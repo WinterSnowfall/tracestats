@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 '''
 @author: Winter Snowfall
-@version: 0.2
+@version: 0.21
 @date: 28/02/2025
 '''
 
@@ -26,7 +26,7 @@ TRACE_PARSE_CHUNK_MIN_LINES = 3
 # processing times and memory use for buffering
 TRACE_PARSE_CHUNK_LINES = 2000000
 TRACE_LOGGING_CHUNK_LINES = TRACE_PARSE_CHUNK_LINES * 5
-API_ENTRY_CALLS = ('Direct3DCreate8', 'Direct3DCreate9', 'D3D10CreateDevice', 'D3D11CreateDevice')
+API_ENTRY_CALLS = ('Direct3DCreate8', 'Direct3DCreate9Ex', 'Direct3DCreate9', 'D3D10CreateDevice', 'D3D11CreateDevice')
 
 class TraceStatsWorker:
     '''Trace parser worker'''
@@ -89,7 +89,6 @@ class TraceStatsWorker:
         self.render_state_dictionary = {}
         self.format_dictionary = {}
         self.pool_dictionary = {}
-        self.present_count = 0
         self.trace_max_call = 0
         self.trace_start_call = 0
         self.trace_end_call = TRACE_PARSE_CHUNK_LINES
@@ -134,7 +133,6 @@ class TraceStatsWorker:
                                                        'Binary_Name': os.path.basename(trace_path).split('.')[0],
                                                        'API': self.api_name,
                                                        'Call_Total': self.trace_max_call,
-                                                       'Present_Count': self.present_count,
                                                        'Call_Stats': self.call_dictionary,
                                                        'Behavior_Flags': self.behavior_flag_dictionary,
                                                        'Render_States': self.render_state_dictionary,
@@ -147,7 +145,6 @@ class TraceStatsWorker:
                 self.render_state_dictionary = {}
                 self.format_dictionary = {}
                 self.pool_dictionary = {}
-                self.present_count = 0
                 self.trace_max_call = 0
                 self.trace_start_call = 0
                 self.trace_end_call = TRACE_PARSE_CHUNK_LINES
@@ -177,10 +174,12 @@ class TraceStatsWorker:
                 if API_ENTRY_CALLS[0] in trace_line:
                     self.api_name = 'D3D8'
                 elif API_ENTRY_CALLS[1] in trace_line:
-                    self.api_name = 'D3D9'
+                    self.api_name = 'D3D9Ex'
                 elif API_ENTRY_CALLS[2] in trace_line:
-                    self.api_name = 'D3D10'
+                    self.api_name = 'D3D9'
                 elif API_ENTRY_CALLS[3] in trace_line:
+                    self.api_name = 'D3D10'
+                elif API_ENTRY_CALLS[4] in trace_line:
                     self.api_name = 'D3D11'
 
             if '::' in trace_line:
@@ -199,12 +198,8 @@ class TraceStatsWorker:
                     existing_value = self.call_dictionary.get(call, 0)
                     self.call_dictionary[call] = existing_value + 1
 
-                    if '::Present' in call:
-                        self.present_count = self.present_count + 1
-                        continue
-
-                    if self.api_name == 'D3D8' or self.api_name == 'D3D9':
-                        # parse device behavior flags for D3D8 and D3D9
+                    if self.api_name == 'D3D8' or self.api_name == 'D3D9Ex' or self.api_name == 'D3D9':
+                        # parse device behavior flags for D3D8, D3D9 and D3D9Ex
                         if '::CreateDevice' in call:
                             logger.debug(f'Found CreateDevice call: {trace_line}')
 
@@ -216,7 +211,7 @@ class TraceStatsWorker:
                                 existing_value = self.behavior_flag_dictionary.get(behavior_flag_stripped, 0)
                                 self.behavior_flag_dictionary[behavior_flag_stripped] = existing_value + 1
 
-                        # parse used render states for D3D8 and D3D9
+                        # parse used render states for D3D8 and D3D9 and D3D9Ex
                         elif '::SetRenderState' in call:
                             logger.debug(f'Found SetRenderState call: {trace_line}')
 
