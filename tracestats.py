@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 '''
 @author: Winter Snowfall
-@version: 0.21
+@version: 0.3
 @date: 28/02/2025
 '''
 
@@ -10,6 +10,9 @@ import json
 import logging
 import argparse
 import subprocess
+import queue
+import threading
+import signal
 
 # logging configuration block
 LOGGER_FORMAT = '%(asctime)s %(levelname)s >>> %(message)s'
@@ -24,21 +27,60 @@ TRACE_PARSE_CHUNK_MIN_LINES = 3
 # really large trace files can take a long time to process with
 # small chuncks, so this is really a fine balance between
 # processing times and memory use for buffering
-TRACE_PARSE_CHUNK_LINES = 2000000
-TRACE_LOGGING_CHUNK_LINES = TRACE_PARSE_CHUNK_LINES * 5
+TRACE_PARSE_CHUNK_CALLS = 5000000
+TRACE_LOGGING_CHUNK_CALLS = TRACE_PARSE_CHUNK_CALLS * 2
+JSON_BASE_KEY = 'tracestats'
+JSON_EXPORT_FOLDER_NAME = 'export'
+JSON_EXPORT_DEFAULT_FILE_NAME = 'tracestats.json'
+# parsing constants
 API_ENTRY_CALLS = ('Direct3DCreate8', 'Direct3DCreate9Ex', 'Direct3DCreate9', 'D3D10CreateDevice', 'D3D11CreateDevice')
+API_ENTRY_CALL_IDENTIFIER = '::'
+API_ENTRY_VALUE_DELIMITER = ','
+# behavior flags
+BEHAVIOR_FLAGS_CALL = '::CreateDevice'
+BEHAVIOR_FLAGS_IDENTIFIER = 'BehaviorFlags = '
+BEHAVIOR_FLAGS_IDENTIFIER_LENGTH = len(BEHAVIOR_FLAGS_IDENTIFIER)
+BEHAVIOR_FLAGS_SPLIT_DELIMITER = '|'
+# render states
+RENDER_STATES_CALL = '::SetRenderState'
+RENDER_STATES_IDENTIFIER = 'State = '
+RENDER_STATES_IDENTIFIER_LENGTH = len(RENDER_STATES_IDENTIFIER)
+# formats and pools
+API_ENTRY_FORMAT_POOL_BASE_CALL = '::Create'
+FORMAT_IDENTIFIER = 'Format = '
+FORMAT_IDENTIFIER_LENGTH = len(FORMAT_IDENTIFIER)
+POOL_IDENTIFIER = 'Pool = '
+POOL_IDENTIFIER_LENGTH = len(POOL_IDENTIFIER)
 
-class TraceStatsWorker:
-    '''Trace parser worker'''
+def sigterm_handler(signum, frame):
+    try:
+        logger.critical('Halting processing due due to SIGTERM...')
+    except:
+        pass
 
-    def __init__(self, traces_paths, json_export_path, apitrace_name, apitrace_path):
-        self.traces_paths = traces_paths[0]
+    raise SystemExit(0)
+
+def sigint_handler(signum, frame):
+    try:
+        logger.critical('Halting processing due to SIGINT...')
+    except:
+        pass
+
+    raise SystemExit(0)
+
+class TraceStats:
+    '''Trace parser for statistics generation'''
+
+    def __init__(self, trace_input_paths, json_export_path, apitrace_name, apitrace_path, apitrace_threads):
+        self.trace_input_paths = trace_input_paths[0]
 
         if json_export_path is None:
-            if len(self.traces_paths) > 1:
-                self.json_export_path = os.path.join('export', 'tracestats.json')
+            if len(self.trace_input_paths) > 1:
+                self.json_export_path = os.path.join(JSON_EXPORT_FOLDER_NAME,
+                                                     JSON_EXPORT_DEFAULT_FILE_NAME)
             else:
-                self.json_export_path = os.path.join('export', os.path.basename(self.traces_paths[0]).split('.')[0] + '.json')
+                self.json_export_path = os.path.join(JSON_EXPORT_FOLDER_NAME,
+                                                     ''.join((os.path.basename(self.trace_input_paths[0]).split('.')[0], '.json')))
         else:
             self.json_export_path = json_export_path
 
@@ -62,8 +104,10 @@ class TraceStatsWorker:
         try:
             if '.exe' in self.apitrace_path:
                 # Use Wine if an .exe file is specified
+                self.use_wine_for_apitrace = True
                 subprocess_params = ('wine', self.apitrace_path, 'version')
             else:
+                self.use_wine_for_apitrace = False
                 subprocess_params = (self.apitrace_path, 'version')
 
             apitrace_check_subprocess = subprocess.run(subprocess_params,
@@ -84,73 +128,89 @@ class TraceStatsWorker:
             raise SystemExit(5)
 
         self.application_name = apitrace_name
-        self.call_dictionary = {}
+        self.entry_point = None
+        self.api_call_dictionary = {}
         self.behavior_flag_dictionary = {}
         self.render_state_dictionary = {}
         self.format_dictionary = {}
         self.pool_dictionary = {}
-        self.trace_max_call = 0
-        self.trace_start_call = 0
-        self.trace_end_call = TRACE_PARSE_CHUNK_LINES
-        self.trace_chunk = ''
-        self.trace_chunk_line_count = 0
-        self.api_name = None
-        self.json_output = {"TraceStats": []}
 
-    def trace_dump(self):
-        for trace_path in self.traces_paths:
+        if apitrace_threads is None:
+            # default to 1 apitrace thread
+            self.thread_count = 1
+        else:
+            try:
+                self.thread_count = int(apitrace_threads)
+            except ValueError:
+                logger.warning('Invalid number of apitrace threads specified, defaulting to 1')
+                self.thread_count = 1
+
+        self.parse_queue = None
+        self.process_queue = None
+        self.parse_loop = threading.Event()
+        self.process_loop = threading.Event()
+        self.json_output = {JSON_BASE_KEY: []}
+
+    def process_traces(self):
+        for trace_path in self.trace_input_paths:
             if os.path.isfile(trace_path):
                 logger.info(f'Processing trace: {trace_path}')
 
-                while self.trace_chunk_line_count >= TRACE_PARSE_CHUNK_MIN_LINES or self.trace_start_call == 0:
-                    if '.exe' in self.apitrace_path:
-                        # Use Wine if an .exe file is specified
-                        subprocess_params = ('wine', self.apitrace_path, 'dump',
-                                            f'--calls={self.trace_start_call}-{self.trace_end_call}', trace_path)
-                    else:
-                        subprocess_params = (self.apitrace_path, 'dump',
-                                            f'--calls={self.trace_start_call}-{self.trace_end_call}', trace_path)
+                self.parse_queue = queue.Queue(maxsize=self.thread_count)
+                self.parse_loop.set()
 
+                parse_threads = [None] * self.thread_count
+                # start trace parsing threads
+                for thread_id in range(self.thread_count):
+                    parse_threads[thread_id] = threading.Thread(target=self.trace_dump_worker, args=())
+                    parse_threads[thread_id].daemon = True
+                    parse_threads[thread_id].start()
+
+                self.process_queue = queue.Queue(maxsize=self.thread_count)
+                self.process_loop.set()
+
+                # start trace processing thread
+                process_thread = threading.Thread(target=self.trace_parse_worker, args=())
+                process_thread.daemon = True
+                process_thread.start()
+
+                trace_start_call = 0
+                trace_end_call = TRACE_PARSE_CHUNK_CALLS
+
+                while self.parse_loop.is_set():
                     try:
-                        trace_dump_subprocess = subprocess.run(subprocess_params,
-                                                               stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
-                                                               check=True)
-                        self.trace_chunk = trace_dump_subprocess.stdout.decode('utf-8')
+                        self.parse_queue.put((trace_start_call, trace_end_call, trace_path),
+                                             block=True, timeout=5)
 
-                    except subprocess.CalledProcessError:
-                        logger.critical('Critical exception during the apitrace dump process')
-                        raise SystemExit(6)
+                        trace_start_call = trace_end_call + 1
+                        trace_end_call = trace_end_call + TRACE_PARSE_CHUNK_CALLS
+                    except queue.Full:
+                        logger.debug('Main thread reset while waiting on full queue')
+                        pass
 
-                    self.trace_chunk_line_count = self.trace_call_count()
+                # ensure parsing threads have halted
+                for thread_id in range(self.thread_count):
+                    parse_threads[thread_id].join()
+                # signal the termination of the processing thread
+                self.process_loop.clear()
+                # ensure the processsing thread has halted
+                process_thread.join()
 
-                    if self.trace_max_call % TRACE_LOGGING_CHUNK_LINES == 0:
-                        logger.info(f'Proccessed {self.trace_end_call} calls...')
-
-                    self.trace_start_call = self.trace_end_call + 1
-                    self.trace_end_call = self.trace_end_call + TRACE_PARSE_CHUNK_LINES
-
-                self.json_output["TraceStats"].append({'Name': self.application_name,
-                                                       'Binary_Name': os.path.basename(trace_path).split('.')[0],
-                                                       'API': self.api_name,
-                                                       'Call_Total': self.trace_max_call,
-                                                       'Call_Stats': self.call_dictionary,
-                                                       'Behavior_Flags': self.behavior_flag_dictionary,
-                                                       'Render_States': self.render_state_dictionary,
-                                                       'Formats': self.format_dictionary,
-                                                       'Pools': self.pool_dictionary})
+                self.json_output[JSON_BASE_KEY].append({'name': self.application_name,
+                                                        'binary_name': os.path.basename(trace_path).split('.')[0],
+                                                        'api_calls': self.api_call_dictionary,
+                                                        'behavior_flags': self.behavior_flag_dictionary,
+                                                        'render_states': self.render_state_dictionary,
+                                                        'formats': self.format_dictionary,
+                                                        'pools': self.pool_dictionary})
 
                 # reset state between processed traces
-                self.call_dictionary = {}
+                self.entry_point = None
+                self.api_call_dictionary = {}
                 self.behavior_flag_dictionary = {}
                 self.render_state_dictionary = {}
                 self.format_dictionary = {}
                 self.pool_dictionary = {}
-                self.trace_max_call = 0
-                self.trace_start_call = 0
-                self.trace_end_call = TRACE_PARSE_CHUNK_LINES
-                self.trace_chunk = ''
-                self.trace_chunk_line_count = 0
-                self.api_name = None
 
                 logger.info('Trace processing complete')
 
@@ -166,104 +226,177 @@ class TraceStatsWorker:
 
         logger.info(f'JSON export complete')
 
-    def trace_call_count(self):
-        trace_line_count = 0
+    def trace_dump_worker(self):
+        # there is no need to drain the queue here, and workers can stop getting
+        # new work as soon as one of them has hit an end of trace dump output
+        while self.parse_loop.is_set():
+            try:
+                trace_start_call, trace_end_call, trace_path = self.parse_queue.get(block=True, timeout=5)
 
-        for trace_line in self.trace_chunk.splitlines():
-            if self.api_name == None:
-                if API_ENTRY_CALLS[0] in trace_line:
-                    self.api_name = 'D3D8'
-                elif API_ENTRY_CALLS[1] in trace_line:
-                    self.api_name = 'D3D9Ex'
-                elif API_ENTRY_CALLS[2] in trace_line:
-                    self.api_name = 'D3D9'
-                elif API_ENTRY_CALLS[3] in trace_line:
-                    self.api_name = 'D3D10'
-                elif API_ENTRY_CALLS[4] in trace_line:
-                    self.api_name = 'D3D11'
+                if self.use_wine_for_apitrace:
+                    subprocess_params = ('wine', self.apitrace_path, 'dump',
+                                        f'--calls={trace_start_call}-{trace_end_call}', trace_path)
+                else:
+                    subprocess_params = (self.apitrace_path, 'dump',
+                                        f'--calls={trace_start_call}-{trace_end_call}', trace_path)
 
-            if '::' in trace_line:
-                split_line = trace_line.split()
-
-                # '::' can also be part of shader comments at times,
-                # in which case the cast bellow will raise a ValueError
                 try:
-                    self.trace_max_call = int(split_line[0])
-                    logger.debug(f'Max call no: {self.trace_max_call}')
+                    trace_dump_subprocess = subprocess.run(subprocess_params,
+                                                            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                                                            check=True)
+                    trace_chunk_lines = trace_dump_subprocess.stdout.decode('utf-8').splitlines()
+                    trace_chunk_line_count = len(trace_chunk_lines)
 
-                    # parse API calls
-                    call = split_line[1].split('(')[0]
-                    logger.debug(f'Found call: {call}')
+                    if trace_chunk_line_count < TRACE_PARSE_CHUNK_MIN_LINES:
+                        if self.parse_loop.is_set():
+                            self.parse_loop.clear()
+                            logger.info('End of trace dump output detected')
 
-                    existing_value = self.call_dictionary.get(call, 0)
-                    self.call_dictionary[call] = existing_value + 1
+                    else:
+                        self.process_queue.put(trace_chunk_lines)
+                        # don't hold onto the chunk as it's quite the heavy chonker
+                        trace_chunk_lines = None
 
-                    if self.api_name == 'D3D8' or self.api_name == 'D3D9Ex' or self.api_name == 'D3D9':
-                        # parse device behavior flags for D3D8, D3D9 and D3D9Ex
-                        if '::CreateDevice' in call:
-                            logger.debug(f'Found CreateDevice call: {trace_line}')
+                except subprocess.CalledProcessError:
+                    logger.critical('Critical exception during the apitrace dump process')
+                    self.parse_loop.clear()
 
-                            behavior_flags_start = trace_line.find('BehaviorFlags = ') + 16
-                            behavior_flags = trace_line[behavior_flags_start:trace_line.find(',', behavior_flags_start)].split('|')
+            except queue.Empty:
+                logger.debug('Parsing thread reset while waiting on empty queue')
+                pass
 
-                            for behavior_flag in behavior_flags:
-                                behavior_flag_stripped = behavior_flag.strip()
-                                existing_value = self.behavior_flag_dictionary.get(behavior_flag_stripped, 0)
-                                self.behavior_flag_dictionary[behavior_flag_stripped] = existing_value + 1
+    def trace_parse_worker(self):
+        while self.process_loop.is_set() or not self.process_queue.empty():
+            try:
+                trace_chunk_lines = self.process_queue.get(block=True, timeout=5)
 
-                        # parse used render states for D3D8 and D3D9 and D3D9Ex
-                        elif '::SetRenderState' in call:
-                            logger.debug(f'Found SetRenderState call: {trace_line}')
+                trace_call_count_max = 0
 
-                            render_state_start = trace_line.find('State = ') + 8
-                            render_state = trace_line[render_state_start:trace_line.find(',', render_state_start)].strip()
+                for trace_line in trace_chunk_lines:
+                    # there are, surprisingly, quite a lot of
+                    # blank/padding lines in an apitrace dump
+                    if len(trace_line) == 0:
+                        continue
+                    # also early skip embedded comments
+                    elif trace_line.startswith('//'):
+                        continue
 
-                            existing_value = self.render_state_dictionary.get(render_state, 0)
-                            self.render_state_dictionary[render_state] = existing_value + 1
-                            continue
+                    # typically, the API entrypoint can be found
+                    # on the fist line of an apitrace
+                    if self.entry_point is None :
+                        for ordinal in range(len(API_ENTRY_CALLS)):
+                            if API_ENTRY_CALLS[ordinal] in trace_line:
+                                self.entry_point = API_ENTRY_CALLS[ordinal]
+                                # add the entrypoint to the call dictionary
+                                existing_value = self.api_call_dictionary.get(API_ENTRY_CALLS[ordinal], 0)
+                                self.api_call_dictionary[API_ENTRY_CALLS[ordinal]] = existing_value + 1
+                                # otherwise D3D9 will get added to D3D9Ex, heh
+                                break
 
-                    if '::Create' in call:
-                        # parse used formats in ::Create calls
-                        if 'Format = ' in trace_line:
-                            logger.debug(f'Found format use in: {trace_line}')
+                    # TODO: we may want to include other identifiers here as well,
+                    # especially for other base entry calls, should apitrace support them
+                    if API_ENTRY_CALL_IDENTIFIER in trace_line:
+                        split_line = trace_line.split()
 
-                            format_start = trace_line.find('Format = ') + 9
-                            format_value = trace_line[format_start:trace_line.find(',', format_start)].strip()
+                        # '::' can also be part of shader comments at times,
+                        # in which case the cast bellow will raise a ValueError
+                        try:
+                            trace_call_count_max = int(split_line[0])
+                            logger.debug(f'Found call count: {trace_call_count_max}')
+                            # parse API calls
+                            call = split_line[1].split('(')[0]
+                            logger.debug(f'Found call: {call}')
 
-                            existing_value = self.format_dictionary.get(format_value, 0)
-                            self.format_dictionary[format_value] = existing_value + 1
-                        # parse used pools in ::Create calls
-                        if 'Pool = ' in trace_line:
-                            logger.debug(f'Found pool use in: {trace_line}')
+                            existing_value = self.api_call_dictionary.get(call, 0)
+                            self.api_call_dictionary[call] = existing_value + 1
 
-                            pool_start = trace_line.find('Pool = ') + 7
-                            pool_value = trace_line[pool_start:trace_line.find(',', pool_start)].strip()
+                            # parse device behavior flags, render states, format
+                            # and pool values for D3D8, D3D9Ex, and D3D9 apitraces
+                            if (self.entry_point == API_ENTRY_CALLS[0] or
+                                self.entry_point == API_ENTRY_CALLS[1] or
+                                self.entry_point == API_ENTRY_CALLS[2]):
+                                if BEHAVIOR_FLAGS_CALL in call:
+                                    logger.debug(f'Found behavior flags on line: {trace_line}')
 
-                            existing_value = self.pool_dictionary.get(pool_value, 0)
-                            self.pool_dictionary[pool_value] = existing_value + 1
+                                    behavior_flags_start = trace_line.find(BEHAVIOR_FLAGS_IDENTIFIER) + BEHAVIOR_FLAGS_IDENTIFIER_LENGTH
+                                    behavior_flags = trace_line[behavior_flags_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
+                                                                                                    behavior_flags_start)].strip()
+                                    behavior_flags = behavior_flags.split(BEHAVIOR_FLAGS_SPLIT_DELIMITER)
 
-                except ValueError:
-                    pass
+                                    for behavior_flag in behavior_flags:
+                                        behavior_flag_stripped = behavior_flag.strip()
+                                        existing_value = self.behavior_flag_dictionary.get(behavior_flag_stripped, 0)
+                                        self.behavior_flag_dictionary[behavior_flag_stripped] = existing_value + 1
 
-            trace_line_count = trace_line_count + 1
+                                elif RENDER_STATES_CALL in call:
+                                    logger.debug(f'Found render states on line: {trace_line}')
 
-        return trace_line_count
+                                    render_state_start = trace_line.find(RENDER_STATES_IDENTIFIER) + RENDER_STATES_IDENTIFIER_LENGTH
+                                    render_state = trace_line[render_state_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
+                                                                                                render_state_start)].strip()
+
+                                    existing_value = self.render_state_dictionary.get(render_state, 0)
+                                    self.render_state_dictionary[render_state] = existing_value + 1
+                                    continue
+
+                                if API_ENTRY_FORMAT_POOL_BASE_CALL in call:
+                                    if FORMAT_IDENTIFIER in trace_line:
+                                        logger.debug(f'Found format on line: {trace_line}')
+
+                                        format_start = trace_line.find(FORMAT_IDENTIFIER) + FORMAT_IDENTIFIER_LENGTH
+                                        format_value = trace_line[format_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
+                                                                                            format_start)].strip()
+
+                                        existing_value = self.format_dictionary.get(format_value, 0)
+                                        self.format_dictionary[format_value] = existing_value + 1
+
+                                    if POOL_IDENTIFIER in trace_line:
+                                        logger.debug(f'Found pool on line: {trace_line}')
+
+                                        pool_start = trace_line.find(POOL_IDENTIFIER) + POOL_IDENTIFIER_LENGTH
+                                        pool_value = trace_line[pool_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
+                                                                                        pool_start)].strip()
+
+                                        existing_value = self.pool_dictionary.get(pool_value, 0)
+                                        self.pool_dictionary[pool_value] = existing_value + 1
+
+                        except ValueError:
+                            pass
+
+                    else:
+                        logger.debug(f'Skipped parsing of line: {trace_line}')
+
+                if trace_call_count_max > 0 and trace_call_count_max % TRACE_LOGGING_CHUNK_CALLS == 0:
+                    logger.info(f'Proccessed {trace_call_count_max} apitrace calls...')
+
+                # don't hold onto the chunk as it's quite the heavy chonker
+                trace_chunk_lines = None
+
+            except queue.Empty:
+                logger.debug('Processsing thread reset while waiting on empty queue')
+                pass
 
 if __name__ == "__main__":
+    # catch SIGTERM and exit gracefully
+    signal.signal(signal.SIGTERM, sigterm_handler)
+    # catch SIGINT and exit gracefully
+    signal.signal(signal.SIGINT, sigint_handler)
+
     parser = argparse.ArgumentParser(description=('tracestats - generate API call statistics from apitraces'), add_help=False)
 
     required = parser.add_argument_group('required arguments')
     optional = parser.add_argument_group('optional arguments')
 
-    required.add_argument('-t', '--traces', help='paths of apitrace files to process', nargs='*', action='append', required=True)
+    required.add_argument('-i', '--input', help='paths of apitrace files to process', nargs='*', action='append', required=True)
 
     optional.add_argument('-h', '--help', action='help', help='show this help message and exit')
+    optional.add_argument('-t', '--threads', help='number of apitrace dump threads to spawn')
     optional.add_argument('-o', '--output', help='path and files of the JSON export')
     optional.add_argument('-n', '--name', help='specify a name for the apitraced application, using double quotes')
     optional.add_argument('-a', '--apitrace', help='path to the apitrace executable')
 
     args = parser.parse_args()
 
-    trace_worker = TraceStatsWorker(args.traces, args.output, args.name, args.apitrace)
-    trace_worker.trace_dump()
+    tracestats = TraceStats(args.input, args.output, args.name, args.apitrace, args.threads)
+    tracestats.process_traces()
 
