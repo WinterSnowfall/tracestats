@@ -45,6 +45,13 @@ BEHAVIOR_FLAGS_SPLIT_DELIMITER = '|'
 RENDER_STATES_CALL = '::SetRenderState'
 RENDER_STATES_IDENTIFIER = 'State = '
 RENDER_STATES_IDENTIFIER_LENGTH = len(RENDER_STATES_IDENTIFIER)
+# query types
+QUERY_TYPE_CALL_D3D8 = '::GetInfo'
+QUERY_TYPE_IDENTIFIER_D3D8 = 'DevInfoID = '
+QUERY_TYPE_IDENTIFIER_LENGTH_D3D8 = len(QUERY_TYPE_IDENTIFIER_D3D8)
+QUERY_TYPE_CALL_D3D9 = '::CreateQuery'
+QUERY_TYPE_IDENTIFIER_D3D9 = 'Type = '
+QUERY_TYPE_IDENTIFIER_LENGTH_D3D9 = len(QUERY_TYPE_IDENTIFIER_D3D9)
 # formats and pools
 API_ENTRY_FORMAT_POOL_BASE_CALL = '::Create'
 FORMAT_IDENTIFIER = 'Format = '
@@ -132,6 +139,7 @@ class TraceStats:
         self.api_call_dictionary = {}
         self.behavior_flag_dictionary = {}
         self.render_state_dictionary = {}
+        self.query_type_dictionary = {}
         self.format_dictionary = {}
         self.pool_dictionary = {}
 
@@ -201,6 +209,7 @@ class TraceStats:
                                                         'api_calls': self.api_call_dictionary,
                                                         'behavior_flags': self.behavior_flag_dictionary,
                                                         'render_states': self.render_state_dictionary,
+                                                        'query_types': self.query_type_dictionary,
                                                         'formats': self.format_dictionary,
                                                         'pools': self.pool_dictionary})
 
@@ -209,6 +218,7 @@ class TraceStats:
                 self.api_call_dictionary = {}
                 self.behavior_flag_dictionary = {}
                 self.render_state_dictionary = {}
+                self.query_type_dictionary = {}
                 self.format_dictionary = {}
                 self.pool_dictionary = {}
 
@@ -337,6 +347,31 @@ class TraceStats:
 
                                     existing_value = self.render_state_dictionary.get(render_state, 0)
                                     self.render_state_dictionary[render_state] = existing_value + 1
+                                    continue
+
+                                # D3D8 uses IDirect3DDevice8::GetInfo calls to initiate queries
+                                elif self.entry_point == API_ENTRY_CALLS[0] and QUERY_TYPE_CALL_D3D8 in call:
+                                    logger.debug(f'Found query type on line: {trace_line}')
+
+                                    query_type_start = trace_line.find(QUERY_TYPE_IDENTIFIER_D3D8) + QUERY_TYPE_IDENTIFIER_LENGTH_D3D8
+                                    query_type = trace_line[query_type_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
+                                                                                             query_type_start)].strip()
+
+                                    existing_value = self.query_type_dictionary.get(query_type, 0)
+                                    self.query_type_dictionary[query_type] = existing_value + 1
+                                    continue
+
+                                # D3D9Ex/D3D9 use IDirect3DQuery9::CreateQuery to initiate queries
+                                elif (self.entry_point == API_ENTRY_CALLS[1] or
+                                      self.entry_point == API_ENTRY_CALLS[2]) and QUERY_TYPE_CALL_D3D9 in call:
+                                    logger.debug(f'Found query type on line: {trace_line}')
+
+                                    query_type_start = trace_line.find(QUERY_TYPE_IDENTIFIER_D3D9) + QUERY_TYPE_IDENTIFIER_LENGTH_D3D9
+                                    query_type = trace_line[query_type_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
+                                                                                             query_type_start)].strip()
+
+                                    existing_value = self.query_type_dictionary.get(query_type, 0)
+                                    self.query_type_dictionary[query_type] = existing_value + 1
                                     continue
 
                                 if API_ENTRY_FORMAT_POOL_BASE_CALL in call:
