@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 '''
 @author: Winter Snowfall
-@version: 0.3
+@version: 0.4
 @date: 28/02/2025
 '''
 
@@ -13,6 +13,12 @@ import subprocess
 import queue
 import threading
 import signal
+
+try:
+    from traceappnames import TraceAppNames
+    TRACEAPPNAMES_IS_IMPORTED = True
+except ImportError:
+    TRACEAPPNAMES_IS_IMPORTED = False
 
 # logging configuration block
 LOGGER_FORMAT = '%(asctime)s %(levelname)s >>> %(message)s'
@@ -33,7 +39,11 @@ JSON_BASE_KEY = 'tracestats'
 JSON_EXPORT_FOLDER_NAME = 'export'
 JSON_EXPORT_DEFAULT_FILE_NAME = 'tracestats.json'
 # parsing constants
-API_ENTRY_CALLS = ('Direct3DCreate8', 'Direct3DCreate9Ex', 'Direct3DCreate9', 'D3D10CreateDevice', 'D3D11CreateDevice')
+API_ENTRY_CALLS = ('Direct3DCreate8',
+                   'Direct3DCreate9Ex',
+                   'Direct3DCreate9',
+                   'D3D10CreateDevice',
+                   'D3D11CreateDevice')
 API_ENTRY_CALL_IDENTIFIER = '::'
 API_ENTRY_VALUE_DELIMITER = ','
 # behavior flags
@@ -78,11 +88,14 @@ def sigint_handler(signum, frame):
 class TraceStats:
     '''Trace parser for statistics generation'''
 
-    def __init__(self, trace_input_paths, json_export_path, apitrace_name, apitrace_path, apitrace_threads):
-        self.trace_input_paths = trace_input_paths[0]
+    def __init__(self, trace_input_paths, json_export_path, application_name, apitrace_path, apitrace_threads):
+        if trace_input_paths is not None:
+            self.trace_input_paths = trace_input_paths[0]
+        else:
+            self.trace_input_paths = None
 
         if json_export_path is None:
-            if len(self.trace_input_paths) > 1:
+            if self.trace_input_paths is None or len(self.trace_input_paths) > 1:
                 self.json_export_path = os.path.join(JSON_EXPORT_FOLDER_NAME,
                                                      JSON_EXPORT_DEFAULT_FILE_NAME)
             else:
@@ -94,9 +107,9 @@ class TraceStats:
         if apitrace_path is None:
             try:
                 apitrace_find_subprocess = subprocess.run(['which', 'apitrace'],
-                                                        stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
-                                                        check=True)
-                self.apitrace_path = apitrace_check_subprocess.stdout.decode('utf-8').split()
+                                                          stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                                                          check=True)
+                self.apitrace_path = apitrace_find_subprocess.stdout.decode('utf-8').strip()
 
             except subprocess.CalledProcessError:
                 logger.critical('Unable to find apitrace. Please ensure it is in $PATH or use -a to specify the full path.')
@@ -134,7 +147,7 @@ class TraceStats:
             logger.critical('Invalid apitrace executable')
             raise SystemExit(5)
 
-        self.application_name = apitrace_name
+        self.application_name = application_name
         self.entry_point = None
         self.api_call_dictionary = {}
         self.behavior_flag_dictionary = {}
@@ -163,6 +176,16 @@ class TraceStats:
         for trace_path in self.trace_input_paths:
             if os.path.isfile(trace_path):
                 logger.info(f'Processing trace: {trace_path}')
+
+                binary_name = os.path.basename(trace_path).split('.')[0]
+                application_name = None
+                if self.application_name is not None:
+                    application_name = self.application_name
+                    logger.info(f'Using application name: {application_name}')
+                else:
+                    if TRACEAPPNAMES_IS_IMPORTED:
+                        application_name = TraceAppNames.get(binary_name)
+                        logger.info(f'Application name found in traceappnames repository: {application_name}')
 
                 self.parse_queue = queue.Queue(maxsize=self.thread_count)
                 self.parse_loop.set()
@@ -204,8 +227,8 @@ class TraceStats:
                 # ensure the processsing thread has halted
                 process_thread.join()
 
-                self.json_output[JSON_BASE_KEY].append({'name': self.application_name,
-                                                        'binary_name': os.path.basename(trace_path).split('.')[0],
+                self.json_output[JSON_BASE_KEY].append({'name': application_name,
+                                                        'binary_name': binary_name,
                                                         'api_calls': self.api_call_dictionary,
                                                         'behavior_flags': self.behavior_flag_dictionary,
                                                         'render_states': self.render_state_dictionary,
@@ -411,6 +434,40 @@ class TraceStats:
                 logger.debug('Processsing thread reset while waiting on empty queue')
                 pass
 
+    def join_json(self):
+        trace_file_paths = []
+
+        for filename in os.listdir(JSON_EXPORT_FOLDER_NAME):
+            if filename.endswith('.json'):
+                trace_file_paths.append(os.path.join(JSON_EXPORT_FOLDER_NAME, filename))
+
+        trace_file_paths.sort()
+
+        for trace_file_path in trace_file_paths:
+            try:
+                logger.info(f'Processing {os.path.basename(trace_file_path)} for joining...')
+
+                with open(trace_file_path, 'r') as file:
+                    file_content = file.read()
+
+                single_trace_content_items = json.loads(file_content).get(JSON_BASE_KEY)
+
+                for item in single_trace_content_items:
+                    self.json_output[JSON_BASE_KEY].append(item)
+
+            except json.JSONDecodeError:
+                logger.critical(f'Unable to parse JSON file: {trace_file_path}')
+                raise SystemExit(5)
+
+        joined_json_export = json.dumps(self.json_output, sort_keys=True, indent=4,
+                                        separators=(',', ': '), ensure_ascii=False)
+        logger.debug(f'Joined JSON export output is: {joined_json_export}')
+
+        with open(self.json_export_path, 'w') as file:
+            file.write(joined_json_export)
+
+        logger.info(f'Joined JSON export complete')
+
 if __name__ == "__main__":
     # catch SIGTERM and exit gracefully
     signal.signal(signal.SIGTERM, sigterm_handler)
@@ -420,18 +477,24 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=('tracestats - generate API call statistics from apitraces'), add_help=False)
 
     required = parser.add_argument_group('required arguments')
+    group = required.add_mutually_exclusive_group(required=True)
     optional = parser.add_argument_group('optional arguments')
 
-    required.add_argument('-i', '--input', help='paths of apitrace files to process', nargs='*', action='append', required=True)
+    group.add_argument('-i', '--input', help='paths of apitrace files to process', nargs='*', action='append')
+    group.add_argument('-j', '--join', help=f'joins all traces in the {JSON_EXPORT_FOLDER_NAME} directory '
+                                            f'into a single {JSON_EXPORT_DEFAULT_FILE_NAME} file', action='store_true')
 
     optional.add_argument('-h', '--help', action='help', help='show this help message and exit')
     optional.add_argument('-t', '--threads', help='number of apitrace dump threads to spawn')
-    optional.add_argument('-o', '--output', help='path and files of the JSON export')
+    optional.add_argument('-o', '--output', help='path and filename of the JSON export')
     optional.add_argument('-n', '--name', help='specify a name for the apitraced application, using double quotes')
     optional.add_argument('-a', '--apitrace', help='path to the apitrace executable')
 
     args = parser.parse_args()
 
     tracestats = TraceStats(args.input, args.output, args.name, args.apitrace, args.threads)
-    tracestats.process_traces()
+    if not args.join:
+        tracestats.process_traces()
+    else:
+        tracestats.join_json()
 
