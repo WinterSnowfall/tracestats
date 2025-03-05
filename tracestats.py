@@ -88,6 +88,21 @@ def sigint_handler(signum, frame):
 class TraceStats:
     '''Trace parser for statistics generation'''
 
+    # these values aren't usually included in any headers
+    @classmethod
+    def d3d8_query_type(cls, value):
+        try:
+            match int(value):
+                case 1: return 'D3DDEVINFOID_TEXTUREMANAGER'
+                case 2: return 'D3DDEVINFOID_D3DTEXTUREMANAGER'
+                case 3: return 'D3DDEVINFOID_TEXTURING'
+                case 4: return 'D3DDEVINFOID_VCACHE'
+                case 5: return 'D3DDEVINFOID_RESOURCEMANAGER'
+                case 6: return 'D3DDEVINFOID_VERTEXSTATS'
+                case _: return 'Unknown'
+        except ValueError:
+            return 'Unknown'
+
     def __init__(self, trace_input_paths, json_export_path, application_name, apitrace_path, apitrace_threads):
         if trace_input_paths is not None:
             self.trace_input_paths = trace_input_paths[0]
@@ -379,9 +394,11 @@ class TraceStats:
                                     query_type_start = trace_line.find(QUERY_TYPE_IDENTIFIER_D3D8) + QUERY_TYPE_IDENTIFIER_LENGTH_D3D8
                                     query_type = trace_line[query_type_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
                                                                                              query_type_start)].strip()
+                                    query_type_decoded = self.d3d8_query_type(query_type)
+                                    logger.debug(f'Decoded query type is: {query_type_decoded}')
 
-                                    existing_value = self.query_type_dictionary.get(query_type, 0)
-                                    self.query_type_dictionary[query_type] = existing_value + 1
+                                    existing_value = self.query_type_dictionary.get(query_type_decoded, 0)
+                                    self.query_type_dictionary[query_type_decoded] = existing_value + 1
                                     continue
 
                                 # D3D9Ex/D3D9 use IDirect3DQuery9::CreateQuery to initiate queries

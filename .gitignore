@@ -1,4 +1,5 @@
 **/__pycache__/
 export/
 traces/
+traceappnames.py
 
