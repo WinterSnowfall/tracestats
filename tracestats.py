@@ -115,7 +115,7 @@ class TraceStats:
                                                      JSON_EXPORT_DEFAULT_FILE_NAME)
             else:
                 self.json_export_path = os.path.join(JSON_EXPORT_FOLDER_NAME,
-                                                     ''.join((os.path.basename(self.trace_input_paths[0]).split('.')[0], '.json')))
+                                                     ''.join((os.path.basename(self.trace_input_paths[0]).rsplit('.', 1)[0], '.json')))
         else:
             self.json_export_path = json_export_path
 
@@ -192,7 +192,7 @@ class TraceStats:
             if os.path.isfile(trace_path):
                 logger.info(f'Processing trace: {trace_path}')
 
-                binary_name = os.path.basename(trace_path).split('.')[0]
+                binary_name = os.path.basename(trace_path).rsplit('.', 1)[0]
                 application_name = None
                 if self.application_name is not None:
                     application_name = self.application_name
