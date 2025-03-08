@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 '''
 @author: Winter Snowfall
-@version: 0.4
-@date: 28/02/2025
+@version: 0.5
+@date: 06/03/2025
 '''
 
 import os
@@ -47,10 +47,18 @@ API_ENTRY_CALLS = ('Direct3DCreate8',
 API_ENTRY_CALL_IDENTIFIER = '::'
 API_ENTRY_VALUE_DELIMITER = ','
 # behavior flags
-BEHAVIOR_FLAGS_CALL = '::CreateDevice'
+BEHAVIOR_AND_PRESENT_PARAMETERS_FLAGS_CALL = '::CreateDevice'
 BEHAVIOR_FLAGS_IDENTIFIER = 'BehaviorFlags = '
 BEHAVIOR_FLAGS_IDENTIFIER_LENGTH = len(BEHAVIOR_FLAGS_IDENTIFIER)
 BEHAVIOR_FLAGS_SPLIT_DELIMITER = '|'
+# present parameters
+PRESENT_PARAMETERS_IDENTIFIER = 'pPresentationParameters = &{'
+PRESENT_PARAMETERS_SKIP_IDENTIFIER = 'pPresentationParameters = ?'
+PRESENT_PARAMETERS_IDENTIFIER_LENGTH = len(PRESENT_PARAMETERS_IDENTIFIER)
+PRESENT_PARAMETERS_IDENTIFIER_END = '}'
+PRESENT_PARAMETERS_SPLIT_DELIMITER = ','
+PRESENT_PARAMETERS_SKIPPED = ('BackBufferWidth', 'BackBufferHeight', 'hDeviceWindow', 'Windowed', 'FullScreen_RefreshRateInHz')
+PRESENT_PARAMETERS_VALUE_SPLIT_DELIMITER = ' = '
 # render states
 RENDER_STATES_CALL = '::SetRenderState'
 RENDER_STATES_IDENTIFIER = 'State = '
@@ -166,6 +174,7 @@ class TraceStats:
         self.entry_point = None
         self.api_call_dictionary = {}
         self.behavior_flag_dictionary = {}
+        self.present_parameter_dictionary = {}
         self.render_state_dictionary = {}
         self.query_type_dictionary = {}
         self.format_dictionary = {}
@@ -192,14 +201,17 @@ class TraceStats:
             if os.path.isfile(trace_path):
                 logger.info(f'Processing trace: {trace_path}')
 
-                binary_name = os.path.basename(trace_path).rsplit('.', 1)[0]
+                binary_name_raw = binary_name = os.path.basename(trace_path).rsplit('.', 1)[0]
+                # workaround for renamed generic game/Game.exe apitraces
+                if binary_name_raw.upper().startswith('GAME'):
+                    binary_name = binary_name_raw[:4]
                 application_name = None
                 if self.application_name is not None:
                     application_name = self.application_name
                     logger.info(f'Using application name: {application_name}')
                 else:
                     if TRACEAPPNAMES_IS_IMPORTED:
-                        application_name = TraceAppNames.get(binary_name)
+                        application_name = TraceAppNames.get(binary_name_raw)
                         logger.info(f'Application name found in traceappnames repository: {application_name}')
 
                 self.parse_queue = queue.Queue(maxsize=self.thread_count)
@@ -245,6 +257,7 @@ class TraceStats:
                 self.json_output[JSON_BASE_KEY].append({'name': application_name,
                                                         'binary_name': binary_name,
                                                         'api_calls': self.api_call_dictionary,
+                                                        'present_parameters': self.present_parameter_dictionary,
                                                         'behavior_flags': self.behavior_flag_dictionary,
                                                         'render_states': self.render_state_dictionary,
                                                         'query_types': self.query_type_dictionary,
@@ -255,6 +268,7 @@ class TraceStats:
                 self.entry_point = None
                 self.api_call_dictionary = {}
                 self.behavior_flag_dictionary = {}
+                self.present_parameter_dictionary = {}
                 self.render_state_dictionary = {}
                 self.query_type_dictionary = {}
                 self.format_dictionary = {}
@@ -318,9 +332,8 @@ class TraceStats:
             try:
                 trace_chunk_lines = self.process_queue.get(block=True, timeout=5)
 
-                trace_call_count_max = 0
-
                 for trace_line in trace_chunk_lines:
+                    trace_call_counter = 0
                     # there are, surprisingly, quite a lot of
                     # blank/padding lines in an apitrace dump
                     if len(trace_line) == 0:
@@ -349,8 +362,8 @@ class TraceStats:
                         # '::' can also be part of shader comments at times,
                         # in which case the cast bellow will raise a ValueError
                         try:
-                            trace_call_count_max = int(split_line[0])
-                            logger.debug(f'Found call count: {trace_call_count_max}')
+                            trace_call_counter = int(split_line[0])
+                            logger.debug(f'Found call count: {trace_call_counter}')
                             # parse API calls
                             call = split_line[1].split('(')[0]
                             logger.debug(f'Found call: {call}')
@@ -363,8 +376,8 @@ class TraceStats:
                             if (self.entry_point == API_ENTRY_CALLS[0] or
                                 self.entry_point == API_ENTRY_CALLS[1] or
                                 self.entry_point == API_ENTRY_CALLS[2]):
-                                if BEHAVIOR_FLAGS_CALL in call:
-                                    logger.debug(f'Found behavior flags on line: {trace_line}')
+                                if BEHAVIOR_AND_PRESENT_PARAMETERS_FLAGS_CALL in call:
+                                    logger.debug(f'Found behavior flags and present parameters on line: {trace_line}')
 
                                     behavior_flags_start = trace_line.find(BEHAVIOR_FLAGS_IDENTIFIER) + BEHAVIOR_FLAGS_IDENTIFIER_LENGTH
                                     behavior_flags = trace_line[behavior_flags_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
@@ -375,6 +388,20 @@ class TraceStats:
                                         behavior_flag_stripped = behavior_flag.strip()
                                         existing_value = self.behavior_flag_dictionary.get(behavior_flag_stripped, 0)
                                         self.behavior_flag_dictionary[behavior_flag_stripped] = existing_value + 1
+
+                                    if PRESENT_PARAMETERS_SKIP_IDENTIFIER not in trace_line:
+                                        present_parameters_start = trace_line.find(PRESENT_PARAMETERS_IDENTIFIER) + PRESENT_PARAMETERS_IDENTIFIER_LENGTH
+                                        present_parameters = trace_line[present_parameters_start:trace_line.find(PRESENT_PARAMETERS_IDENTIFIER_END,
+                                                                                                        present_parameters_start)].strip()
+                                        present_parameters = present_parameters.split(PRESENT_PARAMETERS_SPLIT_DELIMITER)
+
+                                        for present_parameter in present_parameters:
+                                            present_parameter_stripped = present_parameter.strip()
+                                            present_parameter_key, present_parameter_value = present_parameter_stripped.split(PRESENT_PARAMETERS_VALUE_SPLIT_DELIMITER)
+                                            if present_parameter_key not in PRESENT_PARAMETERS_SKIPPED:
+                                                if present_parameter_key != 'Flags' or present_parameter_value != '0x0':
+                                                    existing_value = self.present_parameter_dictionary.get(present_parameter_stripped, 0)
+                                                    self.present_parameter_dictionary[present_parameter_stripped] = existing_value + 1
 
                                 elif RENDER_STATES_CALL in call:
                                     logger.debug(f'Found render states on line: {trace_line}')
@@ -414,7 +441,7 @@ class TraceStats:
                                     self.query_type_dictionary[query_type] = existing_value + 1
                                     continue
 
-                                if API_ENTRY_FORMAT_POOL_BASE_CALL in call:
+                                elif API_ENTRY_FORMAT_POOL_BASE_CALL in call:
                                     if FORMAT_IDENTIFIER in trace_line:
                                         logger.debug(f'Found format on line: {trace_line}')
 
@@ -441,8 +468,8 @@ class TraceStats:
                     else:
                         logger.debug(f'Skipped parsing of line: {trace_line}')
 
-                if trace_call_count_max > 0 and trace_call_count_max % TRACE_LOGGING_CHUNK_CALLS == 0:
-                    logger.info(f'Proccessed {trace_call_count_max} apitrace calls...')
+                if trace_call_counter > 0 and trace_call_counter % TRACE_LOGGING_CHUNK_CALLS == 0:
+                    logger.info(f'Proccessed {trace_call_counter} apitrace calls...')
 
                 # don't hold onto the chunk as it's quite the heavy chonker
                 trace_chunk_lines = None
