@@ -44,8 +44,13 @@ API_ENTRY_CALLS = ('Direct3DCreate8',
                    'Direct3DCreate9',
                    'D3D10CreateDevice',
                    'D3D11CreateDevice')
+API_BASE_CALLS = API_ENTRY_CALLS + ('CreateDXGIFactory',
+                                    'CreateDXGIFactory1',
+                                    'CreateDXGIFactory2')
 API_ENTRY_CALL_IDENTIFIER = '::'
 API_ENTRY_VALUE_DELIMITER = ','
+
+############################## D3D8, D3D9Ex, D3D9 ##############################
 # behavior flags
 BEHAVIOR_AND_PRESENT_PARAMETERS_FLAGS_CALL = '::CreateDevice'
 BEHAVIOR_FLAGS_IDENTIFIER = 'BehaviorFlags = '
@@ -76,6 +81,23 @@ FORMAT_IDENTIFIER = 'Format = '
 FORMAT_IDENTIFIER_LENGTH = len(FORMAT_IDENTIFIER)
 POOL_IDENTIFIER = 'Pool = '
 POOL_IDENTIFIER_LENGTH = len(POOL_IDENTIFIER)
+############################## D3D8, D3D9Ex, D3D9 ##############################
+
+################################# D3D10, D3D11 #################################
+# device flags (treat these as d3d9 behavior flags for simplicity)
+DEVICE_FLAGS_AND_FEATURE_LEVELS_CALL = 'CreateDevice'
+DEVICE_FLAGS_IDENTIFIER = 'Flags = '
+DEVICE_FLAGS_IDENTIFIER_LENGTH = len(DEVICE_FLAGS_IDENTIFIER)
+DEVICE_FLAGS_SKIP_IDENTIFIER = 'Flags = 0x0'
+DEVICE_FLAGS_SPLIT_DELIMITER = '|'
+# feature levels
+FEATURE_LEVELS_IDENTIFIER = 'pFeatureLevels = {'
+FEATURE_LEVELS_IDENTIFIER_LENGTH = len(FEATURE_LEVELS_IDENTIFIER)
+FEATURE_LEVELS_IDENTIFIER_ONE = 'pFeatureLevels = &'
+FEATURE_LEVELS_IDENTIFIER_ONE_LENGTH = len(FEATURE_LEVELS_IDENTIFIER_ONE)
+FEATURE_LEVELS_SKIP_IDENTIFIER = 'pFeatureLevels = NULL'
+FEATURE_LEVELS_IDENTIFIER_END = '}'
+################################# D3D10, D3D11 #################################
 
 def sigterm_handler(signum, frame):
     try:
@@ -179,6 +201,8 @@ class TraceStats:
         self.query_type_dictionary = {}
         self.format_dictionary = {}
         self.pool_dictionary = {}
+        self.device_flag_dictionary = {}
+        self.feature_level_dictionary = {}
 
         if apitrace_threads is None:
             # default to 1 apitrace thread
@@ -205,6 +229,8 @@ class TraceStats:
                 # workaround for renamed generic game/Game.exe apitraces
                 if binary_name_raw.upper().startswith('GAME'):
                     binary_name = binary_name_raw[:4]
+                elif binary_name_raw.endswith('_'):
+                    binary_name = binary_name_raw[:-1]
                 application_name = None
                 if self.application_name is not None:
                     application_name = self.application_name
@@ -254,15 +280,29 @@ class TraceStats:
                 # ensure the processsing thread has halted
                 process_thread.join()
 
-                self.json_output[JSON_BASE_KEY].append({'name': application_name,
-                                                        'binary_name': binary_name,
-                                                        'api_calls': self.api_call_dictionary,
-                                                        'present_parameters': self.present_parameter_dictionary,
-                                                        'behavior_flags': self.behavior_flag_dictionary,
-                                                        'render_states': self.render_state_dictionary,
-                                                        'query_types': self.query_type_dictionary,
-                                                        'formats': self.format_dictionary,
-                                                        'pools': self.pool_dictionary})
+                return_dictionary = {}
+                return_dictionary['name'] = application_name
+                return_dictionary['binary_name'] = binary_name
+                if len(self.api_call_dictionary) > 0:
+                    return_dictionary['api_calls'] = self.api_call_dictionary
+                if len(self.present_parameter_dictionary) > 0:
+                    return_dictionary['present_parameters'] = self.present_parameter_dictionary
+                if len(self.behavior_flag_dictionary) > 0:
+                    return_dictionary['behavior_flags'] = self.behavior_flag_dictionary
+                if len(self.render_state_dictionary) > 0:
+                    return_dictionary['render_states'] = self.render_state_dictionary
+                if len(self.query_type_dictionary) > 0:
+                    return_dictionary['query_types'] = self.query_type_dictionary
+                if len(self.format_dictionary) > 0:
+                    return_dictionary['formats'] = self.format_dictionary
+                if len(self.pool_dictionary) > 0:
+                    return_dictionary['pools'] = self.pool_dictionary
+                if len(self.device_flag_dictionary) > 0:
+                    return_dictionary['device_flags'] = self.device_flag_dictionary
+                if len(self.feature_level_dictionary) > 0:
+                    return_dictionary['feature_levels'] = self.feature_level_dictionary
+
+                self.json_output[JSON_BASE_KEY].append(return_dictionary)
 
                 # reset state between processed traces
                 self.entry_point = None
@@ -273,6 +313,8 @@ class TraceStats:
                 self.query_type_dictionary = {}
                 self.format_dictionary = {}
                 self.pool_dictionary = {}
+                self.device_flag_dictionary = {}
+                self.feature_level_dictionary = {}
 
                 logger.info('Trace processing complete')
 
@@ -342,22 +384,18 @@ class TraceStats:
                     elif trace_line.startswith('//'):
                         continue
 
-                    # typically, the API entrypoint can be found
-                    # on the fist line of an apitrace
-                    if self.entry_point is None :
-                        for ordinal in range(len(API_ENTRY_CALLS)):
-                            if API_ENTRY_CALLS[ordinal] in trace_line:
-                                self.entry_point = API_ENTRY_CALLS[ordinal]
-                                # add the entrypoint to the call dictionary
-                                existing_value = self.api_call_dictionary.get(API_ENTRY_CALLS[ordinal], 0)
-                                self.api_call_dictionary[API_ENTRY_CALLS[ordinal]] = existing_value + 1
-                                # otherwise D3D9 will get added to D3D9Ex, heh
-                                break
-
-                    # TODO: we may want to include other identifiers here as well,
-                    # especially for other base entry calls, should apitrace support them
-                    if API_ENTRY_CALL_IDENTIFIER in trace_line:
+                    if (API_ENTRY_CALL_IDENTIFIER in trace_line or
+                        any(api_base_call in trace_line for api_base_call in API_BASE_CALLS)):
                         split_line = trace_line.split()
+
+                        # typically, the API entrypoint can be found
+                        # on the fist line of an apitrace
+                        if self.entry_point is None :
+                            for ordinal in range(len(API_ENTRY_CALLS)):
+                                if API_ENTRY_CALLS[ordinal] in split_line[1]:
+                                    self.entry_point = API_ENTRY_CALLS[ordinal]
+                                    # otherwise D3D9 will get added to D3D9Ex, heh
+                                    break
 
                         # '::' can also be part of shader comments at times,
                         # in which case the cast bellow will raise a ValueError
@@ -461,6 +499,41 @@ class TraceStats:
 
                                         existing_value = self.pool_dictionary.get(pool_value, 0)
                                         self.pool_dictionary[pool_value] = existing_value + 1
+
+                            elif (self.entry_point == API_ENTRY_CALLS[3] or
+                                  self.entry_point == API_ENTRY_CALLS[4]):
+                                if DEVICE_FLAGS_AND_FEATURE_LEVELS_CALL in call:
+                                    logger.debug(f'Found device flags and feature levels on line: {trace_line}')
+
+                                    if DEVICE_FLAGS_SKIP_IDENTIFIER not in trace_line:
+                                        device_flags_start = trace_line.find(DEVICE_FLAGS_IDENTIFIER) + DEVICE_FLAGS_IDENTIFIER_LENGTH
+                                        device_flags = trace_line[device_flags_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
+                                                                                                    device_flags_start)].strip()
+                                        device_flags = device_flags.split(DEVICE_FLAGS_SPLIT_DELIMITER)
+
+                                        for device_flag in device_flags:
+                                            device_flag_stripped = device_flag.strip()
+                                            existing_value = self.device_flag_dictionary.get(device_flag_stripped, 0)
+                                            self.device_flag_dictionary[device_flag_stripped] = existing_value + 1
+
+                                    if FEATURE_LEVELS_SKIP_IDENTIFIER not in trace_line:
+                                        if FEATURE_LEVELS_IDENTIFIER in trace_line:
+                                            feature_levels_start = trace_line.find(FEATURE_LEVELS_IDENTIFIER) + FEATURE_LEVELS_IDENTIFIER_LENGTH
+                                            feature_levels = trace_line[feature_levels_start:trace_line.find(FEATURE_LEVELS_IDENTIFIER_END,
+                                                                                                            feature_levels_start)].strip()
+                                            feature_levels = feature_levels.split(API_ENTRY_VALUE_DELIMITER)
+
+                                            for feature_level in feature_levels:
+                                                feature_level_stripped = feature_level.strip()
+                                                existing_value = self.feature_level_dictionary.get(feature_level_stripped, 0)
+                                                self.feature_level_dictionary[feature_level_stripped] = existing_value + 1
+
+                                        elif FEATURE_LEVELS_IDENTIFIER_ONE in trace_line:
+                                            feature_levels_start = trace_line.find(FEATURE_LEVELS_IDENTIFIER_ONE) + FEATURE_LEVELS_IDENTIFIER_ONE_LENGTH
+                                            feature_level_stripped = trace_line[feature_levels_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
+                                                                                                                     feature_levels_start)].strip()
+                                            existing_value = self.feature_level_dictionary.get(feature_level_stripped, 0)
+                                            self.feature_level_dictionary[feature_level_stripped] = existing_value + 1
 
                         except ValueError:
                             pass
