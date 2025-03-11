@@ -1,0 +1,16 @@
+<div id="file-upload">
+    <form method="post" enctype="multipart/form-data" id="file-upload-form">
+        {% csrf_token %}
+        <p>
+            <div class="search-container">
+                <h5>What is the airspeed velocity of an unladen swallow?</h5>
+                {{ file_upload_form.authorization_token }}
+            </div>
+        </p>
+        <p>
+            {{ file_upload_form.file_upload }} 
+            <button type="submit" name="upload-form">Upload tracestats JSON</button>
+            <button type="reset" value="Reset">Clear.it</button>
+        </p>
+    </form>
+</div>

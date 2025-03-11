@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 '''
 @author: Winter Snowfall
-@version: 0.5
-@date: 06/03/2025
+@version: 0.6
+@date: 12/03/2025
 '''
 
 import os
@@ -39,14 +39,20 @@ JSON_BASE_KEY = 'tracestats'
 JSON_EXPORT_FOLDER_NAME = 'export'
 JSON_EXPORT_DEFAULT_FILE_NAME = 'tracestats.json'
 # parsing constants
-API_ENTRY_CALLS = ('Direct3DCreate8',
-                   'Direct3DCreate9Ex',
-                   'Direct3DCreate9',
-                   'D3D10CreateDevice',
-                   'D3D11CreateDevice')
-API_BASE_CALLS = API_ENTRY_CALLS + ('CreateDXGIFactory',
-                                    'CreateDXGIFactory1',
-                                    'CreateDXGIFactory2')
+API_ENTRY_CALLS = {'Direct3DCreate8': 'D3D8',
+                   'Direct3DCreate9Ex': 'D3D9Ex', # ensure D3D9Ex gets checked before D3D9
+                   'Direct3DCreate9': 'D3D9',
+                   'D3D10CreateDeviceAndSwapChain1': 'D3D10',
+                   'D3D10CreateDevice1': 'D3D10',
+                   'D3D10CreateDeviceAndSwapChain': 'D3D10',
+                   'D3D10CreateDevice': 'D3D10',
+                   'D3D10CoreCreateDevice': 'D3D10',
+                   'D3D11CreateDeviceAndSwapChain': 'D3D11',
+                   'D3D11CreateDevice': 'D3D11',
+                   'D3D11CoreCreateDevice': 'D3D11'}
+API_BASE_CALLS = {**API_ENTRY_CALLS, 'CreateDXGIFactory': 'DXGI',
+                                     'CreateDXGIFactory1': 'DXGI',
+                                     'CreateDXGIFactory2': 'DGXI'}
 API_ENTRY_CALL_IDENTIFIER = '::'
 API_ENTRY_VALUE_DELIMITER = ','
 
@@ -75,10 +81,11 @@ QUERY_TYPE_IDENTIFIER_LENGTH_D3D8 = len(QUERY_TYPE_IDENTIFIER_D3D8)
 QUERY_TYPE_CALL_D3D9 = '::CreateQuery'
 QUERY_TYPE_IDENTIFIER_D3D9 = 'Type = '
 QUERY_TYPE_IDENTIFIER_LENGTH_D3D9 = len(QUERY_TYPE_IDENTIFIER_D3D9)
-# formats and pools
-API_ENTRY_FORMAT_POOL_BASE_CALL = '::Create'
+# formats
+API_ENTRY_FORMAT_BASE_CALL = '::Create'
 FORMAT_IDENTIFIER = 'Format = '
 FORMAT_IDENTIFIER_LENGTH = len(FORMAT_IDENTIFIER)
+# pools
 POOL_IDENTIFIER = 'Pool = '
 POOL_IDENTIFIER_LENGTH = len(POOL_IDENTIFIER)
 ############################## D3D8, D3D9Ex, D3D9 ##############################
@@ -97,6 +104,25 @@ FEATURE_LEVELS_IDENTIFIER_ONE = 'pFeatureLevels = &'
 FEATURE_LEVELS_IDENTIFIER_ONE_LENGTH = len(FEATURE_LEVELS_IDENTIFIER_ONE)
 FEATURE_LEVELS_SKIP_IDENTIFIER = 'pFeatureLevels = NULL'
 FEATURE_LEVELS_IDENTIFIER_END = '}'
+# rastizer state
+RASTIZER_STATE_CALL = '::CreateRasterizerState'
+RASTIZER_STATE_IDENTIFIER = 'pRasterizerDesc = &{'
+RASTIZER_STATE_IDENTIFIER_LENGTH = len(RASTIZER_STATE_IDENTIFIER)
+RASTIZER_STATE_IDENTIFIER_END = '}'
+# blend state
+BLEND_STATE_CALL = '::CreateBlendState'
+BLEND_STATE_IDENTIFIER = 'pBlendStateDesc = &{'
+BLEND_STATE_IDENTIFIER_LENGTH = len(RASTIZER_STATE_IDENTIFIER)
+BLEND_STATE_IDENTIFIER_END = ', RenderTarget = '
+# usage
+USAGE_IDENTIFIER = 'Usage = '
+USAGE_IDENTIFIER_LENGTH = len(USAGE_IDENTIFIER)
+USAGE_IDENTIFIER_SKIP = 'DXGI_USAGE_'
+# bind flags
+BIND_FLAGS_IDENTIFIER = 'BindFlags = '
+BIND_FLAGS_IDENTIFIER_LENGTH = len(BIND_FLAGS_IDENTIFIER)
+BIND_FLAGS_SKIP_IDENTIFIER = 'BindFlags = 0x0'
+BIND_FLAGS_SPLIT_DELIMITER = '|'
 ################################# D3D10, D3D11 #################################
 
 def sigterm_handler(signum, frame):
@@ -193,7 +219,7 @@ class TraceStats:
             raise SystemExit(5)
 
         self.application_name = application_name
-        self.entry_point = None
+        self.api = None
         self.api_call_dictionary = {}
         self.behavior_flag_dictionary = {}
         self.present_parameter_dictionary = {}
@@ -203,6 +229,10 @@ class TraceStats:
         self.pool_dictionary = {}
         self.device_flag_dictionary = {}
         self.feature_level_dictionary = {}
+        self.rastizer_state_dictionary = {}
+        self.blend_state_dictionary = {}
+        self.usage_dictionary = {}
+        self.bind_flag_dictionary = {}
 
         if apitrace_threads is None:
             # default to 1 apitrace thread
@@ -235,10 +265,9 @@ class TraceStats:
                 if self.application_name is not None:
                     application_name = self.application_name
                     logger.info(f'Using application name: {application_name}')
-                else:
-                    if TRACEAPPNAMES_IS_IMPORTED:
-                        application_name = TraceAppNames.get(binary_name_raw)
-                        logger.info(f'Application name found in traceappnames repository: {application_name}')
+                elif TRACEAPPNAMES_IS_IMPORTED:
+                    application_name = TraceAppNames.get(binary_name_raw)
+                    logger.info(f'Application name found in traceappnames repository: {application_name}')
 
                 self.parse_queue = queue.Queue(maxsize=self.thread_count)
                 self.parse_loop.set()
@@ -301,11 +330,19 @@ class TraceStats:
                     return_dictionary['device_flags'] = self.device_flag_dictionary
                 if len(self.feature_level_dictionary) > 0:
                     return_dictionary['feature_levels'] = self.feature_level_dictionary
+                if len(self.rastizer_state_dictionary) > 0:
+                    return_dictionary['rastizer_states'] = self.rastizer_state_dictionary
+                if len(self.blend_state_dictionary) > 0:
+                    return_dictionary['blend_states'] = self.blend_state_dictionary
+                if len(self.usage_dictionary) > 0:
+                    return_dictionary['usage'] = self.usage_dictionary
+                if len(self.bind_flag_dictionary) > 0:
+                    return_dictionary['bind_flags'] = self.bind_flag_dictionary
 
                 self.json_output[JSON_BASE_KEY].append(return_dictionary)
 
                 # reset state between processed traces
-                self.entry_point = None
+                self.api = None
                 self.api_call_dictionary = {}
                 self.behavior_flag_dictionary = {}
                 self.present_parameter_dictionary = {}
@@ -315,6 +352,10 @@ class TraceStats:
                 self.pool_dictionary = {}
                 self.device_flag_dictionary = {}
                 self.feature_level_dictionary = {}
+                self.rastizer_state_dictionary = {}
+                self.blend_state_dictionary = {}
+                self.usage_dictionary = {}
+                self.bind_flag_dictionary = {}
 
                 logger.info('Trace processing complete')
 
@@ -373,9 +414,9 @@ class TraceStats:
         while self.process_loop.is_set() or not self.process_queue.empty():
             try:
                 trace_chunk_lines = self.process_queue.get(block=True, timeout=5)
+                trace_call_counter = 0
 
                 for trace_line in trace_chunk_lines:
-                    trace_call_counter = 0
                     # there are, surprisingly, quite a lot of
                     # blank/padding lines in an apitrace dump
                     if len(trace_line) == 0:
@@ -384,159 +425,219 @@ class TraceStats:
                     elif trace_line.startswith('//'):
                         continue
 
-                    if (API_ENTRY_CALL_IDENTIFIER in trace_line or
-                        any(api_base_call in trace_line for api_base_call in API_BASE_CALLS)):
-                        split_line = trace_line.split()
+                    split_line = trace_line.split()
 
+                    # otherwise unnumbered lines will raise a ValueError
+                    try:
+                        trace_call_counter = int(split_line[0])
+                        logger.debug(f'Found call count: {trace_call_counter}')
+                    except ValueError:
+                        pass
+
+                    if (API_ENTRY_CALL_IDENTIFIER in trace_line or
+                        any(api_base_call in trace_line for api_base_call in API_BASE_CALLS.keys())):
                         # typically, the API entrypoint can be found
                         # on the fist line of an apitrace
-                        if self.entry_point is None :
-                            for ordinal in range(len(API_ENTRY_CALLS)):
-                                if API_ENTRY_CALLS[ordinal] in split_line[1]:
-                                    self.entry_point = API_ENTRY_CALLS[ordinal]
+                        if self.api is None :
+                            for key, value in API_ENTRY_CALLS.items():
+                                if key in split_line[1]:
+                                    self.api = value
+                                    logger.info(f'Detected API: {self.api}')
                                     # otherwise D3D9 will get added to D3D9Ex, heh
                                     break
 
-                        # '::' can also be part of shader comments at times,
-                        # in which case the cast bellow will raise a ValueError
-                        try:
-                            trace_call_counter = int(split_line[0])
-                            logger.debug(f'Found call count: {trace_call_counter}')
-                            # parse API calls
-                            call = split_line[1].split('(')[0]
-                            logger.debug(f'Found call: {call}')
+                        # parse API calls
+                        call = split_line[1].split('(')[0]
+                        logger.debug(f'Found call: {call}')
 
-                            existing_value = self.api_call_dictionary.get(call, 0)
-                            self.api_call_dictionary[call] = existing_value + 1
+                        existing_value = self.api_call_dictionary.get(call, 0)
+                        self.api_call_dictionary[call] = existing_value + 1
 
-                            # parse device behavior flags, render states, format
-                            # and pool values for D3D8, D3D9Ex, and D3D9 apitraces
-                            if (self.entry_point == API_ENTRY_CALLS[0] or
-                                self.entry_point == API_ENTRY_CALLS[1] or
-                                self.entry_point == API_ENTRY_CALLS[2]):
-                                if BEHAVIOR_AND_PRESENT_PARAMETERS_FLAGS_CALL in call:
-                                    logger.debug(f'Found behavior flags and present parameters on line: {trace_line}')
+                        # parse device behavior flags, render states, format
+                        # and pool values for D3D8, D3D9Ex, and D3D9 apitraces
+                        if self.api == 'D3D8' or self.api == 'D3D9Ex' or self.api == 'D3D9':
+                            if BEHAVIOR_AND_PRESENT_PARAMETERS_FLAGS_CALL in call:
+                                logger.debug(f'Found behavior flags and present parameters on line: {trace_line}')
 
-                                    behavior_flags_start = trace_line.find(BEHAVIOR_FLAGS_IDENTIFIER) + BEHAVIOR_FLAGS_IDENTIFIER_LENGTH
-                                    behavior_flags = trace_line[behavior_flags_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
-                                                                                                    behavior_flags_start)].strip()
-                                    behavior_flags = behavior_flags.split(BEHAVIOR_FLAGS_SPLIT_DELIMITER)
+                                behavior_flags_start = trace_line.find(BEHAVIOR_FLAGS_IDENTIFIER) + BEHAVIOR_FLAGS_IDENTIFIER_LENGTH
+                                behavior_flags = trace_line[behavior_flags_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
+                                                                                                behavior_flags_start)].strip()
+                                behavior_flags = behavior_flags.split(BEHAVIOR_FLAGS_SPLIT_DELIMITER)
 
-                                    for behavior_flag in behavior_flags:
-                                        behavior_flag_stripped = behavior_flag.strip()
-                                        existing_value = self.behavior_flag_dictionary.get(behavior_flag_stripped, 0)
-                                        self.behavior_flag_dictionary[behavior_flag_stripped] = existing_value + 1
+                                for behavior_flag in behavior_flags:
+                                    behavior_flag_stripped = behavior_flag.strip()
+                                    existing_value = self.behavior_flag_dictionary.get(behavior_flag_stripped, 0)
+                                    self.behavior_flag_dictionary[behavior_flag_stripped] = existing_value + 1
 
-                                    if PRESENT_PARAMETERS_SKIP_IDENTIFIER not in trace_line:
-                                        present_parameters_start = trace_line.find(PRESENT_PARAMETERS_IDENTIFIER) + PRESENT_PARAMETERS_IDENTIFIER_LENGTH
-                                        present_parameters = trace_line[present_parameters_start:trace_line.find(PRESENT_PARAMETERS_IDENTIFIER_END,
-                                                                                                        present_parameters_start)].strip()
-                                        present_parameters = present_parameters.split(PRESENT_PARAMETERS_SPLIT_DELIMITER)
+                                if PRESENT_PARAMETERS_SKIP_IDENTIFIER not in trace_line:
+                                    present_parameters_start = trace_line.find(PRESENT_PARAMETERS_IDENTIFIER) + PRESENT_PARAMETERS_IDENTIFIER_LENGTH
+                                    present_parameters = trace_line[present_parameters_start:trace_line.find(PRESENT_PARAMETERS_IDENTIFIER_END,
+                                                                                                    present_parameters_start)].strip()
+                                    present_parameters = present_parameters.split(PRESENT_PARAMETERS_SPLIT_DELIMITER)
 
-                                        for present_parameter in present_parameters:
-                                            present_parameter_stripped = present_parameter.strip()
-                                            present_parameter_key, present_parameter_value = present_parameter_stripped.split(PRESENT_PARAMETERS_VALUE_SPLIT_DELIMITER)
-                                            if present_parameter_key not in PRESENT_PARAMETERS_SKIPPED:
-                                                if present_parameter_key != 'Flags' or present_parameter_value != '0x0':
-                                                    existing_value = self.present_parameter_dictionary.get(present_parameter_stripped, 0)
-                                                    self.present_parameter_dictionary[present_parameter_stripped] = existing_value + 1
+                                    for present_parameter in present_parameters:
+                                        present_parameter_stripped = present_parameter.strip()
+                                        present_parameter_key, present_parameter_value = present_parameter_stripped.split(PRESENT_PARAMETERS_VALUE_SPLIT_DELIMITER)
+                                        if present_parameter_key not in PRESENT_PARAMETERS_SKIPPED:
+                                            if present_parameter_key != 'Flags' or present_parameter_value != '0x0':
+                                                existing_value = self.present_parameter_dictionary.get(present_parameter_stripped, 0)
+                                                self.present_parameter_dictionary[present_parameter_stripped] = existing_value + 1
 
-                                elif RENDER_STATES_CALL in call:
-                                    logger.debug(f'Found render states on line: {trace_line}')
+                            elif RENDER_STATES_CALL in call:
+                                logger.debug(f'Found render states on line: {trace_line}')
 
-                                    render_state_start = trace_line.find(RENDER_STATES_IDENTIFIER) + RENDER_STATES_IDENTIFIER_LENGTH
-                                    render_state = trace_line[render_state_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
-                                                                                                render_state_start)].strip()
+                                render_state_start = trace_line.find(RENDER_STATES_IDENTIFIER) + RENDER_STATES_IDENTIFIER_LENGTH
+                                render_state = trace_line[render_state_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
+                                                                                            render_state_start)].strip()
 
-                                    existing_value = self.render_state_dictionary.get(render_state, 0)
-                                    self.render_state_dictionary[render_state] = existing_value + 1
-                                    continue
+                                existing_value = self.render_state_dictionary.get(render_state, 0)
+                                self.render_state_dictionary[render_state] = existing_value + 1
+                                continue
 
-                                # D3D8 uses IDirect3DDevice8::GetInfo calls to initiate queries
-                                elif self.entry_point == API_ENTRY_CALLS[0] and QUERY_TYPE_CALL_D3D8 in call:
-                                    logger.debug(f'Found query type on line: {trace_line}')
+                            # D3D8 uses IDirect3DDevice8::GetInfo calls to initiate queries
+                            elif self.api == 'D3D8' and QUERY_TYPE_CALL_D3D8 in call:
+                                logger.debug(f'Found query type on line: {trace_line}')
 
-                                    query_type_start = trace_line.find(QUERY_TYPE_IDENTIFIER_D3D8) + QUERY_TYPE_IDENTIFIER_LENGTH_D3D8
-                                    query_type = trace_line[query_type_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
-                                                                                             query_type_start)].strip()
-                                    query_type_decoded = self.d3d8_query_type(query_type)
-                                    logger.debug(f'Decoded query type is: {query_type_decoded}')
+                                query_type_start = trace_line.find(QUERY_TYPE_IDENTIFIER_D3D8) + QUERY_TYPE_IDENTIFIER_LENGTH_D3D8
+                                query_type = trace_line[query_type_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
+                                                                                            query_type_start)].strip()
+                                query_type_decoded = self.d3d8_query_type(query_type)
+                                logger.debug(f'Decoded query type is: {query_type_decoded}')
 
-                                    existing_value = self.query_type_dictionary.get(query_type_decoded, 0)
-                                    self.query_type_dictionary[query_type_decoded] = existing_value + 1
-                                    continue
+                                existing_value = self.query_type_dictionary.get(query_type_decoded, 0)
+                                self.query_type_dictionary[query_type_decoded] = existing_value + 1
+                                continue
 
-                                # D3D9Ex/D3D9 use IDirect3DQuery9::CreateQuery to initiate queries
-                                elif (self.entry_point == API_ENTRY_CALLS[1] or
-                                      self.entry_point == API_ENTRY_CALLS[2]) and QUERY_TYPE_CALL_D3D9 in call:
-                                    logger.debug(f'Found query type on line: {trace_line}')
+                            # D3D9Ex/D3D9 use IDirect3DQuery9::CreateQuery to initiate queries
+                            elif (self.api == 'D3D9Ex' or self.api == 'D3D9') and QUERY_TYPE_CALL_D3D9 in call:
+                                logger.debug(f'Found query type on line: {trace_line}')
 
-                                    query_type_start = trace_line.find(QUERY_TYPE_IDENTIFIER_D3D9) + QUERY_TYPE_IDENTIFIER_LENGTH_D3D9
-                                    query_type = trace_line[query_type_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
-                                                                                             query_type_start)].strip()
+                                query_type_start = trace_line.find(QUERY_TYPE_IDENTIFIER_D3D9) + QUERY_TYPE_IDENTIFIER_LENGTH_D3D9
+                                query_type = trace_line[query_type_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
+                                                                                            query_type_start)].strip()
 
-                                    existing_value = self.query_type_dictionary.get(query_type, 0)
-                                    self.query_type_dictionary[query_type] = existing_value + 1
-                                    continue
+                                existing_value = self.query_type_dictionary.get(query_type, 0)
+                                self.query_type_dictionary[query_type] = existing_value + 1
+                                continue
 
-                                elif API_ENTRY_FORMAT_POOL_BASE_CALL in call:
-                                    if FORMAT_IDENTIFIER in trace_line:
-                                        logger.debug(f'Found format on line: {trace_line}')
+                            elif API_ENTRY_FORMAT_BASE_CALL in call:
+                                if FORMAT_IDENTIFIER in trace_line:
+                                    logger.debug(f'Found format on line: {trace_line}')
 
-                                        format_start = trace_line.find(FORMAT_IDENTIFIER) + FORMAT_IDENTIFIER_LENGTH
-                                        format_value = trace_line[format_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
-                                                                                            format_start)].strip()
+                                    format_start = trace_line.find(FORMAT_IDENTIFIER) + FORMAT_IDENTIFIER_LENGTH
+                                    format_value = trace_line[format_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
+                                                                                        format_start)].strip()
 
-                                        existing_value = self.format_dictionary.get(format_value, 0)
-                                        self.format_dictionary[format_value] = existing_value + 1
+                                    existing_value = self.format_dictionary.get(format_value, 0)
+                                    self.format_dictionary[format_value] = existing_value + 1
 
-                                    if POOL_IDENTIFIER in trace_line:
-                                        logger.debug(f'Found pool on line: {trace_line}')
+                                if POOL_IDENTIFIER in trace_line:
+                                    logger.debug(f'Found pool on line: {trace_line}')
 
-                                        pool_start = trace_line.find(POOL_IDENTIFIER) + POOL_IDENTIFIER_LENGTH
-                                        pool_value = trace_line[pool_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
-                                                                                        pool_start)].strip()
+                                    pool_start = trace_line.find(POOL_IDENTIFIER) + POOL_IDENTIFIER_LENGTH
+                                    pool_value = trace_line[pool_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
+                                                                                    pool_start)].strip()
 
-                                        existing_value = self.pool_dictionary.get(pool_value, 0)
-                                        self.pool_dictionary[pool_value] = existing_value + 1
+                                    existing_value = self.pool_dictionary.get(pool_value, 0)
+                                    self.pool_dictionary[pool_value] = existing_value + 1
 
-                            elif (self.entry_point == API_ENTRY_CALLS[3] or
-                                  self.entry_point == API_ENTRY_CALLS[4]):
-                                if DEVICE_FLAGS_AND_FEATURE_LEVELS_CALL in call:
-                                    logger.debug(f'Found device flags and feature levels on line: {trace_line}')
+                        elif self.api == 'D3D10' or self.api == 'D3D11':
+                            if DEVICE_FLAGS_AND_FEATURE_LEVELS_CALL in call:
+                                logger.debug(f'Found device flags and feature levels on line: {trace_line}')
 
-                                    if DEVICE_FLAGS_SKIP_IDENTIFIER not in trace_line:
-                                        device_flags_start = trace_line.find(DEVICE_FLAGS_IDENTIFIER) + DEVICE_FLAGS_IDENTIFIER_LENGTH
-                                        device_flags = trace_line[device_flags_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
-                                                                                                    device_flags_start)].strip()
-                                        device_flags = device_flags.split(DEVICE_FLAGS_SPLIT_DELIMITER)
+                                if DEVICE_FLAGS_SKIP_IDENTIFIER not in trace_line:
+                                    device_flags_start = trace_line.find(DEVICE_FLAGS_IDENTIFIER) + DEVICE_FLAGS_IDENTIFIER_LENGTH
+                                    device_flags = trace_line[device_flags_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
+                                                                                                device_flags_start)].strip()
+                                    device_flags = device_flags.split(DEVICE_FLAGS_SPLIT_DELIMITER)
 
-                                        for device_flag in device_flags:
-                                            device_flag_stripped = device_flag.strip()
-                                            existing_value = self.device_flag_dictionary.get(device_flag_stripped, 0)
-                                            self.device_flag_dictionary[device_flag_stripped] = existing_value + 1
+                                    for device_flag in device_flags:
+                                        device_flag_stripped = device_flag.strip()
+                                        existing_value = self.device_flag_dictionary.get(device_flag_stripped, 0)
+                                        self.device_flag_dictionary[device_flag_stripped] = existing_value + 1
 
-                                    if FEATURE_LEVELS_SKIP_IDENTIFIER not in trace_line:
-                                        if FEATURE_LEVELS_IDENTIFIER in trace_line:
-                                            feature_levels_start = trace_line.find(FEATURE_LEVELS_IDENTIFIER) + FEATURE_LEVELS_IDENTIFIER_LENGTH
-                                            feature_levels = trace_line[feature_levels_start:trace_line.find(FEATURE_LEVELS_IDENTIFIER_END,
-                                                                                                            feature_levels_start)].strip()
-                                            feature_levels = feature_levels.split(API_ENTRY_VALUE_DELIMITER)
+                                if FEATURE_LEVELS_SKIP_IDENTIFIER not in trace_line:
+                                    if FEATURE_LEVELS_IDENTIFIER in trace_line:
+                                        feature_levels_start = trace_line.find(FEATURE_LEVELS_IDENTIFIER) + FEATURE_LEVELS_IDENTIFIER_LENGTH
+                                        feature_levels = trace_line[feature_levels_start:trace_line.find(FEATURE_LEVELS_IDENTIFIER_END,
+                                                                                                        feature_levels_start)].strip()
+                                        feature_levels = feature_levels.split(API_ENTRY_VALUE_DELIMITER)
 
-                                            for feature_level in feature_levels:
-                                                feature_level_stripped = feature_level.strip()
-                                                existing_value = self.feature_level_dictionary.get(feature_level_stripped, 0)
-                                                self.feature_level_dictionary[feature_level_stripped] = existing_value + 1
-
-                                        elif FEATURE_LEVELS_IDENTIFIER_ONE in trace_line:
-                                            feature_levels_start = trace_line.find(FEATURE_LEVELS_IDENTIFIER_ONE) + FEATURE_LEVELS_IDENTIFIER_ONE_LENGTH
-                                            feature_level_stripped = trace_line[feature_levels_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
-                                                                                                                     feature_levels_start)].strip()
+                                        for feature_level in feature_levels:
+                                            feature_level_stripped = feature_level.strip()
                                             existing_value = self.feature_level_dictionary.get(feature_level_stripped, 0)
                                             self.feature_level_dictionary[feature_level_stripped] = existing_value + 1
 
-                        except ValueError:
-                            pass
+                                    elif FEATURE_LEVELS_IDENTIFIER_ONE in trace_line:
+                                        feature_levels_start = trace_line.find(FEATURE_LEVELS_IDENTIFIER_ONE) + FEATURE_LEVELS_IDENTIFIER_ONE_LENGTH
+                                        feature_level_stripped = trace_line[feature_levels_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
+                                                                                                                    feature_levels_start)].strip()
+                                        existing_value = self.feature_level_dictionary.get(feature_level_stripped, 0)
+                                        self.feature_level_dictionary[feature_level_stripped] = existing_value + 1
+
+                            elif RASTIZER_STATE_CALL in call:
+                                logger.debug(f'Found rastizer state on line: {trace_line}')
+
+                                if RASTIZER_STATE_IDENTIFIER in trace_line:
+                                    rastizer_states_start = trace_line.find(RASTIZER_STATE_IDENTIFIER) + RASTIZER_STATE_IDENTIFIER_LENGTH
+                                    rastizer_states = trace_line[rastizer_states_start:trace_line.find(RASTIZER_STATE_IDENTIFIER_END,
+                                                                                                        rastizer_states_start)].strip()
+                                    rastizer_states = rastizer_states.split(API_ENTRY_VALUE_DELIMITER)
+
+                                    for rastizer_state in rastizer_states:
+                                        rastizer_state_stripped = rastizer_state.strip()
+                                        existing_value = self.rastizer_state_dictionary.get(rastizer_state_stripped, 0)
+                                        self.rastizer_state_dictionary[rastizer_state_stripped] = existing_value + 1
+
+                            elif BLEND_STATE_CALL in call:
+                                logger.debug(f'Found blend state on line: {trace_line}')
+
+                                if BLEND_STATE_IDENTIFIER in trace_line:
+                                    blend_states_start = trace_line.find(BLEND_STATE_IDENTIFIER) + BLEND_STATE_IDENTIFIER_LENGTH
+                                    blend_states = trace_line[blend_states_start:trace_line.find(BLEND_STATE_IDENTIFIER_END,
+                                                                                                    blend_states_start)].strip()
+                                    blend_states = blend_states.split(API_ENTRY_VALUE_DELIMITER)
+
+                                    for blend_state in blend_states:
+                                        blend_state_stripped = blend_state.strip()
+                                        existing_value = self.blend_state_dictionary.get(blend_state_stripped, 0)
+                                        self.blend_state_dictionary[blend_state_stripped] = existing_value + 1
+
+                            elif API_ENTRY_FORMAT_BASE_CALL in call:
+                                if FORMAT_IDENTIFIER in trace_line:
+                                    logger.debug(f'Found format on line: {trace_line}')
+
+                                    format_start = trace_line.find(FORMAT_IDENTIFIER) + FORMAT_IDENTIFIER_LENGTH
+                                    format_value = trace_line[format_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
+                                                                                        format_start)].strip()
+
+                                    existing_value = self.format_dictionary.get(format_value, 0)
+                                    self.format_dictionary[format_value] = existing_value + 1
+
+                                if USAGE_IDENTIFIER in trace_line:
+                                    logger.debug(f'Found usage on line: {trace_line}')
+
+                                    usage_start = trace_line.find(USAGE_IDENTIFIER) + USAGE_IDENTIFIER_LENGTH
+                                    usage_value = trace_line[usage_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
+                                                                                            usage_start)].strip()
+
+                                    if not USAGE_IDENTIFIER_SKIP in usage_value:
+                                        existing_value = self.usage_dictionary.get(usage_value, 0)
+                                        self.usage_dictionary[usage_value] = existing_value + 1
+
+                                if BIND_FLAGS_IDENTIFIER in trace_line and BIND_FLAGS_SKIP_IDENTIFIER not in trace_line:
+                                    logger.debug(f'Found bind flags on line: {trace_line}')
+
+                                    bind_flags_start = trace_line.find(BIND_FLAGS_IDENTIFIER) + BIND_FLAGS_IDENTIFIER_LENGTH
+                                    bind_flags = trace_line[bind_flags_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
+                                                                                                bind_flags_start)].strip()
+
+                                    bind_flags = bind_flags.split(BIND_FLAGS_SPLIT_DELIMITER)
+
+                                    for bind_flag in bind_flags:
+                                        bind_flag_stripped = bind_flag.strip()
+                                        existing_value = self.bind_flag_dictionary.get(bind_flag_stripped, 0)
+                                        self.bind_flag_dictionary[bind_flag_stripped] = existing_value + 1
 
                     else:
                         logger.debug(f'Skipped parsing of line: {trace_line}')

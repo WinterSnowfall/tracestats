@@ -1,0 +1,194 @@
+* {
+    font-family: 'Lucida Console', monospace;
+}
+
+body, html {
+    height: 100vh;
+    margin: 0;
+    background-color: #41434a;
+    color: white;
+}
+
+p {
+    margin: 0 0;
+}
+
+h1 {
+    text-shadow: 0 4px 6px #1c1c1c;
+}
+
+h5 {
+    text-shadow: 0 4px 6px #1c1c1c;
+}
+
+h6 {
+    margin-bottom: 10px;
+    margin-top: 0px;
+    text-shadow: 0 4px 6px #1c1c1c;
+}
+
+button {
+    margin: 0 5px;
+    background-color: #41434a;
+    color: white;
+    border: 1px solid white;
+    border-radius: 5px;
+    padding: 5px 10px;
+    box-shadow: 0 4px 6px #1c1c1c;
+    cursor: pointer;
+}
+
+button:hover {
+    background-color: white;
+    color: #41434a;
+    border: 1px solid #41434a;
+}
+
+table {
+    justify-content: center;
+    margin-top: 40px;
+    width: auto;
+    border-collapse: collapse;
+    max-height: 60vh;
+    max-width: 80vw;
+    overflow-y: auto;
+    display: flex;
+    font-size: 14px;
+}
+
+th {
+    background-color: white;
+    color: #41434a;
+    width: auto;
+    padding: 8px;
+    border: 1px solid white;
+    text-align: left;
+    white-space: nowrap;
+    user-select: none;
+}
+
+td {
+    width: auto;
+    padding: 8px;
+    max-width: 30vw;
+    overflow-wrap: break-word;
+    border: 1px solid white;
+    text-align: left;
+}
+
+mark {
+    background-color: white;
+    color: #41434a;
+}
+
+a {
+    color: lightgray;
+}
+
+a:visited {
+    color: lightgray;
+}
+
+a:hover {
+    color: white;
+}
+
+.align-right {
+    text-align: right;
+    padding-left: 0px;
+}
+
+.color-stat {
+    color: #df6c1f;
+    font-weight: bold;
+    font-size: 12px;
+}
+
+.container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    overflow-y: auto;
+    text-align: center;
+}
+
+.logo-image {
+    margin-right: 10px;
+    margin-left: 10px;
+    max-width: 40px;
+    max-height: 40px;
+    user-select: none;
+}
+
+.tracestats-stats {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+    user-select: none;
+}
+
+.button-tray {
+    user-select: none;
+}
+
+.search-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+    user-select: none;
+}
+
+.search-input {
+    margin-bottom: 20px;
+    background-color: #41434a;
+    color: white;
+    border: 1px solid white;
+    width: 550px;
+    border-radius: 5px;
+    box-shadow: 0 4px 6px #1c1c1c;
+}
+
+.password-input {
+    margin-left: 10px;
+    background-color: #41434a;
+    color: white;
+    border: 1px solid white;
+    width: 200px;
+    border-radius: 5px;
+    box-shadow: 0 4px 6px #1c1c1c;
+}
+
+.search-button-negative {
+    background-color: white;
+    color: #41434a;
+    border: 1px solid #41434a;
+    border-radius: 5px;
+    padding: 5px 10px;
+    box-shadow: 0 4px 6px #1c1c1c;
+    cursor: pointer;
+}
+
+.notification-error {
+    margin-top: 20px;
+    color: lightcoral;
+    text-shadow: 0 4px 6px #1c1c1c;
+    user-select: none;
+}
+
+.notification-info {
+    margin-top: 20px;
+    color: lightgreen;
+    text-shadow: 0 4px 6px #1c1c1c;
+    user-select: none;
+}
+
+.notification-highlight {
+    margin-top: 20px;
+    color:#df6c1f;
+    text-shadow: 0 4px 6px #1c1c1c;
+    user-select: none;
+}
+

@@ -1,6 +1,6 @@
 # tracestats
 
-A basic apitrace trace parser and interpreter, covering APIs from d3d8 to d3d11, which exports statistics to a JSON file.
+A humble apitrace trace parser and API call stats exporter, covering APIs from d3d8 to d3d11, with an included web app/search engine. It collects statistical data from apitrace files, which it then exports in JSON format. The JSON files can in turn be uploaded to the included web app/search engine and queried from a consolidated database.
 
 ### How to use
 
@@ -24,5 +24,9 @@ Optionally, you can also specify:
 
 ### What about some other stats which I noticed are missing?
 
-As I said, it's a rather basic statistics exporter for now, but it *may* be expanded at some point to capture even more data.
+As I said, it's a rather humble statistics exporter for now, but it *may* be expanded at some point to capture even more data.
+
+### What's in the "django" folder?
+
+A simple web application for uploading and querying exported tracestats JSON data, developed using Django. Note that it is provided only for reference, with some artifacts such as the logo and sqlite database not included (the latter can still very easily be generated using the Django manage script). For information on usage, deployment steps and so on please refer to the [Django documentation](https://docs.djangoproject.com/).
 

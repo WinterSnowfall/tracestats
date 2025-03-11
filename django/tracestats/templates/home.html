@@ -1,0 +1,67 @@
+{% load static %}
+{% load filters %}
+<!DOCTYPE html>
+<html>
+<head>
+    <link rel="stylesheet" href="{% static 'global.css' %}">
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="{% static 'scripts.js' %}"></script>
+</head>
+<body>
+<div class="container">
+    <div class="search-body">
+        <div class="search-container">
+            <h1>❄ Winter's avian</h1><img class="logo-image" src="{% static 'logo.svg' %}"><h1>API stats search engine ❄</h1>
+        </div>
+        <div class="tracestats-stats">
+            <h6>... Our vast network of bird brains currently holds information on <span class="color-stat">{{ traces_total }}</span> apitraces ...</h6>
+        </div>
+        <form method="post">
+            {% csrf_token %}
+            <p>{{ form.search_input }}</p>
+            <div class="button-tray">
+                <button class="search-button" type="submit" name="search-form">Let's fly!</button>
+                <button class="search-button" type="reset" id="reset-search-form" value="Reset">Reset.me</button>
+                <button class="search-button" type="button" id="toggle-file-upload">Add bird seed</button>
+            </div>
+        </form>
+        <div id="file-upload-area"></div>
+        <div class="search-results" id="search-results">
+            <table>
+                <tr>
+                    <th><b>#</b></th>
+                    <th>Application Name</th>
+                    <th>API</th>
+                    <th>Stat Name</th>
+                    <th>Stat Count</th>
+                    <th>% Total</th>
+                </tr>
+                {% for stat in search_results %}
+                <tr class="results-row">
+                    <td><b>{{ forloop.counter }}</b></td>
+                    <td><a href="https://www.pcgamingwiki.com/w/index.php?search={{ stat.trace.name|pcgwize }}&title=Special:Search">{{ stat.trace.name }}</a></td>
+                    <td>{{ stat.trace.api }}</td>
+                    <td>{{ stat.stat_name|safe }}</td>
+                    <td>{{ stat.stat_count }}</td>
+                    <td class="align-right">
+                        {% if stat.stat_type == 1 %}
+                            {{ stat.call_percentage }}
+                        {% elif stat.stat_type == 4 %}
+                            {{ stat.render_state_percentage }}
+                        {% elif stat.stat_type == 5 %}
+                            {{ stat.query_type_percentage }}
+                        {% else %}
+                            N/A
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </table>
+        </div>
+        <div id="notification-area" class="{% if notification_type == 'error' %}notification-error{% elif notification_type == 'info' %}notification-info{% else %}notification-highlight{% endif %}">
+            {{ notification_message }}
+        </div>
+    </div>
+</div>
+</body>
+</html>
