@@ -78,9 +78,11 @@ RENDER_STATES_IDENTIFIER_LENGTH = len(RENDER_STATES_IDENTIFIER)
 QUERY_TYPE_CALL_D3D8 = '::GetInfo'
 QUERY_TYPE_IDENTIFIER_D3D8 = 'DevInfoID = '
 QUERY_TYPE_IDENTIFIER_LENGTH_D3D8 = len(QUERY_TYPE_IDENTIFIER_D3D8)
-QUERY_TYPE_CALL_D3D9 = '::CreateQuery'
+QUERY_TYPE_CALL_D3D9_10_11 = '::CreateQuery'
 QUERY_TYPE_IDENTIFIER_D3D9 = 'Type = '
 QUERY_TYPE_IDENTIFIER_LENGTH_D3D9 = len(QUERY_TYPE_IDENTIFIER_D3D9)
+QUERY_TYPE_IDENTIFIER_D3D10_11 = 'Query = '
+QUERY_TYPE_IDENTIFIER_D3D10_11_LENGTH = len(QUERY_TYPE_IDENTIFIER_D3D10_11)
 # formats
 API_ENTRY_FORMAT_BASE_CALL = '::Create'
 FORMAT_IDENTIFIER = 'Format = '
@@ -113,7 +115,8 @@ RASTIZER_STATE_IDENTIFIER_END = '}'
 BLEND_STATE_CALL = '::CreateBlendState'
 BLEND_STATE_IDENTIFIER = 'pBlendStateDesc = &{'
 BLEND_STATE_IDENTIFIER_LENGTH = len(RASTIZER_STATE_IDENTIFIER)
-BLEND_STATE_IDENTIFIER_END = ', RenderTarget = '
+BLEND_STATE_IDENTIFIER_END_D3D10 = ', BlendEnable = '
+BLEND_STATE_IDENTIFIER_END_D3D11 = ', RenderTarget = '
 # usage
 USAGE_IDENTIFIER = 'Usage = '
 USAGE_IDENTIFIER_LENGTH = len(USAGE_IDENTIFIER)
@@ -124,6 +127,8 @@ BIND_FLAGS_IDENTIFIER_LENGTH = len(BIND_FLAGS_IDENTIFIER)
 BIND_FLAGS_SKIP_IDENTIFIER = 'BindFlags = 0x0'
 BIND_FLAGS_SPLIT_DELIMITER = '|'
 ################################# D3D10, D3D11 #################################
+
+DEFERRED_CONTEXT_CALL = '::CreateDeferredContext'
 
 def sigterm_handler(signum, frame):
     try:
@@ -415,6 +420,8 @@ class TraceStats:
             try:
                 trace_chunk_lines = self.process_queue.get(block=True, timeout=5)
                 trace_call_counter = 0
+                trace_call_counter_notification = 0
+                trace_deffered_context_warned = False
 
                 for trace_line in trace_chunk_lines:
                     # there are, surprisingly, quite a lot of
@@ -423,6 +430,9 @@ class TraceStats:
                         continue
                     # also early skip embedded comments
                     elif trace_line.startswith('//'):
+                        continue
+                    # early skip whitespaced lines (not API calls)
+                    elif trace_line.startswith('  '):
                         continue
 
                     split_line = trace_line.split()
@@ -509,7 +519,7 @@ class TraceStats:
                                 continue
 
                             # D3D9Ex/D3D9 use IDirect3DQuery9::CreateQuery to initiate queries
-                            elif (self.api == 'D3D9Ex' or self.api == 'D3D9') and QUERY_TYPE_CALL_D3D9 in call:
+                            elif (self.api == 'D3D9Ex' or self.api == 'D3D9') and QUERY_TYPE_CALL_D3D9_10_11 in call:
                                 logger.debug(f'Found query type on line: {trace_line}')
 
                                 query_type_start = trace_line.find(QUERY_TYPE_IDENTIFIER_D3D9) + QUERY_TYPE_IDENTIFIER_LENGTH_D3D9
@@ -575,6 +585,17 @@ class TraceStats:
                                         existing_value = self.feature_level_dictionary.get(feature_level_stripped, 0)
                                         self.feature_level_dictionary[feature_level_stripped] = existing_value + 1
 
+                            elif QUERY_TYPE_CALL_D3D9_10_11 in call:
+                                logger.debug(f'Found query type on line: {trace_line}')
+
+                                query_type_start = trace_line.find(QUERY_TYPE_IDENTIFIER_D3D10_11) + QUERY_TYPE_IDENTIFIER_D3D10_11_LENGTH
+                                query_type = trace_line[query_type_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
+                                                                                         query_type_start)].strip()
+
+                                existing_value = self.query_type_dictionary.get(query_type, 0)
+                                self.query_type_dictionary[query_type] = existing_value + 1
+                                continue
+
                             elif RASTIZER_STATE_CALL in call:
                                 logger.debug(f'Found rastizer state on line: {trace_line}')
 
@@ -594,14 +615,23 @@ class TraceStats:
 
                                 if BLEND_STATE_IDENTIFIER in trace_line:
                                     blend_states_start = trace_line.find(BLEND_STATE_IDENTIFIER) + BLEND_STATE_IDENTIFIER_LENGTH
-                                    blend_states = trace_line[blend_states_start:trace_line.find(BLEND_STATE_IDENTIFIER_END,
-                                                                                                    blend_states_start)].strip()
+                                    if self.api == 'D3D10':
+                                        blend_states = trace_line[blend_states_start:trace_line.find(BLEND_STATE_IDENTIFIER_END_D3D10,
+                                                                                                     blend_states_start)].strip()
+                                    elif self.api == 'D3D11':
+                                        blend_states = trace_line[blend_states_start:trace_line.find(BLEND_STATE_IDENTIFIER_END_D3D11,
+                                                                                                     blend_states_start)].strip()
                                     blend_states = blend_states.split(API_ENTRY_VALUE_DELIMITER)
 
                                     for blend_state in blend_states:
                                         blend_state_stripped = blend_state.strip()
                                         existing_value = self.blend_state_dictionary.get(blend_state_stripped, 0)
                                         self.blend_state_dictionary[blend_state_stripped] = existing_value + 1
+
+                            elif DEFERRED_CONTEXT_CALL in call and not trace_deffered_context_warned:
+                                # issue with apitrace potentially skipping certain call lines if the trace call numbers are not ordered
+                                logger.warning('Application is using deffered contexts. Trace parsing may not be accurate.')
+                                trace_deffered_context_warned = True
 
                             elif API_ENTRY_FORMAT_BASE_CALL in call:
                                 if FORMAT_IDENTIFIER in trace_line:
@@ -642,8 +672,9 @@ class TraceStats:
                     else:
                         logger.debug(f'Skipped parsing of line: {trace_line}')
 
-                if trace_call_counter > 0 and trace_call_counter % TRACE_LOGGING_CHUNK_CALLS == 0:
-                    logger.info(f'Proccessed {trace_call_counter} apitrace calls...')
+                    if trace_call_counter != trace_call_counter_notification and trace_call_counter % TRACE_LOGGING_CHUNK_CALLS == 0:
+                        logger.info(f'Proccessed {trace_call_counter} apitrace calls...')
+                        trace_call_counter_notification = trace_call_counter
 
                 # don't hold onto the chunk as it's quite the heavy chonker
                 trace_chunk_lines = None
