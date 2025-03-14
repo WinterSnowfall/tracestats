@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 '''
 @author: Winter Snowfall
-@version: 0.6
-@date: 12/03/2025
+@version: 0.8
+@date: 14/03/2025
 '''
 
 import os
@@ -57,8 +57,11 @@ API_ENTRY_CALL_IDENTIFIER = '::'
 API_ENTRY_VALUE_DELIMITER = ','
 
 ############################## D3D8, D3D9Ex, D3D9 ##############################
+# device type
+DEVICE_CREATION_CALL = '::CreateDevice'
+DEVICE_TYPE_IDENTIFIER = 'DeviceType = '
+DEVICE_TYPE_IDENTIFIER_LENGTH = len(DEVICE_TYPE_IDENTIFIER)
 # behavior flags
-BEHAVIOR_AND_PRESENT_PARAMETERS_FLAGS_CALL = '::CreateDevice'
 BEHAVIOR_FLAGS_IDENTIFIER = 'BehaviorFlags = '
 BEHAVIOR_FLAGS_IDENTIFIER_LENGTH = len(BEHAVIOR_FLAGS_IDENTIFIER)
 BEHAVIOR_FLAGS_SPLIT_DELIMITER = '|'
@@ -128,8 +131,6 @@ BIND_FLAGS_SKIP_IDENTIFIER = 'BindFlags = 0x0'
 BIND_FLAGS_SPLIT_DELIMITER = '|'
 ################################# D3D10, D3D11 #################################
 
-DEFERRED_CONTEXT_CALL = '::CreateDeferredContext'
-
 def sigterm_handler(signum, frame):
     try:
         logger.critical('Halting processing due due to SIGTERM...')
@@ -164,7 +165,7 @@ class TraceStats:
         except ValueError:
             return 'Unknown'
 
-    def __init__(self, trace_input_paths, json_export_path, application_name, apitrace_path, apitrace_threads):
+    def __init__(self, trace_input_paths, json_export_path, application_name, application_link, apitrace_path, apitrace_threads):
         if trace_input_paths is not None:
             self.trace_input_paths = trace_input_paths[0]
         else:
@@ -224,8 +225,10 @@ class TraceStats:
             raise SystemExit(5)
 
         self.application_name = application_name
+        self.application_link = application_link
         self.api = None
         self.api_call_dictionary = {}
+        self.device_type_dictionary = {}
         self.behavior_flag_dictionary = {}
         self.present_parameter_dictionary = {}
         self.render_state_dictionary = {}
@@ -264,15 +267,18 @@ class TraceStats:
                 # workaround for renamed generic game/Game.exe apitraces
                 if binary_name_raw.upper().startswith('GAME'):
                     binary_name = binary_name_raw[:4]
+                # workaround for games that support multiple APIs
                 elif binary_name_raw.endswith('_'):
                     binary_name = binary_name_raw[:-1]
-                application_name = None
+
                 if self.application_name is not None:
-                    application_name = self.application_name
-                    logger.info(f'Using application name: {application_name}')
+                    logger.info(f'Using application name: {self.application_name}')
                 elif TRACEAPPNAMES_IS_IMPORTED:
-                    application_name = TraceAppNames.get(binary_name_raw)
-                    logger.info(f'Application name found in traceappnames repository: {application_name}')
+                    self.application_name = TraceAppNames.get(binary_name_raw)
+                    logger.info(f'Application name found in traceappnames repository: {self.application_name}')
+
+                if self.application_link is not None:
+                    logger.info(f'Using application link: {self.application_link}')
 
                 self.parse_queue = queue.Queue(maxsize=self.thread_count)
                 self.parse_loop.set()
@@ -315,10 +321,15 @@ class TraceStats:
                 process_thread.join()
 
                 return_dictionary = {}
-                return_dictionary['name'] = application_name
                 return_dictionary['binary_name'] = binary_name
+                if self.application_name is not None:
+                    return_dictionary['name'] = self.application_name
+                if self.application_link is not None:
+                    return_dictionary['link'] = self.application_link
                 if len(self.api_call_dictionary) > 0:
                     return_dictionary['api_calls'] = self.api_call_dictionary
+                if len(self.device_type_dictionary) > 0:
+                    return_dictionary['device_types'] = self.device_type_dictionary
                 if len(self.present_parameter_dictionary) > 0:
                     return_dictionary['present_parameters'] = self.present_parameter_dictionary
                 if len(self.behavior_flag_dictionary) > 0:
@@ -349,6 +360,7 @@ class TraceStats:
                 # reset state between processed traces
                 self.api = None
                 self.api_call_dictionary = {}
+                self.device_type_dictionary = {}
                 self.behavior_flag_dictionary = {}
                 self.present_parameter_dictionary = {}
                 self.render_state_dictionary = {}
@@ -383,11 +395,12 @@ class TraceStats:
             try:
                 trace_start_call, trace_end_call, trace_path = self.parse_queue.get(block=True, timeout=5)
 
+                # mind the -v (verbose) flag here, otherwise apitrace dump will skip random calls :/
                 if self.use_wine_for_apitrace:
-                    subprocess_params = ('wine', self.apitrace_path, 'dump',
+                    subprocess_params = ('wine', self.apitrace_path, 'dump', '-v', '--color=never',
                                         f'--calls={trace_start_call}-{trace_end_call}', trace_path)
                 else:
-                    subprocess_params = (self.apitrace_path, 'dump',
+                    subprocess_params = (self.apitrace_path, 'dump', '-v', '--color=never',
                                         f'--calls={trace_start_call}-{trace_end_call}', trace_path)
 
                 try:
@@ -416,14 +429,18 @@ class TraceStats:
                 pass
 
     def trace_parse_worker(self):
+        trace_parsing_bug_warned = False
+        trace_call_counter_notification = 0
+
         while self.process_loop.is_set() or not self.process_queue.empty():
             try:
                 trace_chunk_lines = self.process_queue.get(block=True, timeout=5)
+                trace_call_counter_prev = 0
                 trace_call_counter = 0
-                trace_call_counter_notification = 0
-                trace_deffered_context_warned = False
 
                 for trace_line in trace_chunk_lines:
+                    # logger.error(f'Processing line: {trace_line}')
+
                     # there are, surprisingly, quite a lot of
                     # blank/padding lines in an apitrace dump
                     if len(trace_line) == 0:
@@ -432,15 +449,22 @@ class TraceStats:
                     elif trace_line.startswith('//'):
                         continue
                     # early skip whitespaced lines (not API calls)
-                    elif trace_line.startswith('  '):
+                    elif trace_line.startswith(' '):
                         continue
 
-                    split_line = trace_line.split()
+                    # no need to do more than 2 splits, as we only need
+                    # the trace number and later on the api call name
+                    split_line = trace_line.split(maxsplit=2)
 
                     # otherwise unnumbered lines will raise a ValueError
                     try:
+                        trace_call_counter_prev = trace_call_counter
                         trace_call_counter = int(split_line[0])
                         logger.debug(f'Found call count: {trace_call_counter}')
+
+                        if not trace_parsing_bug_warned and trace_call_counter < trace_call_counter_prev:
+                            logger.warning('API call indexes are not ordered. Trace parsing may be inaccurate.')
+                            trace_parsing_bug_warned = True
                     except ValueError:
                         pass
 
@@ -457,7 +481,7 @@ class TraceStats:
                                     break
 
                         # parse API calls
-                        call = split_line[1].split('(')[0]
+                        call = split_line[1].split('(', 1)[0]
                         logger.debug(f'Found call: {call}')
 
                         existing_value = self.api_call_dictionary.get(call, 0)
@@ -466,8 +490,15 @@ class TraceStats:
                         # parse device behavior flags, render states, format
                         # and pool values for D3D8, D3D9Ex, and D3D9 apitraces
                         if self.api == 'D3D8' or self.api == 'D3D9Ex' or self.api == 'D3D9':
-                            if BEHAVIOR_AND_PRESENT_PARAMETERS_FLAGS_CALL in call:
-                                logger.debug(f'Found behavior flags and present parameters on line: {trace_line}')
+                            if DEVICE_CREATION_CALL in call:
+                                logger.debug(f'Found device type, behavior flags and present parameters on line: {trace_line}')
+
+                                device_type_start = trace_line.find(DEVICE_TYPE_IDENTIFIER) + DEVICE_TYPE_IDENTIFIER_LENGTH
+                                device_type = trace_line[device_type_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
+                                                                                               device_type_start)].strip()
+
+                                existing_value = self.device_type_dictionary.get(device_type, 0)
+                                self.device_type_dictionary[device_type] = existing_value + 1
 
                                 behavior_flags_start = trace_line.find(BEHAVIOR_FLAGS_IDENTIFIER) + BEHAVIOR_FLAGS_IDENTIFIER_LENGTH
                                 behavior_flags = trace_line[behavior_flags_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
@@ -502,7 +533,6 @@ class TraceStats:
 
                                 existing_value = self.render_state_dictionary.get(render_state, 0)
                                 self.render_state_dictionary[render_state] = existing_value + 1
-                                continue
 
                             # D3D8 uses IDirect3DDevice8::GetInfo calls to initiate queries
                             elif self.api == 'D3D8' and QUERY_TYPE_CALL_D3D8 in call:
@@ -516,7 +546,6 @@ class TraceStats:
 
                                 existing_value = self.query_type_dictionary.get(query_type_decoded, 0)
                                 self.query_type_dictionary[query_type_decoded] = existing_value + 1
-                                continue
 
                             # D3D9Ex/D3D9 use IDirect3DQuery9::CreateQuery to initiate queries
                             elif (self.api == 'D3D9Ex' or self.api == 'D3D9') and QUERY_TYPE_CALL_D3D9_10_11 in call:
@@ -528,7 +557,6 @@ class TraceStats:
 
                                 existing_value = self.query_type_dictionary.get(query_type, 0)
                                 self.query_type_dictionary[query_type] = existing_value + 1
-                                continue
 
                             elif API_ENTRY_FORMAT_BASE_CALL in call:
                                 if FORMAT_IDENTIFIER in trace_line:
@@ -594,7 +622,6 @@ class TraceStats:
 
                                 existing_value = self.query_type_dictionary.get(query_type, 0)
                                 self.query_type_dictionary[query_type] = existing_value + 1
-                                continue
 
                             elif RASTIZER_STATE_CALL in call:
                                 logger.debug(f'Found rastizer state on line: {trace_line}')
@@ -627,11 +654,6 @@ class TraceStats:
                                         blend_state_stripped = blend_state.strip()
                                         existing_value = self.blend_state_dictionary.get(blend_state_stripped, 0)
                                         self.blend_state_dictionary[blend_state_stripped] = existing_value + 1
-
-                            elif DEFERRED_CONTEXT_CALL in call and not trace_deffered_context_warned:
-                                # issue with apitrace potentially skipping certain call lines if the trace call numbers are not ordered
-                                logger.warning('Application is using deffered contexts. Trace parsing may not be accurate.')
-                                trace_deffered_context_warned = True
 
                             elif API_ENTRY_FORMAT_BASE_CALL in call:
                                 if FORMAT_IDENTIFIER in trace_line:
@@ -737,11 +759,12 @@ if __name__ == "__main__":
     optional.add_argument('-t', '--threads', help='number of apitrace dump threads to spawn')
     optional.add_argument('-o', '--output', help='path and filename of the JSON export')
     optional.add_argument('-n', '--name', help='specify a name for the apitraced application, using double quotes')
+    optional.add_argument('-l', '--link', help='specify a web link for the application')
     optional.add_argument('-a', '--apitrace', help='path to the apitrace executable')
 
     args = parser.parse_args()
 
-    tracestats = TraceStats(args.input, args.output, args.name, args.apitrace, args.threads)
+    tracestats = TraceStats(args.input, args.output, args.name, args.link, args.apitrace, args.threads)
     if not args.join:
         tracestats.process_traces()
     else:
