@@ -19,7 +19,7 @@
         <form method="post">
             {% csrf_token %}
             <p>{{ form.search_input }}</p>
-            <div class="button-tray">
+            <div class="no-selection">
                 <button class="search-button" type="submit" name="search-form">Let's fly!</button>
                 <button class="search-button" type="reset" id="reset-search-form" value="Reset">Reset.me</button>
                 <button class="search-button" type="button" id="toggle-file-upload">Add bird seed</button>
@@ -38,7 +38,7 @@
                 </tr>
                 {% for stat in search_results %}
                 <tr class="results-row">
-                    <td><b>{{ forloop.counter }}</b></td>
+                    <td class="no-selection"><b>{{ forloop.counter }}</b></td>
                     <td><a href="https://www.pcgamingwiki.com/w/index.php?search={{ stat.trace.name|pcgwize }}&title=Special:Search">{{ stat.trace.name }}</a></td>
                     <td>{{ stat.trace.api }}</td>
                     <td>{{ stat.stat_name|safe }}</td>
@@ -46,9 +46,9 @@
                     <td class="align-right">
                         {% if stat.stat_type == 1 %}
                             {{ stat.call_percentage }}
-                        {% elif stat.stat_type == 4 %}
-                            {{ stat.render_state_percentage }}
                         {% elif stat.stat_type == 5 %}
+                            {{ stat.render_state_percentage }}
+                        {% elif stat.stat_type == 6 %}
                             {{ stat.query_type_percentage }}
                         {% else %}
                             N/A

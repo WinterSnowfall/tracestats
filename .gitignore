@@ -3,6 +3,7 @@ django/staticfiles/
 django/tracestats/migrations/0001_initial.py
 django/tracestats/static/logo.svg
 django/db.sqlite3
+django/db.sqlite3.bak
 export/
 traces/
 traceappnames.py

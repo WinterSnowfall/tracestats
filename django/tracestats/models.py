@@ -19,6 +19,7 @@ class Tokens(models.Model):
 
 class Trace(models.Model):
     name                = models.CharField(max_length=255, db_index=True)
+    link                = models.CharField(max_length=255, null=True)
     binary_name         = models.CharField(max_length=255)
     updated_by          = models.ForeignKey(Tokens,
                                             on_delete=models.PROTECT)
@@ -59,7 +60,7 @@ class Stats(models.Model):
 
     @property
     def render_state_percentage(self):
-        if self.stat_type == 4 and self.trace.render_states_total is not None:
+        if self.stat_type == 5 and self.trace.render_states_total is not None:
             # Don't display anything under 0.01 and round up to 2 demimal points of precision
             result = round_up_two_decimals(max((self.stat_count * 100) / self.trace.render_states_total, 0.01))
             precision = 0 if result.is_integer() else (2 if (result * 100) % 10 != 0 else 1)
@@ -68,7 +69,7 @@ class Stats(models.Model):
 
     @property
     def query_type_percentage(self):
-        if self.stat_type == 5 and self.trace.query_types_total is not None:
+        if self.stat_type == 6 and self.trace.query_types_total is not None:
             # Don't display anything under 0.01 and round up to 2 demimal points of precision
             result = round_up_two_decimals(max((self.stat_count * 100) / self.trace.query_types_total, 0.01))
             precision = 0 if result.is_integer() else (2 if (result * 100) % 10 != 0 else 1)

@@ -26,18 +26,20 @@ API_ENTRY_CALLS = {'Direct3DCreate8': 'D3D8',
                    'D3D11CreateDevice': 'D3D11',
                    'D3D11CoreCreateDevice': 'D3D11'}
 STATS_TYPE = {'api_calls': 1,
-              'behavior_flags': 2,
-              'present_parameters': 3,
-              'render_states': 4,
-              'query_types': 5,
-              'formats': 6,
-              'pools': 7,
-              'device_flags': 8,
-              'feature_levels': 9,
-              'rastizer_states': 10,
-              'blend_states': 11,
-              'usage': 12,
-              'bind_flags': 13}
+              'device_types': 2,
+              'behavior_flags': 3,
+              'present_parameters': 4,
+              'render_states': 5,
+              'query_types': 6,
+              'formats': 7,
+              'pools': 8,
+              'device_flags': 9,
+              'feature_levels': 10,
+              'rastizer_states': 11,
+              'blend_states': 12,
+              'usage': 13,
+              'bind_flags': 14}
+SEARCH_RESULTS_LIMIT = 500
 
 def tracestats(request):
   request.session['content_visible'] = False
@@ -75,6 +77,7 @@ def tracestats(request):
                 # use the binary name for the application name, if unspecified
                 if entry_application_name is None:
                   entry_application_name = entry_binary_name
+                entry_application_link = entry.get('link')
 
                 # determine the API based on the entrypoint call
                 entry_api = None
@@ -123,6 +126,7 @@ def tracestats(request):
 
                 if existing_trace is None:
                   trace = models.Trace(name=entry_application_name,
+                                       link=entry_application_link,
                                        binary_name=entry_binary_name,
                                        updated_by=token,
                                        api=entry_api,
@@ -135,6 +139,7 @@ def tracestats(request):
                   # clear any existing stats if we are updating the trace
                   models.Stats.objects.filter(trace=trace).delete()
                   # update the new values in the trace entry
+                  trace.link = entry_application_link
                   trace.binary_name = entry_binary_name
                   trace.updated_by = token
                   trace.updated_last = now()
@@ -149,6 +154,17 @@ def tracestats(request):
                 for key, value in entry_call_stats.items():
                   stats.append(models.Stats(trace=trace,
                                             stat_type=STATS_TYPE['api_calls'],
+                                            stat_name=key,
+                                            stat_count=value))
+                if len(stats) > 0:
+                  models.Stats.objects.bulk_create(stats)
+
+                # create child stats entries for device types
+                entry_device_types = entry.get('device_types', {})
+                stats = []
+                for key, value in entry_device_types.items():
+                  stats.append(models.Stats(trace=trace,
+                                            stat_type=STATS_TYPE['device_types'],
                                             stat_name=key,
                                             stat_count=value))
                 if len(stats) > 0:
@@ -219,9 +235,9 @@ def tracestats(request):
                   models.Stats.objects.bulk_create(stats)
 
                 # create child stats entries for device flags
-                device_flags = entry.get('device_flags', {})
+                entry_device_flags = entry.get('device_flags', {})
                 stats = []
-                for key, value in device_flags.items():
+                for key, value in entry_device_flags.items():
                   stats.append(models.Stats(trace=trace,
                                             stat_type=STATS_TYPE['device_flags'],
                                             stat_name=key,
@@ -230,9 +246,9 @@ def tracestats(request):
                   models.Stats.objects.bulk_create(stats)
 
                 # create child stats entries for feature levels
-                feature_levels = entry.get('feature_levels', {})
+                entry_feature_levels = entry.get('feature_levels', {})
                 stats = []
-                for key, value in feature_levels.items():
+                for key, value in entry_feature_levels.items():
                   stats.append(models.Stats(trace=trace,
                                             stat_type=STATS_TYPE['feature_levels'],
                                             stat_name=key,
@@ -241,9 +257,9 @@ def tracestats(request):
                   models.Stats.objects.bulk_create(stats)
 
                 # create child stats entries for raster states
-                rastizer_states = entry.get('rastizer_states', {})
+                entry_rastizer_states = entry.get('rastizer_states', {})
                 stats = []
-                for key, value in rastizer_states.items():
+                for key, value in entry_rastizer_states.items():
                   stats.append(models.Stats(trace=trace,
                                             stat_type=STATS_TYPE['rastizer_states'],
                                             stat_name=key,
@@ -252,9 +268,9 @@ def tracestats(request):
                   models.Stats.objects.bulk_create(stats)
 
                 # create child stats entries for blend states
-                blend_states = entry.get('blend_states', {})
+                entry_blend_states = entry.get('blend_states', {})
                 stats = []
-                for key, value in blend_states.items():
+                for key, value in entry_blend_states.items():
                   stats.append(models.Stats(trace=trace,
                                             stat_type=STATS_TYPE['blend_states'],
                                             stat_name=key,
@@ -263,9 +279,9 @@ def tracestats(request):
                   models.Stats.objects.bulk_create(stats)
 
                 # create child stats entries for usage
-                usage = entry.get('usage', {})
+                entry_usage = entry.get('usage', {})
                 stats = []
-                for key, value in usage.items():
+                for key, value in entry_usage.items():
                   stats.append(models.Stats(trace=trace,
                                             stat_type=STATS_TYPE['usage'],
                                             stat_name=key,
@@ -274,9 +290,9 @@ def tracestats(request):
                   models.Stats.objects.bulk_create(stats)
 
                 # create child stats entries for bind flags
-                bind_flags = entry.get('bind_flags', {})
+                entry_bind_flags = entry.get('bind_flags', {})
                 stats = []
-                for key, value in bind_flags.items():
+                for key, value in entry_bind_flags.items():
                   stats.append(models.Stats(trace=trace,
                                             stat_type=STATS_TYPE['bind_flags'],
                                             stat_name=key,
@@ -319,11 +335,11 @@ def tracestats(request):
         if not exact_search:
           search_results = models.Stats.objects.filter(stat_name__icontains=search_input).order_by('stat_type',
                                                                                                    '-stat_count',
-                                                                                                   'trace__name')
+                                                                                                   'trace__name')[:SEARCH_RESULTS_LIMIT]
         else:
           search_results = models.Stats.objects.filter(stat_name__exact=search_input).order_by('stat_type',
                                                                                                '-stat_count',
-                                                                                               'trace__name')
+                                                                                               'trace__name')[:SEARCH_RESULTS_LIMIT]
 
         if len(search_results) == 0:
           # If no objects are found, do a search based on application names
@@ -331,12 +347,12 @@ def tracestats(request):
             search_results = models.Stats.objects.filter(trace__name__icontains=search_input).order_by('trace__name',
                                                                                                        'trace__api',
                                                                                                        'stat_type',
-                                                                                                       '-stat_count')
+                                                                                                       '-stat_count')[:SEARCH_RESULTS_LIMIT]
           else:
             search_results = models.Stats.objects.filter(trace__name__exact=search_input).order_by('trace__name',
                                                                                                    'trace__api',
                                                                                                    'stat_type',
-                                                                                                   '-stat_count')
+                                                                                                   '-stat_count')[:SEARCH_RESULTS_LIMIT]
 
           if len(search_results) == 0:
             # If no results of any kind could be found, show a notification to that extent
