@@ -274,11 +274,26 @@ class TraceStats:
                 if self.application_name is not None:
                     logger.info(f'Using application name: {self.application_name}')
                 elif TRACEAPPNAMES_IS_IMPORTED:
-                    self.application_name = TraceAppNames.get(binary_name_raw)
-                    logger.info(f'Application name found in traceappnames repository: {self.application_name}')
+                    try:
+                        self.application_name = TraceAppNames.get(binary_name_raw)[0]
+                        if self.application_name is not None:
+                            logger.info(f'Application name found in traceappnames repository: {self.application_name}')
+                    except TypeError:
+                        pass
+                # use the binary name as an application name if it is undertermined at this point
+                if self.application_name is None:
+                    logger.info(f'Defaulting application name to: {binary_name}')
+                    self.application_name = binary_name
 
                 if self.application_link is not None:
                     logger.info(f'Using application link: {self.application_link}')
+                elif TRACEAPPNAMES_IS_IMPORTED:
+                    try:
+                        self.application_link = TraceAppNames.get(binary_name_raw)[1]
+                        if self.application_link is not None:
+                            logger.info(f'Application link found in traceappnames repository: {self.application_link}')
+                    except TypeError:
+                        pass
 
                 self.parse_queue = queue.Queue(maxsize=self.thread_count)
                 self.parse_loop.set()
@@ -322,8 +337,7 @@ class TraceStats:
 
                 return_dictionary = {}
                 return_dictionary['binary_name'] = binary_name
-                if self.application_name is not None:
-                    return_dictionary['name'] = self.application_name
+                return_dictionary['name'] = self.application_name
                 if self.application_link is not None:
                     return_dictionary['link'] = self.application_link
                 if len(self.api_call_dictionary) > 0:

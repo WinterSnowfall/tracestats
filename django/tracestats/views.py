@@ -77,7 +77,7 @@ def tracestats(request):
                 # use the binary name for the application name, if unspecified
                 if entry_application_name is None:
                   entry_application_name = entry_binary_name
-                entry_application_link = entry.get('link')
+                entry_application_link = entry.get('link', None)
 
                 # determine the API based on the entrypoint call
                 entry_api = None
