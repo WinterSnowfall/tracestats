@@ -9,10 +9,6 @@ body, html {
     color: white;
 }
 
-p {
-    margin: 0 0;
-}
-
 h1 {
     text-shadow: 0 4px 6px #1c1c1c;
 }
@@ -22,8 +18,7 @@ h5 {
 }
 
 h6 {
-    margin-bottom: 10px;
-    margin-top: 0px;
+    margin: 0;
     text-shadow: 0 4px 6px #1c1c1c;
 }
 
@@ -122,6 +117,7 @@ a:hover {
 }
 
 .tracestats-stats {
+    margin: 0 0;
     display: flex;
     justify-content: center;
     align-items: center;
@@ -142,6 +138,7 @@ a:hover {
 }
 
 .search-input {
+    margin-top: 20px;
     margin-bottom: 20px;
     background-color: #41434a;
     color: white;
@@ -169,6 +166,21 @@ a:hover {
     padding: 5px 10px;
     box-shadow: 0 4px 6px #1c1c1c;
     cursor: pointer;
+}
+
+.api-stats-container {
+    margin-top: 20px;
+    user-select: none;
+}
+
+.api-stats-chart {
+    display: flex;
+    margin-top: 10px;
+    height: 250px;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+    user-select: none;
 }
 
 .notification-error {

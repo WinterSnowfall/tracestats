@@ -42,7 +42,8 @@ STATS_TYPE = {'api_calls': 1,
 SEARCH_RESULTS_LIMIT = 500
 
 def tracestats(request):
-  request.session['content_visible'] = False
+  request.session['file_upload_visible'] = False
+  request.session['api_stats_visible'] = False
   request.session.modified = True
   search_form = None
   search_results = None
@@ -318,12 +319,16 @@ def tracestats(request):
         else:
           context = {'notification_message': 'Wrong answer. You\'ve been cast into the Gorge of Eternal Peril!',
                     'notification_type': 'error'}
+      else:
+        context = {'notification_message': 'That file has upset the Rabbit of Caerbannog. Naughty naughty.',
+                   'notification_type': 'error'}
 
     elif 'search-form' in request.POST:
       search_form = forms.SearchForm(request.POST)
       if search_form.is_valid():
         search_input = request.POST['search_input'].strip()
         logger.info(f'Search_Input: {search_input}')
+        naughtiness  = False
         exact_search = False
 
         search_bang_split = search_input.rsplit(' ', 1)
@@ -334,30 +339,30 @@ def tracestats(request):
         # Note that all searches are case insensitive in SQLite
         if not exact_search:
           search_results = models.Stats.objects.filter(stat_name__icontains=search_input).order_by('stat_type',
-                                                                                                   '-stat_count',
-                                                                                                   'trace__name')[:SEARCH_RESULTS_LIMIT]
+                                                                                                  '-stat_count',
+                                                                                                  'trace__name')[:SEARCH_RESULTS_LIMIT]
         else:
           search_results = models.Stats.objects.filter(stat_name__exact=search_input).order_by('stat_type',
-                                                                                               '-stat_count',
-                                                                                               'trace__name')[:SEARCH_RESULTS_LIMIT]
+                                                                                              '-stat_count',
+                                                                                              'trace__name')[:SEARCH_RESULTS_LIMIT]
 
         if len(search_results) == 0:
           # If no objects are found, do a search based on application names
           if not exact_search:
             search_results = models.Stats.objects.filter(trace__name__icontains=search_input).order_by('trace__name',
-                                                                                                       'trace__api',
-                                                                                                       'stat_type',
-                                                                                                       '-stat_count')[:SEARCH_RESULTS_LIMIT]
+                                                                                                      'trace__api',
+                                                                                                      'stat_type',
+                                                                                                      '-stat_count')[:SEARCH_RESULTS_LIMIT]
           else:
             search_results = models.Stats.objects.filter(trace__name__exact=search_input).order_by('trace__name',
-                                                                                                   'trace__api',
-                                                                                                   'stat_type',
-                                                                                                   '-stat_count')[:SEARCH_RESULTS_LIMIT]
+                                                                                                  'trace__api',
+                                                                                                  'stat_type',
+                                                                                                  '-stat_count')[:SEARCH_RESULTS_LIMIT]
 
           if len(search_results) == 0:
             # If no results of any kind could be found, show a notification to that extent
             context = {'notification_message': 'I\'m afraid that particular shrubbery is nowhere to be found.',
-                       'notification_type': 'highlight'}
+                      'notification_type': 'highlight'}
         else:
           # Highlight the searched text in the returned results
           for search_result in search_results:
@@ -382,20 +387,58 @@ def tracestats(request):
   return render(request, 'home.html', context)
 
 def generate_file_upload(request):
-  try:
-    request.session['content_visible'] = not request.session['content_visible']
-    request.session.modified = True
-  except KeyError:
-    request.session['content_visible'] = True
-    request.session.modified = True
-
-  if request.session['content_visible']:
-      file_upload_form = forms.FileUploadForm()
-      context = {'file_upload_form': file_upload_form}
-      context.update(csrf(request))
-      content = loader.render_to_string('file_upload.html', context)
+  if request.method != 'POST':
+    return JsonResponse({'error': 'The Rabbit of Caerbannog pounces on you and you die!'}, status=403)
   else:
-      content = ""
+    try:
+      request.session['file_upload_visible'] = not request.session['file_upload_visible']
+      request.session.modified = True
+    except KeyError:
+      request.session['file_upload_visible'] = True
+      request.session.modified = True
 
-  return JsonResponse({'content': content})
+    if request.session['file_upload_visible']:
+        file_upload_form = forms.FileUploadForm()
+        context = {'file_upload_form': file_upload_form}
+        context.update(csrf(request))
+        content = loader.render_to_string('file_upload.html', context)
+    else:
+        content = ""
+
+    request.session['api_stats_visible'] = False
+    request.session.modified = True
+
+    return JsonResponse({'content': content})
+
+def generate_stats(request):
+  if request.method != 'POST':
+    return JsonResponse({'error': 'The Rabbit of Caerbannog pounces on you and you die!'}, status=403)
+  else:
+    api_stats = {}
+
+    try:
+      request.session['api_stats_visible'] = not request.session['api_stats_visible']
+      request.session.modified = True
+    except KeyError:
+      request.session['api_stats_visible'] = True
+      request.session.modified = True
+
+    if request.session['api_stats_visible']:
+        api_stats['d3d8']   = models.Trace.objects.filter(api='D3D8').count()
+        api_stats['d3d9']   = models.Trace.objects.filter(api='D3D9').count()
+        api_stats['d3d9ex'] = models.Trace.objects.filter(api='D3D9Ex').count()
+        api_stats['d3d10']  = models.Trace.objects.filter(api='D3D10').count()
+        api_stats['d3d11']  = models.Trace.objects.filter(api='D3D11').count()
+
+        context = {}
+        context.update(csrf(request))
+        content = loader.render_to_string('api_stats.html', context)
+    else:
+        content = ""
+
+    request.session['file_upload_visible'] = False
+    request.session.modified = True
+
+    return JsonResponse({'content': content,
+                         'api_stats': api_stats})
 

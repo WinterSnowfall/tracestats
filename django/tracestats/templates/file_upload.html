@@ -1,16 +1,14 @@
 <div id="file-upload">
     <form method="post" enctype="multipart/form-data" id="file-upload-form">
-        {% csrf_token %}
-        <p>
-            <div class="search-container">
-                <h5>What is the airspeed velocity of an unladen swallow?</h5>
-                {{ file_upload_form.authorization_token }}
-            </div>
-        </p>
+        <div class="search-container">
+            <h5>What is the airspeed velocity of an unladen swallow?</h5>
+            {{ file_upload_form.authorization_token }}
+        </div>
         <div class="no-selection">
-            {{ file_upload_form.file_upload }} 
-            <button type="submit" name="upload-form">Upload tracestats JSON</button>
-            <button type="reset" value="Reset">Clear.it</button>
+            {{ file_upload_form.file_upload }}
+            <button type="submit" name="upload-form" id="upload-button">Upload tracestats JSON</button>
+            <button id="reset-upload-form" type="reset" value="Reset">Clear.it</button>
         </div>
     </form>
+    <div id="upload-notification-area" class="notification-info"></div>
 </div>
