@@ -85,7 +85,7 @@ $(document).on('click', '#toggle-stats', function() {
                     data: {
                         labels: ['D3D8', 'D3D9', 'D3D9Ex', 'D3D10', 'D3D11'],
                         datasets: [{
-                            label: 'API Stats',
+                            label: 'apitraces',
                             data: [response.api_stats['d3d8'],
                                    response.api_stats['d3d9'],
                                    response.api_stats['d3d9ex'],

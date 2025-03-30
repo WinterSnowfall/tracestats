@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 '''
 @author: Winter Snowfall
-@version: 0.8
-@date: 14/03/2025
+@version: 0.9
+@date: 30/03/2025
 '''
 
 import os
@@ -86,6 +86,13 @@ QUERY_TYPE_IDENTIFIER_D3D9 = 'Type = '
 QUERY_TYPE_IDENTIFIER_LENGTH_D3D9 = len(QUERY_TYPE_IDENTIFIER_D3D9)
 QUERY_TYPE_IDENTIFIER_D3D10_11 = 'Query = '
 QUERY_TYPE_IDENTIFIER_D3D10_11_LENGTH = len(QUERY_TYPE_IDENTIFIER_D3D10_11)
+# lock flags
+LOCK_FLAGS_CALL = '::Lock'
+LOCK_FLAGS_IDENTIFIER = 'Flags = '
+LOCK_FLAGS_IDENTIFIER_LENGTH = len(LOCK_FLAGS_IDENTIFIER)
+LOCK_FLAGS_IDENTIFIER_END = ')'
+LOCK_FLAGS_SKIP_IDENTIFIER = 'Flags = 0x0'
+LOCK_FLAGS_SPLIT_DELIMITER = '|'
 # formats
 API_ENTRY_FORMAT_BASE_CALL = '::Create'
 FORMAT_IDENTIFIER = 'Format = '
@@ -233,6 +240,7 @@ class TraceStats:
         self.present_parameter_dictionary = {}
         self.render_state_dictionary = {}
         self.query_type_dictionary = {}
+        self.lock_flag_dictionary = {}
         self.format_dictionary = {}
         self.pool_dictionary = {}
         self.device_flag_dictionary = {}
@@ -352,6 +360,8 @@ class TraceStats:
                     return_dictionary['render_states'] = self.render_state_dictionary
                 if len(self.query_type_dictionary) > 0:
                     return_dictionary['query_types'] = self.query_type_dictionary
+                if len(self.lock_flag_dictionary) > 0:
+                    return_dictionary['lock_flags'] = self.lock_flag_dictionary
                 if len(self.format_dictionary) > 0:
                     return_dictionary['formats'] = self.format_dictionary
                 if len(self.pool_dictionary) > 0:
@@ -379,6 +389,7 @@ class TraceStats:
                 self.present_parameter_dictionary = {}
                 self.render_state_dictionary = {}
                 self.query_type_dictionary = {}
+                self.lock_flag_dictionary = {}
                 self.format_dictionary = {}
                 self.pool_dictionary = {}
                 self.device_flag_dictionary = {}
@@ -486,7 +497,7 @@ class TraceStats:
                         any(api_base_call in trace_line for api_base_call in API_BASE_CALLS.keys())):
                         # typically, the API entrypoint can be found
                         # on the fist line of an apitrace
-                        if self.api is None :
+                        if self.api is None:
                             for key, value in API_ENTRY_CALLS.items():
                                 if key in split_line[1]:
                                     self.api = value
@@ -571,6 +582,20 @@ class TraceStats:
 
                                 existing_value = self.query_type_dictionary.get(query_type, 0)
                                 self.query_type_dictionary[query_type] = existing_value + 1
+
+                            elif LOCK_FLAGS_CALL in call and LOCK_FLAGS_SKIP_IDENTIFIER not in trace_line:
+                                logger.debug(f'Found lock flags on line: {trace_line}')
+
+                                lock_flags_start = trace_line.find(LOCK_FLAGS_IDENTIFIER) + LOCK_FLAGS_IDENTIFIER_LENGTH
+                                lock_flags = trace_line[lock_flags_start:trace_line.find(LOCK_FLAGS_IDENTIFIER_END,
+                                                                                         lock_flags_start)].strip()
+
+                                lock_flags = lock_flags.split(LOCK_FLAGS_SPLIT_DELIMITER)
+
+                                for lock_flag in lock_flags:
+                                    lock_flag_stripped = lock_flag.strip()
+                                    existing_value = self.lock_flag_dictionary.get(lock_flag_stripped, 0)
+                                    self.lock_flag_dictionary[lock_flag_stripped] = existing_value + 1
 
                             elif API_ENTRY_FORMAT_BASE_CALL in call:
                                 if FORMAT_IDENTIFIER in trace_line:

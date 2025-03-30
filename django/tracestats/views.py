@@ -25,20 +25,22 @@ API_ENTRY_CALLS = {'Direct3DCreate8': 'D3D8',
                    'D3D11CreateDeviceAndSwapChain': 'D3D11',
                    'D3D11CreateDevice': 'D3D11',
                    'D3D11CoreCreateDevice': 'D3D11'}
+TRACE_API_OVERRIDES = {'FarCry2': 'D3D9'} # Ignore queries done on a D3D9Ex interface, as it's not used for rendering
 STATS_TYPE = {'api_calls': 1,
               'device_types': 2,
               'behavior_flags': 3,
               'present_parameters': 4,
               'render_states': 5,
               'query_types': 6,
-              'formats': 7,
-              'pools': 8,
-              'device_flags': 9,
-              'feature_levels': 10,
-              'rastizer_states': 11,
-              'blend_states': 12,
-              'usage': 13,
-              'bind_flags': 14}
+              'lock_flags': 7,
+              'formats': 8,
+              'pools': 9,
+              'device_flags': 10,
+              'feature_levels': 11,
+              'rastizer_states': 12,
+              'blend_states': 13,
+              'usage': 14,
+              'bind_flags': 15}
 SEARCH_RESULTS_LIMIT = 500
 
 def tracestats(request):
@@ -74,20 +76,27 @@ def tracestats(request):
               for entry in tracestats_data:
                 # create/update base trace db entry
                 entry_application_name = entry.get('name')
+                logger.debug(f'Application name is: {entry_application_name}')
                 entry_binary_name = entry.get('binary_name')
+                logger.debug(f'Binary name is: {entry_binary_name}')
                 # use the binary name for the application name, if unspecified
                 if entry_application_name is None:
                   entry_application_name = entry_binary_name
                 entry_application_link = entry.get('link', None)
 
+                entry_call_stats = entry.get('api_calls', {})
                 # determine the API based on the entrypoint call
                 entry_api = None
-                entry_call_stats = entry.get('api_calls', {})
-                for key, value in API_ENTRY_CALLS.items():
-                  if key in entry_call_stats.keys():
-                    entry_api = value
-                    logger.debug(f'Found an entry call for: {entry_api}')
-                    break
+                entry_api_override = TRACE_API_OVERRIDES.get(entry_binary_name, None)
+                if entry_api_override is not None:
+                  entry_api = entry_api_override
+                else:
+                  for key, value in API_ENTRY_CALLS.items():
+                    if key in entry_call_stats.keys():
+                      entry_api = value
+                      logger.debug(f'Found an entry call for: {entry_api}')
+                      break
+                logger.debug(f'API is: {entry_api}')
                 if entry_api is None:
                   raise Exception('Invalid JSON structure')
 
@@ -213,7 +222,18 @@ def tracestats(request):
                 if len(stats) > 0:
                   models.Stats.objects.bulk_create(stats)
 
-                # create child stats entries for render formats
+                # create child stats entries for lock flags
+                entry_lock_flags = entry.get('lock_flags', {})
+                stats = []
+                for key, value in entry_lock_flags.items():
+                  stats.append(models.Stats(trace=trace,
+                                            stat_type=STATS_TYPE['lock_flags'],
+                                            stat_name=key,
+                                            stat_count=value))
+                if len(stats) > 0:
+                  models.Stats.objects.bulk_create(stats)
+
+                # create child stats entries for formats
                 entry_formats = entry.get('formats', {})
                 stats = []
                 for key, value in entry_formats.items():
@@ -313,7 +333,8 @@ def tracestats(request):
           except json.JSONDecodeError:
             context = {'notification_message': 'That is most certainly not a JSON. Think you\'re pretty funny, don\'t ya\'?',
                       'notification_type': 'error'}
-          except:
+          except Exception as e:
+            logger.error('Encountered exception: ', exc_info=e)
             context = {'notification_message': 'The JSON structure is incorrect. Just use whatever tracestats generates, ok?',
                       'notification_type': 'error'}
         else:
