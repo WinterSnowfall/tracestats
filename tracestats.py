@@ -94,6 +94,13 @@ LOCK_FLAGS_IDENTIFIER_LENGTH = len(LOCK_FLAGS_IDENTIFIER)
 LOCK_FLAGS_IDENTIFIER_END = ')'
 LOCK_FLAGS_SKIP_IDENTIFIER = 'Flags = 0x0'
 LOCK_FLAGS_SPLIT_DELIMITER = '|'
+# usage
+USAGE_IDENTIFIER = 'Usage = '
+USAGE_IDENTIFIER_LENGTH = len(USAGE_IDENTIFIER)
+USAGE_VALUE_IDENTIFIER = 'D3DUSAGE_'
+USAGE_SKIP_IDENTIFIER = 'Flags = 0x0'
+USAGE_SKIP_IDENTIFIER_D3D10_11 = 'DXGI_USAGE_'
+USAGE_SPLIT_DELIMITER = '|'
 # formats
 API_ENTRY_FORMAT_BASE_CALL = '::Create'
 FORMAT_IDENTIFIER = 'Format = '
@@ -128,10 +135,6 @@ BLEND_STATE_IDENTIFIER = 'pBlendStateDesc = &{'
 BLEND_STATE_IDENTIFIER_LENGTH = len(RASTIZER_STATE_IDENTIFIER)
 BLEND_STATE_IDENTIFIER_END_D3D10 = ', BlendEnable = '
 BLEND_STATE_IDENTIFIER_END_D3D11 = ', RenderTarget = '
-# usage
-USAGE_IDENTIFIER = 'Usage = '
-USAGE_IDENTIFIER_LENGTH = len(USAGE_IDENTIFIER)
-USAGE_IDENTIFIER_SKIP = 'DXGI_USAGE_'
 # bind flags
 BIND_FLAGS_IDENTIFIER = 'BindFlags = '
 BIND_FLAGS_IDENTIFIER_LENGTH = len(BIND_FLAGS_IDENTIFIER)
@@ -638,6 +641,20 @@ class TraceStats:
                                     existing_value = self.format_dictionary.get(format_value, 0)
                                     self.format_dictionary[format_value] = existing_value + 1
 
+                                if USAGE_IDENTIFIER in trace_line and USAGE_SKIP_IDENTIFIER not in trace_line:
+                                    logger.debug(f'Found usage on line: {trace_line}')
+
+                                    usage_start = trace_line.find(USAGE_IDENTIFIER) + USAGE_IDENTIFIER_LENGTH
+                                    usage_values = trace_line[usage_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
+                                                                                          usage_start)].strip()
+                                    usage_values = usage_values.split(USAGE_SPLIT_DELIMITER)
+
+                                    for usage_value in usage_values:
+                                        usage_value_stripped = usage_value.strip()
+                                        if usage_value_stripped.startswith(USAGE_VALUE_IDENTIFIER):
+                                            existing_value = self.usage_dictionary.get(usage_value_stripped, 0)
+                                            self.usage_dictionary[usage_value_stripped] = existing_value + 1
+
                                 if POOL_IDENTIFIER in trace_line:
                                     logger.debug(f'Found pool on line: {trace_line}')
 
@@ -742,7 +759,7 @@ class TraceStats:
                                     usage_value = trace_line[usage_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
                                                                                             usage_start)].strip()
 
-                                    if not USAGE_IDENTIFIER_SKIP in usage_value:
+                                    if not USAGE_SKIP_IDENTIFIER_D3D10_11 in usage_value:
                                         existing_value = self.usage_dictionary.get(usage_value, 0)
                                         self.usage_dictionary[usage_value] = existing_value + 1
 
