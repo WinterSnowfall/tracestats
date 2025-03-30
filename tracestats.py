@@ -50,6 +50,7 @@ API_ENTRY_CALLS = {'Direct3DCreate8': 'D3D8',
                    'D3D11CreateDeviceAndSwapChain': 'D3D11',
                    'D3D11CreateDevice': 'D3D11',
                    'D3D11CoreCreateDevice': 'D3D11'}
+TRACE_API_OVERRIDES = {'FarCry2': 'D3D9'} # Ignore queries done on a D3D9Ex interface, as it's not used for rendering
 API_BASE_CALLS = {**API_ENTRY_CALLS, 'CreateDXGIFactory': 'DXGI',
                                      'CreateDXGIFactory1': 'DXGI',
                                      'CreateDXGIFactory2': 'DGXI'}
@@ -172,7 +173,8 @@ class TraceStats:
         except ValueError:
             return 'Unknown'
 
-    def __init__(self, trace_input_paths, json_export_path, application_name, application_link, apitrace_path, apitrace_threads):
+    def __init__(self, trace_input_paths, json_export_path, application_name,
+                 application_link, apis_to_skip, apitrace_path, apitrace_threads):
         if trace_input_paths is not None:
             self.trace_input_paths = trace_input_paths[0]
         else:
@@ -231,6 +233,12 @@ class TraceStats:
             logger.critical('Invalid apitrace executable')
             raise SystemExit(5)
 
+        if apis_to_skip is not None:
+            self.apis_to_skip = [api.strip().upper() for api in apis_to_skip.split(',')]
+            logger.info(f'Skiping APIs: {self.apis_to_skip}')
+        else:
+            self.apis_to_skip = None
+
         self.application_name = application_name
         self.application_link = application_link
         self.api = None
@@ -262,6 +270,7 @@ class TraceStats:
 
         self.parse_queue = None
         self.process_queue = None
+        self.api_skip = threading.Event()
         self.parse_loop = threading.Event()
         self.process_loop = threading.Event()
         self.json_output = {JSON_BASE_KEY: []}
@@ -270,6 +279,8 @@ class TraceStats:
         for trace_path in self.trace_input_paths:
             if os.path.isfile(trace_path):
                 logger.info(f'Processing trace: {trace_path}')
+
+                self.api_skip.clear()
 
                 binary_name_raw = binary_name = os.path.basename(trace_path).rsplit('.', 1)[0]
                 # workaround for renamed generic game/Game.exe apitraces
@@ -302,6 +313,12 @@ class TraceStats:
                             logger.info(f'Application link found in traceappnames repository: {self.application_link}')
                     except TypeError:
                         pass
+
+                self.api = TRACE_API_OVERRIDES.get(binary_name, None)
+                if self.apis_to_skip is not None and self.api in self.apis_to_skip:
+                    self.api = None
+                    logger.info('Skipped trace due to API filter')
+                    continue
 
                 self.parse_queue = queue.Queue(maxsize=self.thread_count)
                 self.parse_loop.set()
@@ -343,43 +360,48 @@ class TraceStats:
                 # ensure the processsing thread has halted
                 process_thread.join()
 
-                return_dictionary = {}
-                return_dictionary['binary_name'] = binary_name
-                return_dictionary['name'] = self.application_name
-                if self.application_link is not None:
-                    return_dictionary['link'] = self.application_link
-                if len(self.api_call_dictionary) > 0:
-                    return_dictionary['api_calls'] = self.api_call_dictionary
-                if len(self.device_type_dictionary) > 0:
-                    return_dictionary['device_types'] = self.device_type_dictionary
-                if len(self.present_parameter_dictionary) > 0:
-                    return_dictionary['present_parameters'] = self.present_parameter_dictionary
-                if len(self.behavior_flag_dictionary) > 0:
-                    return_dictionary['behavior_flags'] = self.behavior_flag_dictionary
-                if len(self.render_state_dictionary) > 0:
-                    return_dictionary['render_states'] = self.render_state_dictionary
-                if len(self.query_type_dictionary) > 0:
-                    return_dictionary['query_types'] = self.query_type_dictionary
-                if len(self.lock_flag_dictionary) > 0:
-                    return_dictionary['lock_flags'] = self.lock_flag_dictionary
-                if len(self.format_dictionary) > 0:
-                    return_dictionary['formats'] = self.format_dictionary
-                if len(self.pool_dictionary) > 0:
-                    return_dictionary['pools'] = self.pool_dictionary
-                if len(self.device_flag_dictionary) > 0:
-                    return_dictionary['device_flags'] = self.device_flag_dictionary
-                if len(self.feature_level_dictionary) > 0:
-                    return_dictionary['feature_levels'] = self.feature_level_dictionary
-                if len(self.rastizer_state_dictionary) > 0:
-                    return_dictionary['rastizer_states'] = self.rastizer_state_dictionary
-                if len(self.blend_state_dictionary) > 0:
-                    return_dictionary['blend_states'] = self.blend_state_dictionary
-                if len(self.usage_dictionary) > 0:
-                    return_dictionary['usage'] = self.usage_dictionary
-                if len(self.bind_flag_dictionary) > 0:
-                    return_dictionary['bind_flags'] = self.bind_flag_dictionary
+                if not self.api_skip.is_set():
+                    return_dictionary = {}
+                    return_dictionary['binary_name'] = binary_name
+                    return_dictionary['name'] = self.application_name
+                    if self.application_link is not None:
+                        return_dictionary['link'] = self.application_link
+                    if len(self.api_call_dictionary) > 0:
+                        return_dictionary['api_calls'] = self.api_call_dictionary
+                    if len(self.device_type_dictionary) > 0:
+                        return_dictionary['device_types'] = self.device_type_dictionary
+                    if len(self.present_parameter_dictionary) > 0:
+                        return_dictionary['present_parameters'] = self.present_parameter_dictionary
+                    if len(self.behavior_flag_dictionary) > 0:
+                        return_dictionary['behavior_flags'] = self.behavior_flag_dictionary
+                    if len(self.render_state_dictionary) > 0:
+                        return_dictionary['render_states'] = self.render_state_dictionary
+                    if len(self.query_type_dictionary) > 0:
+                        return_dictionary['query_types'] = self.query_type_dictionary
+                    if len(self.lock_flag_dictionary) > 0:
+                        return_dictionary['lock_flags'] = self.lock_flag_dictionary
+                    if len(self.format_dictionary) > 0:
+                        return_dictionary['formats'] = self.format_dictionary
+                    if len(self.pool_dictionary) > 0:
+                        return_dictionary['pools'] = self.pool_dictionary
+                    if len(self.device_flag_dictionary) > 0:
+                        return_dictionary['device_flags'] = self.device_flag_dictionary
+                    if len(self.feature_level_dictionary) > 0:
+                        return_dictionary['feature_levels'] = self.feature_level_dictionary
+                    if len(self.rastizer_state_dictionary) > 0:
+                        return_dictionary['rastizer_states'] = self.rastizer_state_dictionary
+                    if len(self.blend_state_dictionary) > 0:
+                        return_dictionary['blend_states'] = self.blend_state_dictionary
+                    if len(self.usage_dictionary) > 0:
+                        return_dictionary['usage'] = self.usage_dictionary
+                    if len(self.bind_flag_dictionary) > 0:
+                        return_dictionary['bind_flags'] = self.bind_flag_dictionary
 
-                self.json_output[JSON_BASE_KEY].append(return_dictionary)
+                    self.json_output[JSON_BASE_KEY].append(return_dictionary)
+
+                    logger.info('Trace processing complete')
+                else:
+                    logger.info('Skipped trace due to API filter')
 
                 # reset state between processed traces
                 self.api = None
@@ -399,19 +421,18 @@ class TraceStats:
                 self.usage_dictionary = {}
                 self.bind_flag_dictionary = {}
 
-                logger.info('Trace processing complete')
-
             else:
                 logger.warning(f'File not found, skipping: {trace_path}')
 
-        json_export = json.dumps(self.json_output, sort_keys=True, indent=4,
-                                 separators=(',', ': '), ensure_ascii=False)
-        logger.debug(f'JSON export output is: {json_export}')
+        if len(self.json_output[JSON_BASE_KEY]) > 0:
+            json_export = json.dumps(self.json_output, sort_keys=True, indent=4,
+                                    separators=(',', ': '), ensure_ascii=False)
+            logger.debug(f'JSON export output is: {json_export}')
 
-        with open(self.json_export_path, 'w') as file:
-            file.write(json_export)
+            with open(self.json_export_path, 'w') as file:
+                file.write(json_export)
 
-        logger.info(f'JSON export complete')
+            logger.info(f'JSON export complete')
 
     def trace_dump_worker(self):
         # there is no need to drain the queue here, and workers can stop getting
@@ -458,6 +479,12 @@ class TraceStats:
         trace_call_counter_notification = 0
 
         while self.process_loop.is_set() or not self.process_queue.empty():
+            # stop parsing if API skip is engaged
+            if self.api_skip.is_set():
+                self.parse_loop.clear()
+                self.process_loop.clear()
+                break
+
             try:
                 trace_chunk_lines = self.process_queue.get(block=True, timeout=5)
                 trace_call_counter_prev = 0
@@ -504,6 +531,9 @@ class TraceStats:
                                     logger.info(f'Detected API: {self.api}')
                                     # otherwise D3D9 will get added to D3D9Ex, heh
                                     break
+                            if self.apis_to_skip is not None and self.api in self.apis_to_skip:
+                                self.api_skip.set()
+                                break
 
                         # parse API calls
                         call = split_line[1].split('(', 1)[0]
@@ -799,11 +829,12 @@ if __name__ == "__main__":
     optional.add_argument('-o', '--output', help='path and filename of the JSON export')
     optional.add_argument('-n', '--name', help='specify a name for the apitraced application, using double quotes')
     optional.add_argument('-l', '--link', help='specify a web link for the application')
+    optional.add_argument('-s', '--skip', help='specify apis to skip, e.g.: d3d9, d3d11')
     optional.add_argument('-a', '--apitrace', help='path to the apitrace executable')
 
     args = parser.parse_args()
 
-    tracestats = TraceStats(args.input, args.output, args.name, args.link, args.apitrace, args.threads)
+    tracestats = TraceStats(args.input, args.output, args.name, args.link, args.skip, args.apitrace, args.threads)
     if not args.join:
         tracestats.process_traces()
     else:
