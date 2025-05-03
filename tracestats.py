@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 '''
 @author: Winter Snowfall
-@version: 0.9
-@date: 30/03/2025
+@version: 1.0
+@date: 02/05/2025
 '''
 
 import os
@@ -56,6 +56,15 @@ API_BASE_CALLS = {**API_ENTRY_CALLS, 'CreateDXGIFactory': 'DXGI',
                                      'CreateDXGIFactory2': 'DGXI'}
 API_ENTRY_CALL_IDENTIFIER = '::'
 API_ENTRY_VALUE_DELIMITER = ','
+# int.from_bytes(b'ATOC', 'little')
+VENDOR_HACK_VALUES = {'2141212672': 'D3DRS_POINTSIZE = RESZ',
+                      '1414745673': 'D3DRS_POINTSIZE = INST',
+                      '827142721' : 'D3DRS_POINTSIZE = A2M1',
+                      '810365505' : 'D3DRS_POINTSIZE = A2M0',
+                      '1111774798': 'D3DRS_ADAPTIVETESS_X = NVDB',
+                      '1129272385': 'D3DRS_ADAPTIVETESS_Y = ATOC',
+                      '1094800211': 'D3DRS_ADAPTIVETESS_Y = SSAA',
+                      '1297108803': 'D3DRS_ADAPTIVETESS_Y = COPM'}
 
 ############################## D3D8, D3D9Ex, D3D9 ##############################
 # device type
@@ -108,6 +117,13 @@ FORMAT_IDENTIFIER_LENGTH = len(FORMAT_IDENTIFIER)
 # pools
 POOL_IDENTIFIER = 'Pool = '
 POOL_IDENTIFIER_LENGTH = len(POOL_IDENTIFIER)
+# vendor hacks
+VENDOR_HACK_POINTSIZE = 'State = D3DRS_POINTSIZE'
+VENDOR_HACK_ADAPTIVETESS_X = 'State = D3DRS_ADAPTIVETESS_X'
+VENDOR_HACK_ADAPTIVETESS_Y = 'State = D3DRS_ADAPTIVETESS_Y'
+VENDOR_HACK_IDENTIFIER = 'Value = '
+VENDOR_HACK_IDENTIFIER_LENGTH = len(VENDOR_HACK_IDENTIFIER)
+VENDOR_HACK_IDENTIFIER_END = ')'
 ############################## D3D8, D3D9Ex, D3D9 ##############################
 
 ################################# D3D10, D3D11 #################################
@@ -253,6 +269,7 @@ class TraceStats:
         self.query_type_dictionary = {}
         self.lock_flag_dictionary = {}
         self.format_dictionary = {}
+        self.vendor_hack_dictionary = {}
         self.pool_dictionary = {}
         self.device_flag_dictionary = {}
         self.feature_level_dictionary = {}
@@ -385,6 +402,8 @@ class TraceStats:
                         return_dictionary['lock_flags'] = self.lock_flag_dictionary
                     if len(self.format_dictionary) > 0:
                         return_dictionary['formats'] = self.format_dictionary
+                    if len(self.vendor_hack_dictionary) > 0:
+                        return_dictionary['vendor_hacks'] = self.vendor_hack_dictionary
                     if len(self.pool_dictionary) > 0:
                         return_dictionary['pools'] = self.pool_dictionary
                     if len(self.device_flag_dictionary) > 0:
@@ -416,6 +435,7 @@ class TraceStats:
                 self.query_type_dictionary = {}
                 self.lock_flag_dictionary = {}
                 self.format_dictionary = {}
+                self.vendor_hack_dictionary = {}
                 self.pool_dictionary = {}
                 self.device_flag_dictionary = {}
                 self.feature_level_dictionary = {}
@@ -591,6 +611,20 @@ class TraceStats:
 
                                 existing_value = self.render_state_dictionary.get(render_state, 0)
                                 self.render_state_dictionary[render_state] = existing_value + 1
+
+                                if (VENDOR_HACK_POINTSIZE in trace_line or
+                                    VENDOR_HACK_ADAPTIVETESS_X in trace_line or
+                                    VENDOR_HACK_ADAPTIVETESS_Y in trace_line):
+                                    vendor_hack_start = trace_line.find(VENDOR_HACK_IDENTIFIER) + VENDOR_HACK_IDENTIFIER_LENGTH
+                                    vendor_hack_value = trace_line[vendor_hack_start:trace_line.find(VENDOR_HACK_IDENTIFIER_END,
+                                                                                                     vendor_hack_start)].strip()
+
+                                    if vendor_hack_value in VENDOR_HACK_VALUES.keys():
+                                        logger.debug(f'Found vendor hack on line: {trace_line}')
+
+                                        vendor_hack_value_decoded = VENDOR_HACK_VALUES[vendor_hack_value]
+                                        existing_value = self.vendor_hack_dictionary.get(vendor_hack_value_decoded, 0)
+                                        self.vendor_hack_dictionary[vendor_hack_value_decoded] = existing_value + 1
 
                             # D3D8 uses IDirect3DDevice8::GetInfo calls to initiate queries
                             elif self.api == 'D3D8' and QUERY_TYPE_CALL_D3D8 in call:
