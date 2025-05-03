@@ -15,6 +15,12 @@ function getCookie(name) {
     return cookieValue;
 }
 
+function removeURLSearchParameter() {
+    const url = new URL(window.location.href);
+    url.searchParams.delete("search");
+    window.history.replaceState({}, document.title, url);
+}
+
 $(document).ready(function() {
     if ($('.results-row').length > 0) {
         $('#search-results').show();
@@ -53,6 +59,7 @@ $(document).on('click', '#toggle-file-upload', function() {
 });
 
 $(document).on('click', '#toggle-stats', function() {
+    removeURLSearchParameter();
     const csrftoken = getCookie('csrftoken');
 
     $.ajax({
@@ -127,6 +134,7 @@ $(document).on('click', '#toggle-stats', function() {
 });
 
 $(document).on('click', '#upload-button', function() {
+    removeURLSearchParameter();
     const fileInput = $('.file-input');
 
     if (fileInput.length > 0) {
@@ -157,6 +165,7 @@ $(document).on('click', '#upload-button', function() {
 });
 
 $(document).on('click', '#reset-search-form', function() {
+    removeURLSearchParameter()
     $('#search-results').hide();
     $('#id_search_input').attr('value', '');
     $('#notification-area').attr('class', 'notification-info');

@@ -2,7 +2,8 @@ import json
 import re
 import logging
 
-from django.shortcuts import render
+from urllib.parse import quote, unquote
+from django.shortcuts import render, redirect
 from django.template import loader
 from django.http import JsonResponse
 from django.template.context_processors import csrf
@@ -35,12 +36,13 @@ STATS_TYPE = {'api_calls': 1,
               'lock_flags': 7,
               'usage': 8,
               'formats': 9,
-              'pools': 10,
-              'device_flags': 11,
-              'feature_levels': 12,
-              'rastizer_states': 13,
-              'blend_states': 14,
-              'bind_flags': 15}
+              'vendor_hacks': 10,
+              'pools': 11,
+              'device_flags': 12,
+              'feature_levels': 13,
+              'rastizer_states': 14,
+              'blend_states': 15,
+              'bind_flags': 16}
 SEARCH_RESULTS_LIMIT = 500
 
 def tracestats(request):
@@ -244,6 +246,17 @@ def tracestats(request):
                 if len(stats) > 0:
                   models.Stats.objects.bulk_create(stats)
 
+                # create child stats entries for vendor hacks
+                entry_vendor_hacks = entry.get('vendor_hacks', {})
+                stats = []
+                for key, value in entry_vendor_hacks.items():
+                  stats.append(models.Stats(trace=trace,
+                                            stat_type=STATS_TYPE['vendor_hacks'],
+                                            stat_name=key,
+                                            stat_count=value))
+                if len(stats) > 0:
+                  models.Stats.objects.bulk_create(stats)
+
                 # create child stats entries for pools
                 entry_pools = entry.get('pools', {})
                 stats = []
@@ -349,54 +362,62 @@ def tracestats(request):
       if search_form.is_valid():
         search_input = request.POST['search_input'].strip()
         logger.info(f'Search_Input: {search_input}')
-        naughtiness  = False
-        exact_search = False
 
-        search_bang_split = search_input.rsplit(' ', 1)
-        if len(search_bang_split) > 1 and search_bang_split[1] == '!':
-          search_input = search_bang_split[0]
-          exact_search = True
-
-        # Note that all searches are case insensitive in SQLite
-        if not exact_search:
-          search_results = models.Stats.objects.filter(stat_name__icontains=search_input).order_by('stat_type',
-                                                                                                  '-stat_count',
-                                                                                                  'trace__name')[:SEARCH_RESULTS_LIMIT]
-        else:
-          search_results = models.Stats.objects.filter(stat_name__exact=search_input).order_by('stat_type',
-                                                                                              '-stat_count',
-                                                                                              'trace__name')[:SEARCH_RESULTS_LIMIT]
-
-        if len(search_results) == 0:
-          # If no objects are found, do a search based on application names
-          if not exact_search:
-            search_results = models.Stats.objects.filter(trace__name__icontains=search_input).order_by('trace__name',
-                                                                                                      'trace__api',
-                                                                                                      'stat_type',
-                                                                                                      '-stat_count')[:SEARCH_RESULTS_LIMIT]
-          else:
-            search_results = models.Stats.objects.filter(trace__name__exact=search_input).order_by('trace__name',
-                                                                                                  'trace__api',
-                                                                                                  'stat_type',
-                                                                                                  '-stat_count')[:SEARCH_RESULTS_LIMIT]
-
-          if len(search_results) == 0:
-            # If no results of any kind could be found, show a notification to that extent
-            context = {'notification_message': 'I\'m afraid that particular shrubbery is nowhere to be found.',
-                      'notification_type': 'highlight'}
-        else:
-          # Highlight the searched text in the returned results
-          for search_result in search_results:
-            result_stat_name = search_result.stat_name
-
-            highlighted_text = re.sub(re.escape(search_input),
-                                      lambda match: f'<mark>{match.group(0)}</mark>',
-                                      result_stat_name,
-                                      flags=re.IGNORECASE)
-            search_result.stat_name = highlighted_text
+        return redirect(f'{request.path}?search={quote(search_input)}')
 
     else:
       logger.error('What in the bloody blazes is this?')
+
+  elif request.method == 'GET':
+    search_input = request.GET.get('search', None)
+
+    if search_input is not None:
+      search_input = unquote(search_input)
+      search_form = forms.SearchForm(initial={'search_input': search_input})
+      exact_search = False
+
+      search_bang_split = search_input.rsplit(' ', 1)
+      if len(search_bang_split) > 1 and search_bang_split[1] == '!':
+        search_input = search_bang_split[0]
+        exact_search = True
+
+      # Note that all searches are case insensitive in SQLite
+      if not exact_search:
+        search_results = models.Stats.objects.filter(stat_name__icontains=search_input).order_by('stat_type',
+                                                                                                '-stat_count',
+                                                                                                'trace__name')[:SEARCH_RESULTS_LIMIT]
+      else:
+        search_results = models.Stats.objects.filter(stat_name__exact=search_input).order_by('stat_type',
+                                                                                            '-stat_count',
+                                                                                            'trace__name')[:SEARCH_RESULTS_LIMIT]
+
+      if len(search_results) == 0:
+        # If no objects are found, do a search based on application names
+        if not exact_search:
+          search_results = models.Stats.objects.filter(trace__name__icontains=search_input).order_by('trace__name',
+                                                                                                    'trace__api',
+                                                                                                    'stat_type',
+                                                                                                    '-stat_count')[:SEARCH_RESULTS_LIMIT]
+        else:
+          search_results = models.Stats.objects.filter(trace__name__exact=search_input).order_by('trace__name',
+                                                                                                'trace__api',
+                                                                                                'stat_type',
+                                                                                                '-stat_count')[:SEARCH_RESULTS_LIMIT]
+
+        if len(search_results) == 0:
+          # If no results of any kind could be found, show a notification to that extent
+          context = {'notification_message': 'I\'m afraid that particular shrubbery is nowhere to be found.',
+                    'notification_type': 'highlight'}
+      else:
+        # Highlight the searched text in the returned results
+        for search_result in search_results:
+          result_stat_name = search_result.stat_name
+
+          highlighted_text = re.sub(re.escape(search_input),
+                                    lambda match: f'<mark>{match.group(0)}</mark>',
+                                    result_stat_name,
+                                    flags=re.IGNORECASE)
+          search_result.stat_name = highlighted_text
 
   context['traces_total'] = models.Trace.objects.count()
 
