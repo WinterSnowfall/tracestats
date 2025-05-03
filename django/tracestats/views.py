@@ -372,6 +372,9 @@ def tracestats(request):
     search_input = request.GET.get('search', None)
 
     if search_input is not None:
+      if len(search_input) < 2:
+        return redirect(f'{request.path}')
+
       search_input = unquote(search_input)
       search_form = forms.SearchForm(initial={'search_input': search_input})
       exact_search = False
