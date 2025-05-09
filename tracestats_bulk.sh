@@ -13,14 +13,17 @@ else
     API_FILTER=""
 fi
 
+rm -f tracestats_bulk.log > /dev/null 2>&1
+
 if $PROCESS_COMPRESSED
 then
     for file in traces/*.trace.zst
     do
         if [ -f "$file" ]
         then
+            echo "Detected compressed apitrace: $file"
             zstd -d "$file"
-            ./tracestats.py -t 4 -i "${file%.zst}" -a "$APITRACE_PATH" $API_FILTER
+            ./tracestats.py -t 4 -i "${file%.zst}" -a "$APITRACE_PATH" $API_FILTER 2>&1 | tee -a tracestats_bulk.log
             rm -f "${file%.zst}"
         fi
     done
@@ -29,7 +32,8 @@ else
     do
         if [ -f "$file" ]
         then
-            ./tracestats.py -t 4 -i "$file" -a "$APITRACE_PATH" $API_FILTER
+            echo "Detected apitrace: $file"
+            ./tracestats.py -t 4 -i "$file" -a "$APITRACE_PATH" $API_FILTER 2>&1 | tee -a tracestats_bulk.log
         fi
     done
 fi

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 '''
 @author: Winter Snowfall
-@version: 1.0
-@date: 02/05/2025
+@version: 1.1
+@date: 09/05/2025
 '''
 
 import os
@@ -56,15 +56,26 @@ API_BASE_CALLS = {**API_ENTRY_CALLS, 'CreateDXGIFactory': 'DXGI',
                                      'CreateDXGIFactory2': 'DGXI'}
 API_ENTRY_CALL_IDENTIFIER = '::'
 API_ENTRY_VALUE_DELIMITER = ','
-# int.from_bytes(b'ATOC', 'little')
+# To convert, use: int.from_bytes(b'ATOC', 'little') or:
+# (1129272385).to_bytes(4, 'little').decode('ascii')
 VENDOR_HACK_VALUES = {'2141212672': 'D3DRS_POINTSIZE = RESZ',
                       '1414745673': 'D3DRS_POINTSIZE = INST',
                       '827142721' : 'D3DRS_POINTSIZE = A2M1',
                       '810365505' : 'D3DRS_POINTSIZE = A2M0',
-                      '1111774798': 'D3DRS_ADAPTIVETESS_X = NVDB',
+                      # undocumented ATI/Nvidia centroid hack (alternate pixel center)
+                      '1414415683': 'D3DRS_POINTSIZE = CENT',
+                      # Nvidia fast Z reject hack used by older Source engine builds
+                      '1093815368': 'D3DRS_POINTSIZE = HL2A',
+                      # undocumented Nvidia game-specific hacks ####
+                      '826953539' : 'D3DRS_ADAPTIVETESS_Y = COJ1', # Call of Juarez
+                      '808931924' : 'D3DRS_ADAPTIVETESS_Y = TR70', # Tomb Raider: Anniversary / Legend
+                      '1162692948': 'D3DRS_ADAPTIVETESS_Y = TIME', # TimeShift
+                      '1282302283': 'D3DRS_ADAPTIVETESS_Y = KanL', # Kane & Lynch
+                      ##############################################
                       '1129272385': 'D3DRS_ADAPTIVETESS_Y = ATOC',
                       '1094800211': 'D3DRS_ADAPTIVETESS_Y = SSAA',
-                      '1297108803': 'D3DRS_ADAPTIVETESS_Y = COPM'}
+                      '1297108803': 'D3DRS_ADAPTIVETESS_Y = COPM',
+                      '1111774798': 'D3DRS_ADAPTIVETESS_X = NVDB'}
 
 ############################## D3D8, D3D9Ex, D3D9 ##############################
 # device type
@@ -118,9 +129,9 @@ FORMAT_IDENTIFIER_LENGTH = len(FORMAT_IDENTIFIER)
 POOL_IDENTIFIER = 'Pool = '
 POOL_IDENTIFIER_LENGTH = len(POOL_IDENTIFIER)
 # vendor hacks
-VENDOR_HACK_POINTSIZE = 'State = D3DRS_POINTSIZE'
-VENDOR_HACK_ADAPTIVETESS_X = 'State = D3DRS_ADAPTIVETESS_X'
-VENDOR_HACK_ADAPTIVETESS_Y = 'State = D3DRS_ADAPTIVETESS_Y'
+VENDOR_HACK_POINTSIZE = 'State = D3DRS_POINTSIZE,'
+VENDOR_HACK_ADAPTIVETESS_X = 'State = D3DRS_ADAPTIVETESS_X,'
+VENDOR_HACK_ADAPTIVETESS_Y = 'State = D3DRS_ADAPTIVETESS_Y,'
 VENDOR_HACK_IDENTIFIER = 'Value = '
 VENDOR_HACK_IDENTIFIER_LENGTH = len(VENDOR_HACK_IDENTIFIER)
 VENDOR_HACK_IDENTIFIER_END = ')'
@@ -306,9 +317,10 @@ class TraceStats:
                 # workaround for renamed generic game/Game.exe apitraces
                 if binary_name_raw.upper().startswith('GAME'):
                     binary_name = binary_name_raw[:4]
-                # workaround for games that support multiple APIs
+                # workaround for games with multiple editions or that support multiple APIs
                 elif binary_name_raw.endswith('_'):
-                    binary_name = binary_name_raw[:-1]
+                    while binary_name.endswith('_'):
+                        binary_name = binary_name[:-1]
 
                 if self.application_name is not None:
                     logger.info(f'Using application name: {self.application_name}')
@@ -618,6 +630,7 @@ class TraceStats:
                                     vendor_hack_start = trace_line.find(VENDOR_HACK_IDENTIFIER) + VENDOR_HACK_IDENTIFIER_LENGTH
                                     vendor_hack_value = trace_line[vendor_hack_start:trace_line.find(VENDOR_HACK_IDENTIFIER_END,
                                                                                                      vendor_hack_start)].strip()
+                                    vendor_hack_value_int = int(vendor_hack_value)
 
                                     if vendor_hack_value in VENDOR_HACK_VALUES.keys():
                                         logger.debug(f'Found vendor hack on line: {trace_line}')
@@ -625,6 +638,21 @@ class TraceStats:
                                         vendor_hack_value_decoded = VENDOR_HACK_VALUES[vendor_hack_value]
                                         existing_value = self.vendor_hack_dictionary.get(vendor_hack_value_decoded, 0)
                                         self.vendor_hack_dictionary[vendor_hack_value_decoded] = existing_value + 1
+                                    elif vendor_hack_value_int > 0:
+                                        # check for values between 0x7fa00000 and 0x7fa10000, as that seems to have been a
+                                        # range used by ATI/AMD to enable/disable and configure all sort of behavior
+                                        if (VENDOR_HACK_POINTSIZE in trace_line and
+                                            vendor_hack_value_int > 2141192192 and vendor_hack_value_int < 2141257728):
+                                            logger.warning(f'Potential ATI vendor hack: {trace_line}, value: {hex(vendor_hack_value_int)}')
+                                        # warn for any unexpected values which properly translate to FOURCCs
+                                        else:
+                                            try:
+                                                vendor_hack_fourcc = int(vendor_hack_value).to_bytes(4, 'little').decode('ascii')
+                                                # some values may decode properly but will not be actual FOURCCs
+                                                if vendor_hack_fourcc.isalnum():
+                                                    logger.warning(f'Unexpected vendor hack: {trace_line}, FOURCC: {vendor_hack_fourcc}')
+                                            except UnicodeDecodeError:
+                                                pass
 
                             # D3D8 uses IDirect3DDevice8::GetInfo calls to initiate queries
                             elif self.api == 'D3D8' and QUERY_TYPE_CALL_D3D8 in call:

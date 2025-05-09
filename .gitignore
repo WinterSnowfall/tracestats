@@ -6,4 +6,5 @@ django/db.sqlite3
 django/db.sqlite3.bak
 export/
 traces/
+tracestats_bulk.log
 
