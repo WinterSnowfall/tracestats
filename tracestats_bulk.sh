@@ -19,8 +19,9 @@ then
     do
         if [ -f "$file" ]
         then
+            echo "Detected compressed apitrace: $file"
             zstd -d "$file"
-            ./tracestats.py -t 4 -i "${file%.zst}" -a "$APITRACE_PATH" $API_FILTER
+            ./tracestats.py -t 4 -i "${file%.zst}" -a "$APITRACE_PATH" $API_FILTER 2>&1 | tee -a tracestats_bulk.log
             rm -f "${file%.zst}"
         fi
     done
@@ -29,7 +30,8 @@ else
     do
         if [ -f "$file" ]
         then
-            ./tracestats.py -t 4 -i "$file" -a "$APITRACE_PATH" $API_FILTER
+            echo "Detected apitrace: $file"
+            ./tracestats.py -t 4 -i "$file" -a "$APITRACE_PATH" $API_FILTER 2>&1 | tee -a tracestats_bulk.log
         fi
     done
 fi
