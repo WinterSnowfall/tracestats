@@ -21,20 +21,16 @@ then
     do
         if [ -f "$file" ]
         then
-            echo "Detected compressed apitrace: $file"
-            zstd -d "$file"
-            ./tracestats.py -t 4 -i "${file%.zst}" -a "$APITRACE_PATH" $API_FILTER 2>&1 | tee -a tracestats_bulk.log
-            rm -f "${file%.zst}"
-        fi
-    done
-else
-    for file in traces/*.trace
-    do
-        if [ -f "$file" ]
-        then
-            echo "Detected apitrace: $file"
             ./tracestats.py -t 4 -i "$file" -a "$APITRACE_PATH" $API_FILTER 2>&1 | tee -a tracestats_bulk.log
         fi
     done
 fi
+
+for file in traces/*.trace
+do
+    if [ -f "$file" ]
+    then
+        ./tracestats.py -t 4 -i "$file" -a "$APITRACE_PATH" $API_FILTER 2>&1 | tee -a tracestats_bulk.log
+    fi
+done
 

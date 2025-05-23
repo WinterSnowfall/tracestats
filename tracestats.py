@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 '''
 @author: Winter Snowfall
-@version: 1.1
-@date: 09/05/2025
+@version: 1.2
+@date: 23/05/2025
 '''
 
 import os
@@ -50,7 +50,6 @@ API_ENTRY_CALLS = {'Direct3DCreate8': 'D3D8',
                    'D3D11CreateDeviceAndSwapChain': 'D3D11',
                    'D3D11CreateDevice': 'D3D11',
                    'D3D11CoreCreateDevice': 'D3D11'}
-TRACE_API_OVERRIDES = {'FarCry2': 'D3D9'} # Ignore queries done on a D3D9Ex interface, as it's not used for rendering
 API_BASE_CALLS = {**API_ENTRY_CALLS, 'CreateDXGIFactory': 'DXGI',
                                      'CreateDXGIFactory1': 'DXGI',
                                      'CreateDXGIFactory2': 'DGXI'}
@@ -144,6 +143,23 @@ DEVICE_FLAGS_IDENTIFIER = 'Flags = '
 DEVICE_FLAGS_IDENTIFIER_LENGTH = len(DEVICE_FLAGS_IDENTIFIER)
 DEVICE_FLAGS_SKIP_IDENTIFIER = 'Flags = 0x0'
 DEVICE_FLAGS_SPLIT_DELIMITER = '|'
+# swapchain parameters
+SWAPCHAIN_PARAMETERS_CALL = '::CreateSwapChain'
+SWAPCHAIN_DEVICE_PARAMETERS_CALL = 'CreateDeviceAndSwapChain'
+SWAPCHAIN_PARAMETERS_IDENTIFIER = 'pDesc = &{'
+SWAPCHAIN_PARAMETERS_IDENTIFIER_2 = 'pSwapChainDesc = &{'
+SWAPCHAIN_PARAMETERS_SKIP_IDENTIFIER = 'pDesc = NULL'
+SWAPCHAIN_PARAMETERS_SKIP_IDENTIFIER_2 = 'pSwapChainDesc = NULL'
+SWAPCHAIN_PARAMETERS_IDENTIFIER_LENGTH = len(SWAPCHAIN_PARAMETERS_IDENTIFIER)
+SWAPCHAIN_PARAMETERS_IDENTIFIER_LENGTH_2 = len(SWAPCHAIN_PARAMETERS_IDENTIFIER_2)
+SWAPCHAIN_PARAMETERS_IDENTIFIER_END = '}, pFullscreenDesc ='
+SWAPCHAIN_PARAMETERS_IDENTIFIER_END_2 = '}, ppSwapChain ='
+SWAPCHAIN_PARAMETERS_SPLIT_DELIMITER = ','
+SWAPCHAIN_PARAMETERS_CAPTURED = ('AlphaMode', 'BufferCount', 'BufferUsage', 'Flags', 'Format',
+                                 'ScanlineOrdering', 'Quality', 'Count', 'Scaling', 'Stereo', 'SwapEffect')
+SWAPCHAIN_PARAMETERS_VALUE_SPLIT_DELIMITER = ' = '
+SWAPCHAIN_BUFFER_USAGE_VALUE_SPLIT_DELIMITER = '|'
+SWAPCHAIN_FLAGS_VALUE_SPLIT_DELIMITER = '|'
 # feature levels
 FEATURE_LEVELS_IDENTIFIER = 'pFeatureLevels = {'
 FEATURE_LEVELS_IDENTIFIER_LENGTH = len(FEATURE_LEVELS_IDENTIFIER)
@@ -215,8 +231,11 @@ class TraceStats:
                 self.json_export_path = os.path.join(JSON_EXPORT_FOLDER_NAME,
                                                      JSON_EXPORT_DEFAULT_FILE_NAME)
             else:
-                self.json_export_path = os.path.join(JSON_EXPORT_FOLDER_NAME,
-                                                     ''.join((os.path.basename(self.trace_input_paths[0]).rsplit('.', 1)[0], '.json')))
+                trace_file_name = os.path.basename(self.trace_input_paths[0]).rsplit('.', 1)[0]
+                # compressed trace name handling
+                if trace_file_name.endswith('.trace'):
+                    trace_file_name = trace_file_name.rsplit('.', 1)[0]
+                self.json_export_path = os.path.join(JSON_EXPORT_FOLDER_NAME, ''.join((trace_file_name, '.json')))
         else:
             self.json_export_path = json_export_path
 
@@ -264,13 +283,15 @@ class TraceStats:
             raise SystemExit(5)
 
         if apis_to_skip is not None:
-            self.apis_to_skip = [api.strip().upper() for api in apis_to_skip.split(',')]
+            self.apis_to_skip = [api.strip().upper() if api.strip().upper() != 'D3D9EX' else 'D3D9Ex' for api in apis_to_skip.split(',')]
             logger.info(f'Skiping APIs: {self.apis_to_skip}')
         else:
             self.apis_to_skip = None
 
+        self.compressed_trace = False
         self.application_name = application_name
         self.application_link = application_link
+        self.traceappnames_api = None
         self.api = None
         self.api_call_dictionary = {}
         self.device_type_dictionary = {}
@@ -283,6 +304,9 @@ class TraceStats:
         self.vendor_hack_dictionary = {}
         self.pool_dictionary = {}
         self.device_flag_dictionary = {}
+        self.swapchain_parameter_dictionary = {}
+        self.swapchain_buffer_usage_dictionary = {}
+        self.swapchain_flag_dictionary = {}
         self.feature_level_dictionary = {}
         self.rastizer_state_dictionary = {}
         self.blend_state_dictionary = {}
@@ -309,11 +333,20 @@ class TraceStats:
     def process_traces(self):
         for trace_path in self.trace_input_paths:
             if os.path.isfile(trace_path):
-                logger.info(f'Processing trace: {trace_path}')
-
+                self.traceappnames_api = None
                 self.api_skip.clear()
 
-                binary_name_raw = binary_name = os.path.basename(trace_path).rsplit('.', 1)[0]
+                logger.info(f'Processing trace: {trace_path}')
+
+                binary_name_raw, file_extension = os.path.basename(trace_path).rsplit('.', 1)
+                if file_extension == 'zst':
+                    trace_path_final = os.path.join(os.path.dirname(trace_path), binary_name_raw)
+                    binary_name_raw = binary_name = binary_name_raw.rsplit('.', 1)[0]
+                    self.compressed_trace = True
+                else:
+                    trace_path_final = trace_path
+                    binary_name = binary_name_raw
+                    self.compressed_trace = False
                 # workaround for renamed generic game/Game.exe apitraces
                 if binary_name_raw.upper().startswith('GAME'):
                     binary_name = binary_name_raw[:4]
@@ -346,11 +379,27 @@ class TraceStats:
                     except TypeError:
                         pass
 
-                self.api = TRACE_API_OVERRIDES.get(binary_name, None)
-                if self.apis_to_skip is not None and self.api in self.apis_to_skip:
-                    self.api = None
-                    logger.info('Skipped trace due to API filter')
-                    continue
+                if TRACEAPPNAMES_IS_IMPORTED:
+                    try:
+                        self.traceappnames_api = TraceAppNames.get(binary_name_raw)[2]
+                        if self.traceappnames_api is not None:
+                            logger.info(f'Application API found in traceappnames repository: {self.traceappnames_api}')
+                    except TypeError:
+                        pass
+
+                    if self.apis_to_skip is not None and self.traceappnames_api in self.apis_to_skip:
+                        logger.info('Skipped trace due to API filter')
+                        continue
+
+                if self.compressed_trace:
+                    try:
+                        logger.info('Decompressing trace file...')
+                        subprocess.run(['zstd', '-d', trace_path, '-o', trace_path_final],
+                                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                                       check=True)
+                    except subprocess.CalledProcessError:
+                        logger.critical(f'Unable to decompress trace file: {trace_path}')
+                        raise SystemExit(6)
 
                 self.parse_queue = queue.Queue(maxsize=self.thread_count)
                 self.parse_loop.set()
@@ -375,7 +424,7 @@ class TraceStats:
 
                 while self.parse_loop.is_set():
                     try:
-                        self.parse_queue.put((trace_start_call, trace_end_call, trace_path),
+                        self.parse_queue.put((trace_start_call, trace_end_call, trace_path_final),
                                              block=True, timeout=5)
 
                         trace_start_call = trace_end_call + 1
@@ -420,6 +469,12 @@ class TraceStats:
                         return_dictionary['pools'] = self.pool_dictionary
                     if len(self.device_flag_dictionary) > 0:
                         return_dictionary['device_flags'] = self.device_flag_dictionary
+                    if len(self.swapchain_parameter_dictionary) > 0:
+                        return_dictionary['swapchain_parameters'] = self.swapchain_parameter_dictionary
+                    if len(self.swapchain_buffer_usage_dictionary) > 0:
+                        return_dictionary['swapchain_buffer_usage'] = self.swapchain_buffer_usage_dictionary
+                    if len(self.swapchain_flag_dictionary) > 0:
+                        return_dictionary['swapchain_flags'] = self.swapchain_flag_dictionary
                     if len(self.feature_level_dictionary) > 0:
                         return_dictionary['feature_levels'] = self.feature_level_dictionary
                     if len(self.rastizer_state_dictionary) > 0:
@@ -437,6 +492,13 @@ class TraceStats:
                 else:
                     logger.info('Skipped trace due to API filter')
 
+                if self.compressed_trace:
+                    try:
+                        logger.info('Removing decompressed trace file...')
+                        os.remove(trace_path_final)
+                    except:
+                        logger.error(f'Unable to clean up trace: {trace_path_final}')
+
                 # reset state between processed traces
                 self.api = None
                 self.api_call_dictionary = {}
@@ -450,6 +512,9 @@ class TraceStats:
                 self.vendor_hack_dictionary = {}
                 self.pool_dictionary = {}
                 self.device_flag_dictionary = {}
+                self.swapchain_parameter_dictionary = {}
+                self.swapchain_buffer_usage_dictionary = {}
+                self.swapchain_flag_dictionary = {}
                 self.feature_level_dictionary = {}
                 self.rastizer_state_dictionary = {}
                 self.blend_state_dictionary = {}
@@ -457,7 +522,7 @@ class TraceStats:
                 self.bind_flag_dictionary = {}
 
             else:
-                logger.warning(f'File not found, skipping: {trace_path}')
+                logger.warning(f'File not found, skipping: {trace_path_final}')
 
         if len(self.json_output[JSON_BASE_KEY]) > 0:
             json_export = json.dumps(self.json_output, sort_keys=True, indent=4,
@@ -562,11 +627,13 @@ class TraceStats:
                         if self.api is None:
                             for key, value in API_ENTRY_CALLS.items():
                                 if key in split_line[1]:
+                                    if self.traceappnames_api is not None and self.traceappnames_api != value:
+                                        logger.warning('Traceappnames API value is mismatched from trace')
                                     self.api = value
                                     logger.info(f'Detected API: {self.api}')
                                     # otherwise D3D9 will get added to D3D9Ex, heh
                                     break
-                            if self.apis_to_skip is not None and self.api in self.apis_to_skip:
+                            if self.traceappnames_api is None and self.apis_to_skip is not None and self.api in self.apis_to_skip:
                                 self.api_skip.set()
                                 break
 
@@ -585,14 +652,14 @@ class TraceStats:
 
                                 device_type_start = trace_line.find(DEVICE_TYPE_IDENTIFIER) + DEVICE_TYPE_IDENTIFIER_LENGTH
                                 device_type = trace_line[device_type_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
-                                                                                               device_type_start)].strip()
+                                                                                           device_type_start)].strip()
 
                                 existing_value = self.device_type_dictionary.get(device_type, 0)
                                 self.device_type_dictionary[device_type] = existing_value + 1
 
                                 behavior_flags_start = trace_line.find(BEHAVIOR_FLAGS_IDENTIFIER) + BEHAVIOR_FLAGS_IDENTIFIER_LENGTH
                                 behavior_flags = trace_line[behavior_flags_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
-                                                                                                behavior_flags_start)].strip()
+                                                                                                 behavior_flags_start)].strip()
                                 behavior_flags = behavior_flags.split(BEHAVIOR_FLAGS_SPLIT_DELIMITER)
 
                                 for behavior_flag in behavior_flags:
@@ -603,7 +670,7 @@ class TraceStats:
                                 if PRESENT_PARAMETERS_SKIP_IDENTIFIER not in trace_line:
                                     present_parameters_start = trace_line.find(PRESENT_PARAMETERS_IDENTIFIER) + PRESENT_PARAMETERS_IDENTIFIER_LENGTH
                                     present_parameters = trace_line[present_parameters_start:trace_line.find(PRESENT_PARAMETERS_IDENTIFIER_END,
-                                                                                                    present_parameters_start)].strip()
+                                                                                                             present_parameters_start)].strip()
                                     present_parameters = present_parameters.split(PRESENT_PARAMETERS_SPLIT_DELIMITER)
 
                                     for present_parameter in present_parameters:
@@ -619,7 +686,7 @@ class TraceStats:
 
                                 render_state_start = trace_line.find(RENDER_STATES_IDENTIFIER) + RENDER_STATES_IDENTIFIER_LENGTH
                                 render_state = trace_line[render_state_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
-                                                                                            render_state_start)].strip()
+                                                                                             render_state_start)].strip()
 
                                 existing_value = self.render_state_dictionary.get(render_state, 0)
                                 self.render_state_dictionary[render_state] = existing_value + 1
@@ -660,7 +727,7 @@ class TraceStats:
 
                                 query_type_start = trace_line.find(QUERY_TYPE_IDENTIFIER_D3D8) + QUERY_TYPE_IDENTIFIER_LENGTH_D3D8
                                 query_type = trace_line[query_type_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
-                                                                                            query_type_start)].strip()
+                                                                                         query_type_start)].strip()
                                 query_type_decoded = self.d3d8_query_type(query_type)
                                 logger.debug(f'Decoded query type is: {query_type_decoded}')
 
@@ -673,7 +740,7 @@ class TraceStats:
 
                                 query_type_start = trace_line.find(QUERY_TYPE_IDENTIFIER_D3D9) + QUERY_TYPE_IDENTIFIER_LENGTH_D3D9
                                 query_type = trace_line[query_type_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
-                                                                                            query_type_start)].strip()
+                                                                                         query_type_start)].strip()
 
                                 existing_value = self.query_type_dictionary.get(query_type, 0)
                                 self.query_type_dictionary[query_type] = existing_value + 1
@@ -698,7 +765,7 @@ class TraceStats:
 
                                     format_start = trace_line.find(FORMAT_IDENTIFIER) + FORMAT_IDENTIFIER_LENGTH
                                     format_value = trace_line[format_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
-                                                                                        format_start)].strip()
+                                                                                           format_start)].strip()
 
                                     existing_value = self.format_dictionary.get(format_value, 0)
                                     self.format_dictionary[format_value] = existing_value + 1
@@ -722,7 +789,7 @@ class TraceStats:
 
                                     pool_start = trace_line.find(POOL_IDENTIFIER) + POOL_IDENTIFIER_LENGTH
                                     pool_value = trace_line[pool_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
-                                                                                    pool_start)].strip()
+                                                                                       pool_start)].strip()
 
                                     existing_value = self.pool_dictionary.get(pool_value, 0)
                                     self.pool_dictionary[pool_value] = existing_value + 1
@@ -734,7 +801,7 @@ class TraceStats:
                                 if DEVICE_FLAGS_SKIP_IDENTIFIER not in trace_line:
                                     device_flags_start = trace_line.find(DEVICE_FLAGS_IDENTIFIER) + DEVICE_FLAGS_IDENTIFIER_LENGTH
                                     device_flags = trace_line[device_flags_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
-                                                                                                device_flags_start)].strip()
+                                                                                                 device_flags_start)].strip()
                                     device_flags = device_flags.split(DEVICE_FLAGS_SPLIT_DELIMITER)
 
                                     for device_flag in device_flags:
@@ -746,7 +813,7 @@ class TraceStats:
                                     if FEATURE_LEVELS_IDENTIFIER in trace_line:
                                         feature_levels_start = trace_line.find(FEATURE_LEVELS_IDENTIFIER) + FEATURE_LEVELS_IDENTIFIER_LENGTH
                                         feature_levels = trace_line[feature_levels_start:trace_line.find(FEATURE_LEVELS_IDENTIFIER_END,
-                                                                                                        feature_levels_start)].strip()
+                                                                                                         feature_levels_start)].strip()
                                         feature_levels = feature_levels.split(API_ENTRY_VALUE_DELIMITER)
 
                                         for feature_level in feature_levels:
@@ -757,9 +824,64 @@ class TraceStats:
                                     elif FEATURE_LEVELS_IDENTIFIER_ONE in trace_line:
                                         feature_levels_start = trace_line.find(FEATURE_LEVELS_IDENTIFIER_ONE) + FEATURE_LEVELS_IDENTIFIER_ONE_LENGTH
                                         feature_level_stripped = trace_line[feature_levels_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
-                                                                                                                    feature_levels_start)].strip()
+                                                                                                                 feature_levels_start)].strip()
                                         existing_value = self.feature_level_dictionary.get(feature_level_stripped, 0)
                                         self.feature_level_dictionary[feature_level_stripped] = existing_value + 1
+
+                            # need to cater for 'CreateDeviceAndSwapChain' parameters parsing too, so no elif
+                            if SWAPCHAIN_PARAMETERS_CALL in call or SWAPCHAIN_DEVICE_PARAMETERS_CALL in call:
+                                logger.debug(f'Found swapchain parameters on line: {trace_line}')
+
+                                if SWAPCHAIN_PARAMETERS_SKIP_IDENTIFIER not in trace_line and SWAPCHAIN_PARAMETERS_SKIP_IDENTIFIER_2 not in trace_line:
+                                    swapchain_parameters_position = trace_line.find(SWAPCHAIN_PARAMETERS_IDENTIFIER)
+                                    swapchain_parameters_variant = SWAPCHAIN_PARAMETERS_IDENTIFIER if swapchain_parameters_position != -1 else SWAPCHAIN_PARAMETERS_IDENTIFIER_2
+                                    swapchain_parameters_length_variant = SWAPCHAIN_PARAMETERS_IDENTIFIER_LENGTH if swapchain_parameters_position != -1 else SWAPCHAIN_PARAMETERS_IDENTIFIER_LENGTH_2
+
+                                    swapchain_parameters_end_position = trace_line.find(SWAPCHAIN_PARAMETERS_IDENTIFIER_END)
+                                    swapchain_parameters_end_variant = SWAPCHAIN_PARAMETERS_IDENTIFIER_END if swapchain_parameters_end_position != -1 else SWAPCHAIN_PARAMETERS_IDENTIFIER_END_2
+
+
+                                    swapchain_parameters_start = trace_line.find(swapchain_parameters_variant) + swapchain_parameters_length_variant
+                                    swapchain_parameters = trace_line[swapchain_parameters_start:trace_line.find(swapchain_parameters_end_variant,
+                                                                                                                 swapchain_parameters_start)].strip()
+                                    # we need to strip the the desc for any array flags and add split delimiters
+                                    swapchain_parameters = swapchain_parameters.replace('{', SWAPCHAIN_PARAMETERS_SPLIT_DELIMITER).replace('}', SWAPCHAIN_PARAMETERS_SPLIT_DELIMITER)
+                                    swapchain_parameters = swapchain_parameters.split(SWAPCHAIN_PARAMETERS_SPLIT_DELIMITER)
+
+                                    for swapchain_parameter in swapchain_parameters:
+                                        swapchain_parameter_stripped = swapchain_parameter.strip()
+
+                                        try:
+                                            swapchain_parameter_key, swapchain_parameter_value = swapchain_parameter_stripped.split(SWAPCHAIN_PARAMETERS_VALUE_SPLIT_DELIMITER, 1)
+
+                                            if swapchain_parameter_key in SWAPCHAIN_PARAMETERS_CAPTURED:
+                                                if swapchain_parameter_value != '0x0':
+                                                    if swapchain_parameter_key == 'BufferUsage':
+                                                        swapchain_buffer_usage = swapchain_parameter_value.split(SWAPCHAIN_BUFFER_USAGE_VALUE_SPLIT_DELIMITER)
+
+                                                        for swapchain_buffer_usage_flag in swapchain_buffer_usage:
+                                                            swapchian_buffer_usage_flag_stripped = swapchain_buffer_usage_flag.strip()
+
+                                                            existing_value = self.swapchain_buffer_usage_dictionary.get(swapchian_buffer_usage_flag_stripped, 0)
+                                                            self.swapchain_buffer_usage_dictionary[swapchian_buffer_usage_flag_stripped] = existing_value + 1
+
+                                                    elif swapchain_parameter_key == 'Flags':
+                                                        swapchain_flags = swapchain_parameter_value.split(SWAPCHAIN_FLAGS_VALUE_SPLIT_DELIMITER)
+
+                                                        for swapchain_flag in swapchain_flags:
+                                                            swapchain_flag_stripped = swapchain_flag.strip()
+
+                                                            existing_value = self.swapchain_flag_dictionary.get(swapchain_flag_stripped, 0)
+                                                            self.swapchain_flag_dictionary[swapchain_flag_stripped] = existing_value + 1
+
+                                                    else:
+                                                        if swapchain_parameter_key == 'Count' or swapchain_parameter_key == 'Quality':
+                                                            swapchain_parameter_stripped = ' '.join(('SampleDesc', swapchain_parameter_stripped))
+
+                                                        existing_value = self.swapchain_parameter_dictionary.get(swapchain_parameter_stripped, 0)
+                                                        self.swapchain_parameter_dictionary[swapchain_parameter_stripped] = existing_value + 1
+                                        except ValueError:
+                                            pass
 
                             elif QUERY_TYPE_CALL_D3D9_10_11 in call:
                                 logger.debug(f'Found query type on line: {trace_line}')
@@ -777,7 +899,7 @@ class TraceStats:
                                 if RASTIZER_STATE_IDENTIFIER in trace_line:
                                     rastizer_states_start = trace_line.find(RASTIZER_STATE_IDENTIFIER) + RASTIZER_STATE_IDENTIFIER_LENGTH
                                     rastizer_states = trace_line[rastizer_states_start:trace_line.find(RASTIZER_STATE_IDENTIFIER_END,
-                                                                                                        rastizer_states_start)].strip()
+                                                                                                       rastizer_states_start)].strip()
                                     rastizer_states = rastizer_states.split(API_ENTRY_VALUE_DELIMITER)
 
                                     for rastizer_state in rastizer_states:
@@ -809,7 +931,7 @@ class TraceStats:
 
                                     format_start = trace_line.find(FORMAT_IDENTIFIER) + FORMAT_IDENTIFIER_LENGTH
                                     format_value = trace_line[format_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
-                                                                                        format_start)].strip()
+                                                                                           format_start)].strip()
 
                                     existing_value = self.format_dictionary.get(format_value, 0)
                                     self.format_dictionary[format_value] = existing_value + 1
@@ -819,7 +941,7 @@ class TraceStats:
 
                                     usage_start = trace_line.find(USAGE_IDENTIFIER) + USAGE_IDENTIFIER_LENGTH
                                     usage_value = trace_line[usage_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
-                                                                                            usage_start)].strip()
+                                                                                         usage_start)].strip()
 
                                     if not USAGE_SKIP_IDENTIFIER_D3D10_11 in usage_value:
                                         existing_value = self.usage_dictionary.get(usage_value, 0)
@@ -830,7 +952,7 @@ class TraceStats:
 
                                     bind_flags_start = trace_line.find(BIND_FLAGS_IDENTIFIER) + BIND_FLAGS_IDENTIFIER_LENGTH
                                     bind_flags = trace_line[bind_flags_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
-                                                                                                bind_flags_start)].strip()
+                                                                                             bind_flags_start)].strip()
 
                                     bind_flags = bind_flags.split(BIND_FLAGS_SPLIT_DELIMITER)
 
@@ -876,7 +998,7 @@ class TraceStats:
 
             except json.JSONDecodeError:
                 logger.critical(f'Unable to parse JSON file: {trace_file_path}')
-                raise SystemExit(5)
+                raise SystemExit(7)
 
         joined_json_export = json.dumps(self.json_output, sort_keys=True, indent=4,
                                         separators=(',', ': '), ensure_ascii=False)

@@ -39,10 +39,13 @@ STATS_TYPE = {'api_calls': 1,
               'vendor_hacks': 10,
               'pools': 11,
               'device_flags': 12,
-              'feature_levels': 13,
-              'rastizer_states': 14,
-              'blend_states': 15,
-              'bind_flags': 16}
+              'swapchain_parameters': 13,
+              'swapchain_buffer_usage': 14,
+              'swapchain_flags': 15,
+              'feature_levels': 16,
+              'rastizer_states': 17,
+              'blend_states': 18,
+              'bind_flags': 19}
 SEARCH_RESULTS_LIMIT = 500
 
 def tracestats(request):
@@ -274,6 +277,39 @@ def tracestats(request):
                 for key, value in entry_device_flags.items():
                   stats.append(models.Stats(trace=trace,
                                             stat_type=STATS_TYPE['device_flags'],
+                                            stat_name=key,
+                                            stat_count=value))
+                if len(stats) > 0:
+                  models.Stats.objects.bulk_create(stats)
+
+                # create child stats entries for swapchain parameters
+                entry_swapchain_parameters = entry.get('swapchain_parameters', {})
+                stats = []
+                for key, value in entry_swapchain_parameters.items():
+                  stats.append(models.Stats(trace=trace,
+                                            stat_type=STATS_TYPE['swapchain_parameters'],
+                                            stat_name=key,
+                                            stat_count=value))
+                if len(stats) > 0:
+                  models.Stats.objects.bulk_create(stats)
+
+                # create child stats entries for swapchain buffer usage
+                entry_swapchain_buffer_usage = entry.get('swapchain_buffer_usage', {})
+                stats = []
+                for key, value in entry_swapchain_buffer_usage.items():
+                  stats.append(models.Stats(trace=trace,
+                                            stat_type=STATS_TYPE['swapchain_buffer_usage'],
+                                            stat_name=key,
+                                            stat_count=value))
+                if len(stats) > 0:
+                  models.Stats.objects.bulk_create(stats)
+
+                # create child stats entries for swapchain flags
+                entry_swapchain_flags = entry.get('swapchain_flags', {})
+                stats = []
+                for key, value in entry_swapchain_flags.items():
+                  stats.append(models.Stats(trace=trace,
+                                            stat_type=STATS_TYPE['swapchain_flags'],
                                             stat_name=key,
                                             stat_count=value))
                 if len(stats) > 0:
