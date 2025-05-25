@@ -172,6 +172,8 @@ RASTIZER_STATE_CALL = '::CreateRasterizerState'
 RASTIZER_STATE_IDENTIFIER = 'pRasterizerDesc = &{'
 RASTIZER_STATE_IDENTIFIER_LENGTH = len(RASTIZER_STATE_IDENTIFIER)
 RASTIZER_STATE_IDENTIFIER_END = '}'
+RASTIZER_STATE_SKIPPED = ('DepthBias', 'DepthBiasClamp', 'SlopeScaledDepthBias')
+RASTIZER_STATE_VALUE_SPLIT_DELIMITER = ' = '
 # blend state
 BLEND_STATE_CALL = '::CreateBlendState'
 BLEND_STATE_IDENTIFIER = 'pBlendStateDesc = &{'
@@ -676,6 +678,7 @@ class TraceStats:
                                     for present_parameter in present_parameters:
                                         present_parameter_stripped = present_parameter.strip()
                                         present_parameter_key, present_parameter_value = present_parameter_stripped.split(PRESENT_PARAMETERS_VALUE_SPLIT_DELIMITER)
+                                        
                                         if present_parameter_key not in PRESENT_PARAMETERS_SKIPPED:
                                             if present_parameter_key != 'Flags' or present_parameter_value != '0x0':
                                                 existing_value = self.present_parameter_dictionary.get(present_parameter_stripped, 0)
@@ -904,8 +907,11 @@ class TraceStats:
 
                                     for rastizer_state in rastizer_states:
                                         rastizer_state_stripped = rastizer_state.strip()
-                                        existing_value = self.rastizer_state_dictionary.get(rastizer_state_stripped, 0)
-                                        self.rastizer_state_dictionary[rastizer_state_stripped] = existing_value + 1
+                                        rastizer_state_key, rastizer_state_value = rastizer_state_stripped.split(RASTIZER_STATE_VALUE_SPLIT_DELIMITER)
+
+                                        if rastizer_state_key not in RASTIZER_STATE_SKIPPED:
+                                            existing_value = self.rastizer_state_dictionary.get(rastizer_state_stripped, 0)
+                                            self.rastizer_state_dictionary[rastizer_state_stripped] = existing_value + 1
 
                             elif BLEND_STATE_CALL in call:
                                 logger.debug(f'Found blend state on line: {trace_line}')
