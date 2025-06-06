@@ -97,6 +97,8 @@ PRESENT_PARAMETERS_VALUE_SPLIT_DELIMITER = ' = '
 RENDER_STATES_CALL = '::SetRenderState'
 RENDER_STATES_IDENTIFIER = 'State = '
 RENDER_STATES_IDENTIFIER_LENGTH = len(RENDER_STATES_IDENTIFIER)
+# Star Wars: Force Unleashed (2) will set RS = -1 to 1 for some reason...
+RENDER_STATES_SKIPPED = ('-1')
 # query types
 QUERY_TYPE_CALL_D3D8 = '::GetInfo'
 QUERY_TYPE_IDENTIFIER_D3D8 = 'DevInfoID = '
@@ -691,8 +693,9 @@ class TraceStats:
                                 render_state = trace_line[render_state_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
                                                                                              render_state_start)].strip()
 
-                                existing_value = self.render_state_dictionary.get(render_state, 0)
-                                self.render_state_dictionary[render_state] = existing_value + 1
+                                if render_state not in RENDER_STATES_SKIPPED:
+                                    existing_value = self.render_state_dictionary.get(render_state, 0)
+                                    self.render_state_dictionary[render_state] = existing_value + 1
 
                                 if (VENDOR_HACK_POINTSIZE in trace_line or
                                     VENDOR_HACK_ADAPTIVETESS_X in trace_line or
