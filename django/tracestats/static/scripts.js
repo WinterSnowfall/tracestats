@@ -41,7 +41,7 @@ $(document).on('click', '#toggle-titles-list', function() {
         success: function(response) {
             if (response.content) {
                 $('#search-results').hide();
-                $('#notification-area').attr('class', 'notification-info');
+                $('#notification-area').attr('class', 'notification-none');
                 $('#notification-area').html('');
                 $('#stats-area').html('');
                 $('#file-upload-area').html('');
@@ -51,7 +51,7 @@ $(document).on('click', '#toggle-titles-list', function() {
                 $('#toggle-titles-list').attr('class', 'search-button-negative');
             } else {
                 $('#search-results').hide();
-                $('#notification-area').attr('class', 'notification-info');
+                $('#notification-area').attr('class', 'notification-none');
                 $('#notification-area').html('');
                 $('#titles-list-area').html('');
                 $('#toggle-titles-list').attr('class', 'search-button');
@@ -73,7 +73,7 @@ $(document).on('click', '#toggle-stats', function() {
         success: function(response) {
             if (response.content) {
                 $('#search-results').hide();
-                $('#notification-area').attr('class', 'notification-info');
+                $('#notification-area').attr('class', 'notification-none');
                 $('#notification-area').html('');
                 $('#titles-list-area').html('');
                 $('#file-upload-area').html('');
@@ -83,11 +83,11 @@ $(document).on('click', '#toggle-stats', function() {
                 $('#toggle-stats').attr('class', 'search-button-negative');
 
                 const backgroundColors = [
-                    '#FF5722', // Deep Orange
-                    '#FFC107', // Golden Yellow
-                    '#FF3D00', // Dark Orange
+                    '#F57C23', // Light Orange
                     '#FFEA00', // Bright Yellow
-                    '#FF9800'  // Light Orange
+                    '#33CC33', // Dark Green
+                    '#FF3D00', // Dark Orange
+                    '#36B4E1', // Light Blue
                 ];
 
                 const ctx = $('#apiStatsPieChart')[0].getContext('2d');
@@ -108,12 +108,23 @@ $(document).on('click', '#toggle-stats', function() {
                     options: {
                         responsive: false,
                         plugins: {
+                            tooltip: {
+                                titleFont: {
+                                    family: 'Lucida Console',
+                                    size: 12
+                                },
+                                bodyFont: {
+                                    family: 'Lucida Console',
+                                    size: 12
+                                }
+                            },
                             legend: {
                                 display: true,
                                 position: 'right',
                                 labels: {
                                     font: {
-                                        family: 'Lucida Console'
+                                        family: 'Lucida Console',
+                                        size: 12
                                     },
                                     boxWidth: 20,
                                     padding: 15,
@@ -128,7 +139,7 @@ $(document).on('click', '#toggle-stats', function() {
                 });
             } else {
                 $('#search-results').hide();
-                $('#notification-area').attr('class', 'notification-info');
+                $('#notification-area').attr('class', 'notification-none');
                 $('#notification-area').html('');
                 $('#stats-area').html('');
                 $('#toggle-stats').attr('class', 'search-button');
@@ -149,7 +160,7 @@ $(document).on('click', '#toggle-file-upload', function() {
         success: function(response) {
             if (response.content) {
                 $('#search-results').hide();
-                $('#notification-area').attr('class', 'notification-info');
+                $('#notification-area').attr('class', 'notification-none');
                 $('#notification-area').html('');
                 $('#titles-list-area').html('');
                 $('#stats-area').html('');
@@ -159,7 +170,7 @@ $(document).on('click', '#toggle-file-upload', function() {
                 $('#toggle-file-upload').attr('class', 'search-button-negative');
             } else {
                 $('#search-results').hide();
-                $('#notification-area').attr('class', 'notification-info');
+                $('#notification-area').attr('class', 'notification-none');
                 $('#notification-area').html('');
                 $('#file-upload-area').html('');
                 $('#toggle-file-upload').attr('class', 'search-button');
@@ -189,11 +200,11 @@ $(document).on('click', '#upload-button', function() {
                 $('#upload-notification-area').attr('class', 'notification-error');
                 $('#upload-notification-area').html('Selected file size exceeds the 4 MB limit. Pick something else.');
             } else {
-                $('#upload-notification-area').attr('class', 'notification-info');
+                $('#upload-notification-area').attr('class', 'notification-none');
                 $('#upload-notification-area').html('');
             }
         } else {
-            $('#upload-notification-area').attr('class', 'notification-info');
+            $('#upload-notification-area').attr('class', 'notification-none');
             $('#upload-notification-area').html('');
         }
     }
@@ -203,12 +214,12 @@ $(document).on('click', '#reset-search-form', function() {
     removeURLSearchParameter()
     $('#search-results').hide();
     $('#id_search_input').attr('value', '');
-    $('#notification-area').attr('class', 'notification-info');
+    $('#notification-area').attr('class', 'notification-none');
     $('#notification-area').html('');
 });
 
 $(document).on('click', '#reset-upload-form', function() {
-    $('#upload-notification-area').attr('class', 'notification-info');
+    $('#upload-notification-area').attr('class', 'notification-none');
     $('#upload-notification-area').html('');
 });
 

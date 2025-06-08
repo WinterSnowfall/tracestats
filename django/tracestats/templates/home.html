@@ -12,10 +12,10 @@
 <div class="container">
     <div class="search-body">
         <div class="search-container">
-            <h1>❄ Winter's avian</h1><img class="logo-image" src="{% static 'logo.svg' %}"><h1>API stats search engine ❄</h1>
+            <h1>❄ Winter's avian 🐦 API stats search engine ❄</h1>
         </div>
         <div class="tracestats-stats">
-            <h6>... Our vast network of bird brains currently holds information on <span class="color-stat">{{ traces_total }}</span> apitraces ...</h6>
+            <h5 class="no-margin">... Our vast network of bird brains currently holds information on <span class="color-stat">{{ traces_total }}</span> apitraces ...</h5>
         </div>
         <form method="post">
             {% csrf_token %}
@@ -28,10 +28,10 @@
                 <button class="search-button" type="button" id="toggle-file-upload">Bird seed</button>
             </div>
         </form>
-        <div id="titles-list-area"></div>
-        <div id="stats-area"></div>
-        <div id="file-upload-area"></div>
-        <div class="search-results" id="search-results">
+        <div class="no-margin" id="titles-list-area"></div>
+        <div class="no-margin" id="stats-area"></div>
+        <div class="no-margin" id="file-upload-area"></div>
+        <div class="table-margin" id="search-results">
             <table>
                 <tr>
                     <th><b>#</b></th>
@@ -49,11 +49,11 @@
                     <td>{{ stat.trace.name }}</td>
                     <td>{{ stat.trace.api }}</td>
                     <td class="no-selection">
-                        <a href="{% url 'tracestats' %}?search={{ stat.trace.name }} !">🐦</a>
+                        <a href="{% url 'tracestats' %}?search={{ stat.trace.name|urlize }} !">🐦</a>
                     </td>
                     <td class="no-selection">
                         {% if stat.trace.link is None %}
-                            <a href="https://www.pcgamingwiki.com/w/index.php?search={{ stat.trace.name|pcgwize }}&title=Special:Search">🎮</a>
+                            <a href="https://www.pcgamingwiki.com/w/index.php?search={{ stat.trace.name|urlize }}&title=Special:Search">🎮</a>
                         {% else %}
                             <a href="{{ stat.trace.link }}">🎮</a>
                         {% endif %}
@@ -75,7 +75,7 @@
                 {% endfor %}
             </table>
         </div>
-        <div id="notification-area" class="{% if notification_type == 'error' %}notification-error{% elif notification_type == 'info' %}notification-info{% else %}notification-highlight{% endif %}">
+        <div id="notification-area" class="{{ notification_type }}">
             {{ notification_message }}
         </div>
     </div>

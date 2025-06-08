@@ -56,6 +56,7 @@ def tracestats(request):
   search_form = None
   search_results = None
   context = {}
+  context['notification_type'] = 'notification-none'
 
   if request.method == 'POST':
     if 'upload-form' in request.POST:
@@ -372,27 +373,27 @@ def tracestats(request):
                   models.Stats.objects.bulk_create(stats)
 
               context = {'notification_message': 'All good. You\'ve cossed the Bridge of Death.',
-                      'notification_type': 'info'}
+                         'notification_type': 'notification-success'}
             else:
               context = {'notification_message': 'The JSON structure is incorrect. Just use whatever tracestats generates, ok?',
-                      'notification_type': 'error'}
+                         'notification_type': 'notification-error'}
 
           except UnicodeDecodeError:
             context = {'notification_message': 'That\'s not even a text file. Try hader next time, won\'t you?',
-                      'notification_type': 'error'}
+                       'notification_type': 'notification-error'}
           except json.JSONDecodeError:
             context = {'notification_message': 'That is most certainly not a JSON. Think you\'re pretty funny, don\'t ya\'?',
-                      'notification_type': 'error'}
+                       'notification_type': 'notification-error'}
           except Exception as e:
             logger.error('Encountered exception: ', exc_info=e)
             context = {'notification_message': 'The JSON structure is incorrect. Just use whatever tracestats generates, ok?',
-                      'notification_type': 'error'}
+                       'notification_type': 'notification-error'}
         else:
           context = {'notification_message': 'Wrong answer. You\'ve been cast into the Gorge of Eternal Peril!',
-                    'notification_type': 'error'}
+                     'notification_type': 'notification-error'}
       else:
         context = {'notification_message': 'That file has upset the Rabbit of Caerbannog. Naughty naughty.',
-                   'notification_type': 'error'}
+                   'notification_type': 'notification-error'}
 
     elif 'search-form' in request.POST:
       search_form = forms.SearchForm(request.POST)
@@ -425,11 +426,13 @@ def tracestats(request):
       if not exact_search:
         search_results = models.Stats.objects.filter(stat_name__icontains=search_input).order_by('stat_type',
                                                                                                 '-stat_count',
-                                                                                                'trace__name')[:SEARCH_RESULTS_LIMIT]
+                                                                                                'trace__name',
+                                                                                                '-trace__api')[:SEARCH_RESULTS_LIMIT]
       else:
         search_results = models.Stats.objects.filter(stat_name__exact=search_input).order_by('stat_type',
                                                                                             '-stat_count',
-                                                                                            'trace__name')[:SEARCH_RESULTS_LIMIT]
+                                                                                            'trace__name',
+                                                                                            '-trace__api')[:SEARCH_RESULTS_LIMIT]
 
       if len(search_results) == 0:
         # If no objects are found, do a search based on application names
@@ -447,7 +450,7 @@ def tracestats(request):
         if len(search_results) == 0:
           # If no results of any kind could be found, show a notification to that extent
           context = {'notification_message': 'I\'m afraid that particular shrubbery is nowhere to be found.',
-                    'notification_type': 'highlight'}
+                     'notification_type': 'notification-info'}
       else:
         # Highlight the searched text in the returned results
         for search_result in search_results:

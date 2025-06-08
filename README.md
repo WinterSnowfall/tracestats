@@ -28,5 +28,5 @@ As I said, it's a rather humble statistics exporter for now, but it *may* be exp
 
 ### What's in the "django" folder?
 
-A simple web application for uploading and querying exported tracestats JSON data, developed using Django. Note that it is provided only for reference, with some artifacts such as the logo and sqlite database not included (the latter can still very easily be generated using the Django manage script). For information on usage, deployment steps and so on please refer to the [Django documentation](https://docs.djangoproject.com/).
+A simple web application for uploading and querying exported tracestats JSON data, developed using Django. Note that it is provided only for reference, with the sqlite database not included (it can be generated very easily, however, using the Django manage script). For information on usage, deployment steps and so on please refer to the [Django documentation](https://docs.djangoproject.com/).
 

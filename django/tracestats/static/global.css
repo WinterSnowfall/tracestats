@@ -3,13 +3,16 @@
 }
 
 body, html {
-    height: 100vh;
     margin: 0;
     background-color: #41434a;
     color: white;
+    height: 100vh;
+    overflow-y: auto;
 }
 
 h1 {
+    margin-top: 0;
+    margin-bottom: 20px;
     text-shadow: 0 4px 6px #1c1c1c;
 }
 
@@ -27,7 +30,17 @@ button {
     background-color: #41434a;
     color: white;
     border: 1px solid white;
-    border-radius: 5px;
+    border-radius: 10px;
+    padding: 5px 10px;
+    box-shadow: 0 4px 6px #1c1c1c;
+    cursor: pointer;
+}
+
+.search-button-negative {
+    background-color: white;
+    color: #41434a;
+    border: 1px solid #41434a;
+    border-radius: 10px;
     padding: 5px 10px;
     box-shadow: 0 4px 6px #1c1c1c;
     cursor: pointer;
@@ -41,14 +54,11 @@ button:hover {
 
 table {
     justify-content: center;
-    margin-top: 40px;
     width: auto;
     border-collapse: collapse;
-    max-height: 60vh;
     max-width: 90vw;
-    overflow-y: auto;
     display: flex;
-    font-size: 14px;
+    font-size: 80%;
 }
 
 th {
@@ -99,26 +109,17 @@ a:hover {
 }
 
 .color-stat {
-    color: #df6c1f;
+    color: #f57c23;
     font-weight: bold;
-    font-size: 12px;
+    font-size: 90%;
 }
 
 .container {
     display: flex;
+    min-height: 100vh;
     justify-content: center;
     align-items: center;
-    height: 100vh;
-    overflow-y: auto;
     text-align: center;
-}
-
-.logo-image {
-    margin-right: 10px;
-    margin-left: 10px;
-    max-width: 40px;
-    max-height: 40px;
-    user-select: none;
 }
 
 .tracestats-stats {
@@ -132,6 +133,19 @@ a:hover {
 
 .no-selection {
     user-select: none;
+}
+
+.no-margin {
+    margin: 0;
+}
+
+.table-margin {
+    margin-top: 30px;
+}
+
+.search-body {
+    margin-top: 60px;
+    margin-bottom: 60px;
 }
 
 .search-container {
@@ -148,9 +162,16 @@ a:hover {
     background-color: #41434a;
     color: white;
     border: 1px solid white;
+    border-radius: 10px;
+    padding: 2px 6px;
     width: 550px;
-    border-radius: 5px;
     box-shadow: 0 4px 6px #1c1c1c;
+}
+
+.file-input {
+    font-family: 'Lucida Console', monospace;
+    font-size: 90%;
+    margin-right: 0px;
 }
 
 .password-input {
@@ -158,19 +179,10 @@ a:hover {
     background-color: #41434a;
     color: white;
     border: 1px solid white;
+    border-radius: 10px;
+    padding: 2px 6px;
     width: 200px;
-    border-radius: 5px;
     box-shadow: 0 4px 6px #1c1c1c;
-}
-
-.search-button-negative {
-    background-color: white;
-    color: #41434a;
-    border: 1px solid #41434a;
-    border-radius: 5px;
-    padding: 5px 10px;
-    box-shadow: 0 4px 6px #1c1c1c;
-    cursor: pointer;
 }
 
 .api-stats-container {
@@ -188,6 +200,11 @@ a:hover {
     user-select: none;
 }
 
+.notification-none {
+    margin: 0;
+    user-select: none;
+}
+
 .notification-error {
     margin-top: 20px;
     color: lightcoral;
@@ -195,16 +212,16 @@ a:hover {
     user-select: none;
 }
 
-.notification-info {
+.notification-success {
     margin-top: 20px;
     color: lightgreen;
     text-shadow: 0 4px 6px #1c1c1c;
     user-select: none;
 }
 
-.notification-highlight {
+.notification-info {
     margin-top: 20px;
-    color:#df6c1f;
+    color:#f57c23;
     text-shadow: 0 4px 6px #1c1c1c;
     user-select: none;
 }
