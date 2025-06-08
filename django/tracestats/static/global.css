@@ -45,7 +45,7 @@ table {
     width: auto;
     border-collapse: collapse;
     max-height: 60vh;
-    max-width: 80vw;
+    max-width: 90vw;
     overflow-y: auto;
     display: flex;
     font-size: 14px;
@@ -65,7 +65,7 @@ th {
 td {
     width: auto;
     padding: 8px;
-    max-width: 30vw;
+    max-width: 40vw;
     overflow-wrap: break-word;
     border: 1px solid white;
     text-align: left;
@@ -78,14 +78,19 @@ mark {
 
 a {
     color: lightgray;
+    text-decoration: none;
+    transition: filter 0.2s;
 }
 
 a:visited {
     color: lightgray;
+    text-decoration: none;
 }
 
 a:hover {
     color: white;
+    text-decoration: none;
+    filter: brightness(1.5);
 }
 
 .align-right {

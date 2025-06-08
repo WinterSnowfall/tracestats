@@ -29,11 +29,11 @@ $(document).ready(function() {
     }
 });
 
-$(document).on('click', '#toggle-file-upload', function() {
+$(document).on('click', '#toggle-titles-list', function() {
     const csrftoken = getCookie('csrftoken');
 
     $.ajax({
-        url: '/tracestats/file-upload/',
+        url: '/tracestats/titles-list/',
         method: 'POST',
         headers: {
             'X-CSRFToken': csrftoken
@@ -44,15 +44,17 @@ $(document).on('click', '#toggle-file-upload', function() {
                 $('#notification-area').attr('class', 'notification-info');
                 $('#notification-area').html('');
                 $('#stats-area').html('');
+                $('#file-upload-area').html('');
                 $('#toggle-stats').attr('class', 'search-button');
-                $('#file-upload-area').html(response.content);
-                $('#toggle-file-upload').attr('class', 'search-button-negative');
+                $('#toggle-file-upload').attr('class', 'search-button');
+                $('#titles-list-area').html(response.content);
+                $('#toggle-titles-list').attr('class', 'search-button-negative');
             } else {
                 $('#search-results').hide();
                 $('#notification-area').attr('class', 'notification-info');
                 $('#notification-area').html('');
-                $('#file-upload-area').html('');
-                $('#toggle-file-upload').attr('class', 'search-button');
+                $('#titles-list-area').html('');
+                $('#toggle-titles-list').attr('class', 'search-button');
             }
         }
     });
@@ -73,7 +75,9 @@ $(document).on('click', '#toggle-stats', function() {
                 $('#search-results').hide();
                 $('#notification-area').attr('class', 'notification-info');
                 $('#notification-area').html('');
+                $('#titles-list-area').html('');
                 $('#file-upload-area').html('');
+                $('#toggle-titles-list').attr('class', 'search-button');
                 $('#toggle-file-upload').attr('class', 'search-button');
                 $('#stats-area').html(response.content);
                 $('#toggle-stats').attr('class', 'search-button-negative');
@@ -128,6 +132,37 @@ $(document).on('click', '#toggle-stats', function() {
                 $('#notification-area').html('');
                 $('#stats-area').html('');
                 $('#toggle-stats').attr('class', 'search-button');
+            }
+        }
+    });
+});
+
+$(document).on('click', '#toggle-file-upload', function() {
+    const csrftoken = getCookie('csrftoken');
+
+    $.ajax({
+        url: '/tracestats/file-upload/',
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': csrftoken
+        },
+        success: function(response) {
+            if (response.content) {
+                $('#search-results').hide();
+                $('#notification-area').attr('class', 'notification-info');
+                $('#notification-area').html('');
+                $('#titles-list-area').html('');
+                $('#stats-area').html('');
+                $('#toggle-titles-list').attr('class', 'search-button');
+                $('#toggle-stats').attr('class', 'search-button');
+                $('#file-upload-area').html(response.content);
+                $('#toggle-file-upload').attr('class', 'search-button-negative');
+            } else {
+                $('#search-results').hide();
+                $('#notification-area').attr('class', 'notification-info');
+                $('#notification-area').html('');
+                $('#file-upload-area').html('');
+                $('#toggle-file-upload').attr('class', 'search-button');
             }
         }
     });

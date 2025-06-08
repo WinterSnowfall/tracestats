@@ -49,8 +49,9 @@ STATS_TYPE = {'api_calls': 1,
 SEARCH_RESULTS_LIMIT = 500
 
 def tracestats(request):
-  request.session['file_upload_visible'] = False
+  request.session['titles_list_visible'] = False
   request.session['api_stats_visible'] = False
+  request.session['file_upload_visible'] = False
   request.session.modified = True
   search_form = None
   search_results = None
@@ -434,12 +435,12 @@ def tracestats(request):
         # If no objects are found, do a search based on application names
         if not exact_search:
           search_results = models.Stats.objects.filter(trace__name__icontains=search_input).order_by('trace__name',
-                                                                                                    'trace__api',
+                                                                                                    '-trace__api',
                                                                                                     'stat_type',
                                                                                                     '-stat_count')[:SEARCH_RESULTS_LIMIT]
         else:
           search_results = models.Stats.objects.filter(trace__name__exact=search_input).order_by('trace__name',
-                                                                                                'trace__api',
+                                                                                                '-trace__api',
                                                                                                 'stat_type',
                                                                                                 '-stat_count')[:SEARCH_RESULTS_LIMIT]
 
@@ -467,26 +468,29 @@ def tracestats(request):
   context['search_results'] = search_results
   return render(request, 'home.html', context)
 
-def generate_file_upload(request):
+def generate_titles_list(request):
   if request.method != 'POST':
     return JsonResponse({'error': 'The Rabbit of Caerbannog pounces on you and you die!'}, status=403)
   else:
+    titles_list = models.Trace.objects.only('name', 'link', 'binary_name', 'api').order_by('name',
+                                                                                           '-api')
+
     try:
-      request.session['file_upload_visible'] = not request.session['file_upload_visible']
+      request.session['titles_list_visible'] = not request.session['titles_list_visible']
       request.session.modified = True
     except KeyError:
-      request.session['file_upload_visible'] = True
+      request.session['titles_list_visible'] = True
       request.session.modified = True
 
-    if request.session['file_upload_visible']:
-        file_upload_form = forms.FileUploadForm()
-        context = {'file_upload_form': file_upload_form}
-        context.update(csrf(request))
-        content = loader.render_to_string('file_upload.html', context)
+    if request.session['titles_list_visible']:
+      context = {'titles_list': titles_list}
+      context.update(csrf(request))
+      content = loader.render_to_string('titles_list.html', context)
     else:
-        content = ""
+      content = ""
 
     request.session['api_stats_visible'] = False
+    request.session['file_upload_visible'] = False
     request.session.modified = True
 
     return JsonResponse({'content': content})
@@ -505,21 +509,47 @@ def generate_stats(request):
       request.session.modified = True
 
     if request.session['api_stats_visible']:
-        api_stats['d3d8']   = models.Trace.objects.filter(api='D3D8').count()
-        api_stats['d3d9']   = models.Trace.objects.filter(api='D3D9').count()
-        api_stats['d3d9ex'] = models.Trace.objects.filter(api='D3D9Ex').count()
-        api_stats['d3d10']  = models.Trace.objects.filter(api='D3D10').count()
-        api_stats['d3d11']  = models.Trace.objects.filter(api='D3D11').count()
+      api_stats['d3d8']   = models.Trace.objects.filter(api='D3D8').count()
+      api_stats['d3d9']   = models.Trace.objects.filter(api='D3D9').count()
+      api_stats['d3d9ex'] = models.Trace.objects.filter(api='D3D9Ex').count()
+      api_stats['d3d10']  = models.Trace.objects.filter(api='D3D10').count()
+      api_stats['d3d11']  = models.Trace.objects.filter(api='D3D11').count()
 
-        context = {}
-        context.update(csrf(request))
-        content = loader.render_to_string('api_stats.html', context)
+      context = {}
+      context.update(csrf(request))
+      content = loader.render_to_string('api_stats.html', context)
     else:
-        content = ""
+      content = ""
 
+    request.session['titles_list_visible'] = False
     request.session['file_upload_visible'] = False
     request.session.modified = True
 
     return JsonResponse({'content': content,
                          'api_stats': api_stats})
+
+def generate_file_upload(request):
+  if request.method != 'POST':
+    return JsonResponse({'error': 'The Rabbit of Caerbannog pounces on you and you die!'}, status=403)
+  else:
+    try:
+      request.session['file_upload_visible'] = not request.session['file_upload_visible']
+      request.session.modified = True
+    except KeyError:
+      request.session['file_upload_visible'] = True
+      request.session.modified = True
+
+    if request.session['file_upload_visible']:
+      file_upload_form = forms.FileUploadForm()
+      context = {'file_upload_form': file_upload_form}
+      context.update(csrf(request))
+      content = loader.render_to_string('file_upload.html', context)
+    else:
+      content = ""
+
+    request.session['titles_list_visible'] = False
+    request.session['api_stats_visible'] = False
+    request.session.modified = True
+
+    return JsonResponse({'content': content})
 
