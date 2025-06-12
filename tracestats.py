@@ -98,7 +98,8 @@ RENDER_STATES_CALL = '::SetRenderState'
 RENDER_STATES_IDENTIFIER = 'State = '
 RENDER_STATES_IDENTIFIER_LENGTH = len(RENDER_STATES_IDENTIFIER)
 # Star Wars: Force Unleashed (2) will set RS = -1 to 1 for some reason...
-RENDER_STATES_SKIPPED = ('-1')
+# Gun Metal will set RS 99, which is undefined...
+RENDER_STATES_SKIPPED = ('-1', '99')
 # query types
 QUERY_TYPE_CALL_D3D8 = '::GetInfo'
 QUERY_TYPE_IDENTIFIER_D3D8 = 'DevInfoID = '
