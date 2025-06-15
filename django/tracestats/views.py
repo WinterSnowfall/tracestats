@@ -46,7 +46,7 @@ STATS_TYPE = {'api_calls': 1,
               'rastizer_states': 17,
               'blend_states': 18,
               'bind_flags': 19}
-SEARCH_RESULTS_LIMIT = 500
+SEARCH_RESULTS_LIMIT = 999
 
 def tracestats(request):
   request.session['titles_list_visible'] = False
