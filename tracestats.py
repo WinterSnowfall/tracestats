@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 '''
 @author: Winter Snowfall
-@version: 1.2
-@date: 23/05/2025
+@version: 1.3
+@date: 21/06/2025
 '''
 
 import os
@@ -57,26 +57,34 @@ API_ENTRY_CALL_IDENTIFIER = '::'
 API_ENTRY_VALUE_DELIMITER = ','
 # To convert, use: int.from_bytes(b'ATOC', 'little') or:
 # (1129272385).to_bytes(4, 'little').decode('ascii')
-VENDOR_HACK_VALUES = {'2141212672': 'D3DRS_POINTSIZE = RESZ',
-                      '1414745673': 'D3DRS_POINTSIZE = INST',
-                      '827142721' : 'D3DRS_POINTSIZE = A2M1',
-                      '810365505' : 'D3DRS_POINTSIZE = A2M0',
+VENDOR_HACK_VALUES = {'1515406674': 'RESZ',        # This is the FOURCC
+                      '2141212672': 'RESZ_ENABLE', # This is the enable value, not the FOURCC
+                      '1414745673': 'INST',
+                      '827142721' : 'A2M1',
+                      '810365505' : 'A2M0',
+                      # not actually used in conjunction with render states, but will be checked for support
+                      '1112945234': 'R2VB',
                       # undocumented ATI/Nvidia centroid hack (alternate pixel center)
-                      '1414415683': 'D3DRS_POINTSIZE = CENT',
+                      '1414415683': 'CENT',
                       # Nvidia fast Z reject hack used by older Source engine builds
-                      '1093815368': 'D3DRS_POINTSIZE = HL2A',
-                      # undocumented Nvidia game-specific hacks ####
-                      '826953539' : 'D3DRS_ADAPTIVETESS_Y = COJ1', # Call of Juarez
-                      '808931924' : 'D3DRS_ADAPTIVETESS_Y = TR70', # Tomb Raider: Anniversary / Legend
-                      '1162692948': 'D3DRS_ADAPTIVETESS_Y = TIME', # TimeShift
-                      '1282302283': 'D3DRS_ADAPTIVETESS_Y = KanL', # Kane & Lynch
-                      ##############################################
-                      '1129272385': 'D3DRS_ADAPTIVETESS_Y = ATOC',
-                      '1094800211': 'D3DRS_ADAPTIVETESS_Y = SSAA',
-                      '1297108803': 'D3DRS_ADAPTIVETESS_Y = COPM',
-                      '1111774798': 'D3DRS_ADAPTIVETESS_X = NVDB'}
+                      '1093815368': 'HL2A',
+                      # undocumented game-specific hacks ###
+                      '826953539' : 'COJ1',                # Call of Juarez
+                      '808931924' : 'TR70',                # Tomb Raider: Anniversary / Legend
+                      '1162692948': 'TIME',                # TimeShift
+                      '1282302283': 'KanL',                # Kane & Lynch (2)
+                      ######################################
+                      '1129272385': 'ATOC',
+                      '1094800211': 'SSAA',
+                      '1297108803': 'COPM',
+                      '1111774798': 'NVDB'}
 
 ############################## D3D8, D3D9Ex, D3D9 ##############################
+# check device format vendor hacks
+CHECK_DEVICE_FORMAT_CALL = '::CheckDeviceFormat'
+CHECK_DEVICE_FORMAT_IDENTIFIER = 'CheckFormat = '
+CHECK_DEVICE_FORMAT_IDENTIFIER_LENGTH = len(CHECK_DEVICE_FORMAT_IDENTIFIER)
+CHECK_DEVICE_FORMAT_IDENTIFIER_END = ')'
 # device type
 DEVICE_CREATION_CALL = '::CreateDevice'
 DEVICE_TYPE_IDENTIFIER = 'DeviceType = '
@@ -91,8 +99,14 @@ PRESENT_PARAMETERS_SKIP_IDENTIFIER = 'pPresentationParameters = ?'
 PRESENT_PARAMETERS_IDENTIFIER_LENGTH = len(PRESENT_PARAMETERS_IDENTIFIER)
 PRESENT_PARAMETERS_IDENTIFIER_END = '}'
 PRESENT_PARAMETERS_SPLIT_DELIMITER = ','
-PRESENT_PARAMETERS_SKIPPED = ('BackBufferWidth', 'BackBufferHeight', 'hDeviceWindow', 'Windowed', 'FullScreen_RefreshRateInHz')
+# present parameter flags are handled separately
+PRESENT_PARAMETERS_SKIPPED = ('Flags', 'BackBufferWidth', 'BackBufferHeight', 'hDeviceWindow', 'Windowed', 'FullScreen_RefreshRateInHz')
 PRESENT_PARAMETERS_VALUE_SPLIT_DELIMITER = ' = '
+# present parameter flags
+PRESENT_PARAMETER_FLAGS_IDENTIFIER = ', Flags = '
+PRESENT_PARAMETER_FLAGS_IDENTIFIER_LENGTH = len(PRESENT_PARAMETER_FLAGS_IDENTIFIER)
+PRESENT_PARAMETER_FLAGS_SKIP_IDENTIFIER = ', Flags = 0x0'
+PRESENT_PARAMETER_FLAGS_SPLIT_DELIMITER = '|'
 # render states
 RENDER_STATES_CALL = '::SetRenderState'
 RENDER_STATES_IDENTIFIER = 'State = '
@@ -224,6 +238,28 @@ class TraceStats:
         except ValueError:
             return 'Unknown'
 
+    @classmethod
+    def detect_potential_vendor_hack(cls, vendor_hack_value_int, trace_line):
+        potential_vendor_hack_value = None
+
+        # check for values between 0x7fa00000 and 0x7fa10000, as that seems to have been a
+        # range used by ATI/AMD to enable/disable and configure all sort of behavior
+        if (VENDOR_HACK_POINTSIZE in trace_line and
+            vendor_hack_value_int > 2141192192 and vendor_hack_value_int < 2141257728):
+            potential_vendor_hack_value = hex(vendor_hack_value_int)
+        # warn for any unexpected values which properly translate to FOURCCs
+        else:
+            try:
+                vendor_hack_fourcc = vendor_hack_value_int.to_bytes(4, 'little').decode('ascii')
+                # some values may decode properly but will not be actual FOURCCs
+                # also account for whitespace in some FOURCCs, such as for R16
+                if vendor_hack_fourcc.strip().isalnum():
+                    potential_vendor_hack_value = vendor_hack_fourcc
+            except UnicodeDecodeError:
+                pass
+
+        return potential_vendor_hack_value
+
     def __init__(self, trace_input_paths, json_export_path, application_name,
                  application_link, apis_to_skip, apitrace_path, apitrace_threads):
         if trace_input_paths is not None:
@@ -299,9 +335,11 @@ class TraceStats:
         self.traceappnames_api = None
         self.api = None
         self.api_call_dictionary = {}
+        self.vendor_hack_check_dictionary = {}
         self.device_type_dictionary = {}
         self.behavior_flag_dictionary = {}
         self.present_parameter_dictionary = {}
+        self.present_parameter_flag_dictionary = {}
         self.render_state_dictionary = {}
         self.query_type_dictionary = {}
         self.lock_flag_dictionary = {}
@@ -399,7 +437,7 @@ class TraceStats:
                 if self.compressed_trace:
                     try:
                         logger.info('Decompressing trace file...')
-                        subprocess.run(['zstd', '-d', trace_path, '-o', trace_path_final],
+                        subprocess.run(['zstd', '-d', '-f', trace_path, '-o', trace_path_final],
                                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                                        check=True)
                     except subprocess.CalledProcessError:
@@ -454,10 +492,14 @@ class TraceStats:
                         return_dictionary['link'] = self.application_link
                     if len(self.api_call_dictionary) > 0:
                         return_dictionary['api_calls'] = self.api_call_dictionary
+                    if len(self.vendor_hack_check_dictionary) > 0:
+                        return_dictionary['vendor_hack_checks'] = self.vendor_hack_check_dictionary
                     if len(self.device_type_dictionary) > 0:
                         return_dictionary['device_types'] = self.device_type_dictionary
                     if len(self.present_parameter_dictionary) > 0:
                         return_dictionary['present_parameters'] = self.present_parameter_dictionary
+                    if len(self.present_parameter_flag_dictionary) > 0:
+                        return_dictionary['present_parameter_flags'] = self.present_parameter_flag_dictionary
                     if len(self.behavior_flag_dictionary) > 0:
                         return_dictionary['behavior_flags'] = self.behavior_flag_dictionary
                     if len(self.render_state_dictionary) > 0:
@@ -507,9 +549,11 @@ class TraceStats:
                 # reset state between processed traces
                 self.api = None
                 self.api_call_dictionary = {}
+                self.vendor_hack_check_dictionary = {}
                 self.device_type_dictionary = {}
                 self.behavior_flag_dictionary = {}
                 self.present_parameter_dictionary = {}
+                self.present_parameter_flag_dictionary = {}
                 self.render_state_dictionary = {}
                 self.query_type_dictionary = {}
                 self.lock_flag_dictionary = {}
@@ -527,7 +571,7 @@ class TraceStats:
                 self.bind_flag_dictionary = {}
 
             else:
-                logger.warning(f'File not found, skipping: {trace_path_final}')
+                logger.warning(f'File not found, skipping: {trace_path}')
 
         if len(self.json_output[JSON_BASE_KEY]) > 0:
             json_export = json.dumps(self.json_output, sort_keys=True, indent=4,
@@ -652,7 +696,31 @@ class TraceStats:
                         # parse device behavior flags, render states, format
                         # and pool values for D3D8, D3D9Ex, and D3D9 apitraces
                         if self.api == 'D3D8' or self.api == 'D3D9Ex' or self.api == 'D3D9':
-                            if DEVICE_CREATION_CALL in call:
+                            if CHECK_DEVICE_FORMAT_CALL in call:
+                                check_device_format_start = trace_line.find(CHECK_DEVICE_FORMAT_IDENTIFIER) + CHECK_DEVICE_FORMAT_IDENTIFIER_LENGTH
+                                check_device_format_value = trace_line[check_device_format_start:trace_line.find(CHECK_DEVICE_FORMAT_IDENTIFIER_END,
+                                                                                                                 check_device_format_start)].strip()
+
+                                # decoded D3DFORMAT values (for regular CheckDeviceFormat queries) should be skipped
+                                if check_device_format_value.isdigit():
+                                    logger.debug(f'CheckDeviceFormat call with numeric format value: {check_device_format_value}')
+
+                                    check_device_format_value_int = int(check_device_format_value)
+
+                                    if check_device_format_value in VENDOR_HACK_VALUES.keys():
+                                        logger.debug(f'Found vendor hack check on line: {trace_line}')
+                                        vendor_hack_format_value_lookup = VENDOR_HACK_VALUES[check_device_format_value]
+                                        vendor_hack_format_value_decoded = ''.join((CHECK_DEVICE_FORMAT_IDENTIFIER, vendor_hack_format_value_lookup))
+
+                                        existing_value = self.vendor_hack_check_dictionary.get(vendor_hack_format_value_decoded, 0)
+                                        self.vendor_hack_check_dictionary[vendor_hack_format_value_decoded] = existing_value + 1
+                                    elif check_device_format_value_int > 0:
+                                        potential_vendor_hack_format_value = self.detect_potential_vendor_hack(check_device_format_value_int, trace_line)
+
+                                        if potential_vendor_hack_format_value is not None:
+                                            logger.warning(f'Detected a check for a FOURCC/potential vendor hack value: {potential_vendor_hack_format_value}')
+
+                            elif DEVICE_CREATION_CALL in call:
                                 logger.debug(f'Found device type, behavior flags and present parameters on line: {trace_line}')
 
                                 device_type_start = trace_line.find(DEVICE_TYPE_IDENTIFIER) + DEVICE_TYPE_IDENTIFIER_LENGTH
@@ -673,6 +741,17 @@ class TraceStats:
                                     self.behavior_flag_dictionary[behavior_flag_stripped] = existing_value + 1
 
                                 if PRESENT_PARAMETERS_SKIP_IDENTIFIER not in trace_line:
+                                    if PRESENT_PARAMETER_FLAGS_SKIP_IDENTIFIER not in trace_line:
+                                        present_parameter_flags_start = trace_line.find(PRESENT_PARAMETER_FLAGS_IDENTIFIER) + PRESENT_PARAMETER_FLAGS_IDENTIFIER_LENGTH
+                                        present_parameter_flags = trace_line[present_parameter_flags_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
+                                                                                                                           present_parameter_flags_start)].strip()
+                                        present_parameter_flags = present_parameter_flags.split(PRESENT_PARAMETER_FLAGS_SPLIT_DELIMITER)
+
+                                        for present_parameter_flag in present_parameter_flags:
+                                            present_parameter_flag_stripped = present_parameter_flag.strip()
+                                            existing_value = self.present_parameter_flag_dictionary.get(present_parameter_flag_stripped, 0)
+                                            self.present_parameter_flag_dictionary[present_parameter_flag_stripped] = existing_value + 1
+
                                     present_parameters_start = trace_line.find(PRESENT_PARAMETERS_IDENTIFIER) + PRESENT_PARAMETERS_IDENTIFIER_LENGTH
                                     present_parameters = trace_line[present_parameters_start:trace_line.find(PRESENT_PARAMETERS_IDENTIFIER_END,
                                                                                                              present_parameters_start)].strip()
@@ -681,11 +760,10 @@ class TraceStats:
                                     for present_parameter in present_parameters:
                                         present_parameter_stripped = present_parameter.strip()
                                         present_parameter_key, present_parameter_value = present_parameter_stripped.split(PRESENT_PARAMETERS_VALUE_SPLIT_DELIMITER)
-                                        
+
                                         if present_parameter_key not in PRESENT_PARAMETERS_SKIPPED:
-                                            if present_parameter_key != 'Flags' or present_parameter_value != '0x0':
-                                                existing_value = self.present_parameter_dictionary.get(present_parameter_stripped, 0)
-                                                self.present_parameter_dictionary[present_parameter_stripped] = existing_value + 1
+                                            existing_value = self.present_parameter_dictionary.get(present_parameter_stripped, 0)
+                                            self.present_parameter_dictionary[present_parameter_stripped] = existing_value + 1
 
                             elif RENDER_STATES_CALL in call:
                                 logger.debug(f'Found render states on line: {trace_line}')
@@ -698,35 +776,36 @@ class TraceStats:
                                     existing_value = self.render_state_dictionary.get(render_state, 0)
                                     self.render_state_dictionary[render_state] = existing_value + 1
 
-                                if (VENDOR_HACK_POINTSIZE in trace_line or
-                                    VENDOR_HACK_ADAPTIVETESS_X in trace_line or
-                                    VENDOR_HACK_ADAPTIVETESS_Y in trace_line):
+                                render_state_point_size = VENDOR_HACK_POINTSIZE in trace_line
+                                render_state_adaptivetess_x = VENDOR_HACK_ADAPTIVETESS_X in trace_line
+                                render_state_adaptivetess_y = VENDOR_HACK_ADAPTIVETESS_Y in trace_line
+
+                                if render_state_point_size or render_state_adaptivetess_x or render_state_adaptivetess_y:
                                     vendor_hack_start = trace_line.find(VENDOR_HACK_IDENTIFIER) + VENDOR_HACK_IDENTIFIER_LENGTH
                                     vendor_hack_value = trace_line[vendor_hack_start:trace_line.find(VENDOR_HACK_IDENTIFIER_END,
                                                                                                      vendor_hack_start)].strip()
+
+                                    if render_state_point_size:
+                                        vendor_hack_render_state = 'D3DRS_POINTSIZE = '
+                                    elif render_state_adaptivetess_x:
+                                        vendor_hack_render_state = 'D3DRS_ADAPTIVETESS_X = '
+                                    elif render_state_adaptivetess_y:
+                                        vendor_hack_render_state = 'D3DRS_ADAPTIVETESS_Y = '
+
                                     vendor_hack_value_int = int(vendor_hack_value)
 
                                     if vendor_hack_value in VENDOR_HACK_VALUES.keys():
                                         logger.debug(f'Found vendor hack on line: {trace_line}')
 
-                                        vendor_hack_value_decoded = VENDOR_HACK_VALUES[vendor_hack_value]
+                                        vendor_hack_value_lookup = VENDOR_HACK_VALUES[vendor_hack_value]
+                                        vendor_hack_value_decoded = ''.join((vendor_hack_render_state, vendor_hack_value_lookup))
                                         existing_value = self.vendor_hack_dictionary.get(vendor_hack_value_decoded, 0)
                                         self.vendor_hack_dictionary[vendor_hack_value_decoded] = existing_value + 1
                                     elif vendor_hack_value_int > 0:
-                                        # check for values between 0x7fa00000 and 0x7fa10000, as that seems to have been a
-                                        # range used by ATI/AMD to enable/disable and configure all sort of behavior
-                                        if (VENDOR_HACK_POINTSIZE in trace_line and
-                                            vendor_hack_value_int > 2141192192 and vendor_hack_value_int < 2141257728):
-                                            logger.warning(f'Potential ATI vendor hack: {trace_line}, value: {hex(vendor_hack_value_int)}')
-                                        # warn for any unexpected values which properly translate to FOURCCs
-                                        else:
-                                            try:
-                                                vendor_hack_fourcc = int(vendor_hack_value).to_bytes(4, 'little').decode('ascii')
-                                                # some values may decode properly but will not be actual FOURCCs
-                                                if vendor_hack_fourcc.isalnum():
-                                                    logger.warning(f'Unexpected vendor hack: {trace_line}, FOURCC: {vendor_hack_fourcc}')
-                                            except UnicodeDecodeError:
-                                                pass
+                                        potential_vendor_hack_value = self.detect_potential_vendor_hack(vendor_hack_value_int, trace_line)
+
+                                        if potential_vendor_hack_value is not None:
+                                            logger.warning(f'Detected a potential vendor hack value: {potential_vendor_hack_value}')
 
                             # D3D8 uses IDirect3DDevice8::GetInfo calls to initiate queries
                             elif self.api == 'D3D8' and QUERY_TYPE_CALL_D3D8 in call:

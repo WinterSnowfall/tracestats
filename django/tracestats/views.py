@@ -28,24 +28,26 @@ API_ENTRY_CALLS = {'Direct3DCreate8': 'D3D8',
                    'D3D11CoreCreateDevice': 'D3D11'}
 TRACE_API_OVERRIDES = {'FarCry2': 'D3D9'} # Ignore queries done on a D3D9Ex interface, as it's not used for rendering
 STATS_TYPE = {'api_calls': 1,
-              'device_types': 2,
-              'behavior_flags': 3,
-              'present_parameters': 4,
-              'render_states': 5,
-              'query_types': 6,
-              'lock_flags': 7,
-              'usage': 8,
-              'formats': 9,
-              'vendor_hacks': 10,
-              'pools': 11,
-              'device_flags': 12,
-              'swapchain_parameters': 13,
-              'swapchain_buffer_usage': 14,
-              'swapchain_flags': 15,
-              'feature_levels': 16,
-              'rastizer_states': 17,
-              'blend_states': 18,
-              'bind_flags': 19}
+              'vendor_hack_checks': 2,
+              'device_types': 3,
+              'behavior_flags': 4,
+              'present_parameters': 5,
+              'present_parameter_flags': 6,
+              'render_states': 7,
+              'query_types': 8,
+              'lock_flags': 9,
+              'usage': 10,
+              'formats': 11,
+              'vendor_hacks': 12,
+              'pools': 13,
+              'device_flags': 14,
+              'swapchain_parameters': 15,
+              'swapchain_buffer_usage': 16,
+              'swapchain_flags': 17,
+              'feature_levels': 18,
+              'rastizer_states': 19,
+              'blend_states': 20,
+              'bind_flags': 21}
 SEARCH_RESULTS_LIMIT = 999
 
 def tracestats(request):
@@ -176,6 +178,17 @@ def tracestats(request):
                 if len(stats) > 0:
                   models.Stats.objects.bulk_create(stats)
 
+                # create child stats entries for vendor hack checks
+                entry_vendor_hack_checks = entry.get('vendor_hack_checks', {})
+                stats = []
+                for key, value in entry_vendor_hack_checks.items():
+                  stats.append(models.Stats(trace=trace,
+                                            stat_type=STATS_TYPE['vendor_hack_checks'],
+                                            stat_name=key,
+                                            stat_count=value))
+                if len(stats) > 0:
+                  models.Stats.objects.bulk_create(stats)
+
                 # create child stats entries for device types
                 entry_device_types = entry.get('device_types', {})
                 stats = []
@@ -193,6 +206,17 @@ def tracestats(request):
                 for key, value in entry_behavior_flags.items():
                   stats.append(models.Stats(trace=trace,
                                             stat_type=STATS_TYPE['behavior_flags'],
+                                            stat_name=key,
+                                            stat_count=value))
+                if len(stats) > 0:
+                  models.Stats.objects.bulk_create(stats)
+
+                # create child stats entries for present parameter flags
+                entry_present_parameter_flags = entry.get('present_parameter_flags', {})
+                stats = []
+                for key, value in entry_present_parameter_flags.items():
+                  stats.append(models.Stats(trace=trace,
+                                            stat_type=STATS_TYPE['present_parameter_flags'],
                                             stat_name=key,
                                             stat_count=value))
                 if len(stats) > 0:

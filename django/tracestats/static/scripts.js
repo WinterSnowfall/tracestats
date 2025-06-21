@@ -185,7 +185,7 @@ $(document).on('click', '#upload-button', function() {
 
     if (fileInput.length > 0) {
         const file = fileInput[0].files[0];
-        const maxSizeInBytes = 4194304; // 4 MB
+        const maxSizeInBytes = 16777216; // 16 MB
 
         if (file && file.size <= maxSizeInBytes) {
             const csrfInput = $('<input>')
@@ -198,7 +198,7 @@ $(document).on('click', '#upload-button', function() {
             if($('.password-input').val()) {
                 $('#file-upload-form')[0].reset();
                 $('#upload-notification-area').attr('class', 'notification-error');
-                $('#upload-notification-area').html('Selected file size exceeds the 4 MB limit. Pick something else.');
+                $('#upload-notification-area').html('Selected file size exceeds the 16 MB limit. Pick something else.');
             } else {
                 $('#upload-notification-area').attr('class', 'notification-none');
                 $('#upload-notification-area').html('');

@@ -60,7 +60,7 @@ class Stats(models.Model):
 
     @property
     def render_state_percentage(self):
-        if self.stat_type == 5 and self.trace.render_states_total is not None:
+        if self.stat_type == 7 and self.trace.render_states_total is not None:
             # Don't display anything under 0.01 and round up to 2 demimal points of precision
             result = round_up_two_decimals(max((self.stat_count * 100) / self.trace.render_states_total, 0.01))
             precision = 0 if result.is_integer() else (2 if (result * 100) % 10 != 0 else 1)
@@ -69,7 +69,7 @@ class Stats(models.Model):
 
     @property
     def query_type_percentage(self):
-        if self.stat_type == 6 and self.trace.query_types_total is not None:
+        if self.stat_type == 8 and self.trace.query_types_total is not None:
             # Don't display anything under 0.01 and round up to 2 demimal points of precision
             result = round_up_two_decimals(max((self.stat_count * 100) / self.trace.query_types_total, 0.01))
             precision = 0 if result.is_integer() else (2 if (result * 100) % 10 != 0 else 1)
