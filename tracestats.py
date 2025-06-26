@@ -78,6 +78,12 @@ VENDOR_HACK_VALUES = {'1515406674': 'RESZ',        # This is the FOURCC
                       '1094800211': 'SSAA',
                       '1297108803': 'COPM',
                       '1111774798': 'NVDB'}
+                       # Checked by D3D9 SAGE engine games
+KNOWN_FOURCC_FORMATS = ('EXT1', 'FXT1', 'GXT1', 'HXT1',
+                       # Checked by various D3D8 and D3D9 games
+                        'AL16', 'AR16', ' R16', ' L16',
+                       # FOURCCs specific to Freelancer
+                        'DAA1', 'DAA8', 'DAOP', 'DAOT')
 
 ############################## D3D8, D3D9Ex, D3D9 ##############################
 # check device format vendor hacks
@@ -717,7 +723,7 @@ class TraceStats:
                                     elif check_device_format_value_int > 0:
                                         potential_vendor_hack_format_value = self.detect_potential_vendor_hack(check_device_format_value_int, trace_line)
 
-                                        if potential_vendor_hack_format_value is not None:
+                                        if potential_vendor_hack_format_value is not None and potential_vendor_hack_format_value not in KNOWN_FOURCC_FORMATS:
                                             logger.warning(f'Detected a check for a FOURCC/potential vendor hack value: {potential_vendor_hack_format_value}')
 
                             elif DEVICE_CREATION_CALL in call:
