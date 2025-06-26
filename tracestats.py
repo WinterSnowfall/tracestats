@@ -670,7 +670,7 @@ class TraceStats:
                         logger.debug(f'Found call count: {trace_call_counter}')
 
                         if not trace_parsing_bug_warned and trace_call_counter < trace_call_counter_prev:
-                            logger.warning('API call indexes are not ordered. Trace parsing may be inaccurate.')
+                            logger.debug('API call indexes are not ordered. Trace parsing may be inaccurate.')
                             trace_parsing_bug_warned = True
                     except ValueError:
                         pass
