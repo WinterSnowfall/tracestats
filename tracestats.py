@@ -134,11 +134,13 @@ LOCK_FLAGS_CALL = '::Lock'
 LOCK_FLAGS_IDENTIFIER = 'Flags = '
 LOCK_FLAGS_IDENTIFIER_LENGTH = len(LOCK_FLAGS_IDENTIFIER)
 LOCK_FLAGS_IDENTIFIER_END = ')'
+LOCK_FLAGS_VALUE_IDENTIFIER = 'D3DLOCK_'
 LOCK_FLAGS_SKIP_IDENTIFIER = 'Flags = 0x0'
 LOCK_FLAGS_SPLIT_DELIMITER = '|'
 # usage
 USAGE_IDENTIFIER = 'Usage = '
 USAGE_IDENTIFIER_LENGTH = len(USAGE_IDENTIFIER)
+USAGE_IDENTIFIER_END_D3D8 = ')'
 USAGE_VALUE_IDENTIFIER = 'D3DUSAGE_'
 USAGE_SKIP_IDENTIFIER = 'Flags = 0x0'
 USAGE_SKIP_IDENTIFIER_D3D10_11 = 'DXGI_USAGE_'
@@ -848,8 +850,11 @@ class TraceStats:
 
                                 for lock_flag in lock_flags:
                                     lock_flag_stripped = lock_flag.strip()
-                                    existing_value = self.lock_flag_dictionary.get(lock_flag_stripped, 0)
-                                    self.lock_flag_dictionary[lock_flag_stripped] = existing_value + 1
+
+                                    # Mafia sets several bogus lock values (not part of the enum)
+                                    if lock_flag_stripped.startswith(LOCK_FLAGS_VALUE_IDENTIFIER):
+                                        existing_value = self.lock_flag_dictionary.get(lock_flag_stripped, 0)
+                                        self.lock_flag_dictionary[lock_flag_stripped] = existing_value + 1
 
                             elif API_ENTRY_FORMAT_BASE_CALL in call:
                                 if FORMAT_IDENTIFIER in trace_line:
@@ -866,8 +871,13 @@ class TraceStats:
                                     logger.debug(f'Found usage on line: {trace_line}')
 
                                     usage_start = trace_line.find(USAGE_IDENTIFIER) + USAGE_IDENTIFIER_LENGTH
-                                    usage_values = trace_line[usage_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
-                                                                                          usage_start)].strip()
+                                    # Usually, usage values will end on a comma
+                                    usage_end = trace_line.find(API_ENTRY_VALUE_DELIMITER, usage_start)
+                                    # In D3D8, usage values are also included in CreateVertexShader
+                                    # calls, where they sit at the end of the parameter list
+                                    if usage_end == -1:
+                                        usage_end = trace_line.find(USAGE_IDENTIFIER_END_D3D8, usage_start)
+                                    usage_values = trace_line[usage_start:usage_end].strip()
                                     usage_values = usage_values.split(USAGE_SPLIT_DELIMITER)
 
                                     for usage_value in usage_values:
