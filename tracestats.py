@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 '''
 @author: Winter Snowfall
-@version: 1.3
-@date: 21/06/2025
+@version: 1.4
+@date: 28/06/2025
 '''
 
 import os
@@ -13,6 +13,7 @@ import subprocess
 import queue
 import threading
 import signal
+from shutil import copy2
 
 try:
     from traceappnames import TraceAppNames
@@ -29,15 +30,13 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO) # DEBUG, INFO, WARNING, ERROR, CRITICAL
 
 # constants
-TRACE_PARSE_CHUNK_MIN_LINES = 3
-# really large trace files can take a long time to process with
-# small chuncks, so this is really a fine balance between
-# processing times and memory use for buffering
-TRACE_PARSE_CHUNK_CALLS = 5000000
-TRACE_LOGGING_CHUNK_CALLS = TRACE_PARSE_CHUNK_CALLS * 2
+TRACE_PARSE_CHUNK_CALLS = 100000
+TRACE_PARSE_QUEUE_SIZE = 10
+TRACE_LOGGING_CHUNK_CALLS = 10000000
 JSON_BASE_KEY = 'tracestats'
 JSON_EXPORT_FOLDER_NAME = 'export'
 JSON_EXPORT_DEFAULT_FILE_NAME = 'tracestats.json'
+
 # parsing constants
 API_ENTRY_CALLS = {'Direct3DCreate8': 'D3D8',
                    'Direct3DCreate9Ex': 'D3D9Ex', # ensure D3D9Ex gets checked before D3D9
@@ -53,8 +52,7 @@ API_ENTRY_CALLS = {'Direct3DCreate8': 'D3D8',
 API_BASE_CALLS = {**API_ENTRY_CALLS, 'CreateDXGIFactory': 'DXGI',
                                      'CreateDXGIFactory1': 'DXGI',
                                      'CreateDXGIFactory2': 'DGXI'}
-API_ENTRY_CALL_IDENTIFIER = '::'
-API_ENTRY_VALUE_DELIMITER = ','
+TRACE_API_OVERRIDES = {'wargame_': 'D3D9Ex'} # Ignore queries done on a plain D3D9 interface, as it's not used for rendering
 # To convert, use: int.from_bytes(b'ATOC', 'little') or:
 # (1129272385).to_bytes(4, 'little').decode('ascii')
 VENDOR_HACK_VALUES = {'1515406674': 'RESZ',        # This is the FOURCC
@@ -85,6 +83,8 @@ KNOWN_FOURCC_FORMATS = ('EXT1', 'FXT1', 'GXT1', 'HXT1',
                        # FOURCCs specific to Freelancer
                         'DAA1', 'DAA8', 'DAOP', 'DAOT')
 
+API_ENTRY_CALL_IDENTIFIER = '::'
+API_ENTRY_VALUE_DELIMITER = ','
 ############################## D3D8, D3D9Ex, D3D9 ##############################
 # check device format vendor hacks
 CHECK_DEVICE_FORMAT_CALL = '::CheckDeviceFormat'
@@ -269,7 +269,7 @@ class TraceStats:
         return potential_vendor_hack_value
 
     def __init__(self, trace_input_paths, json_export_path, application_name,
-                 application_link, apis_to_skip, apitrace_path, apitrace_threads):
+                 application_link, apis_to_skip, apitrace_path):
         if trace_input_paths is not None:
             self.trace_input_paths = trace_input_paths[0]
         else:
@@ -338,6 +338,8 @@ class TraceStats:
             self.apis_to_skip = None
 
         self.compressed_trace = False
+        self.binary_name_raw = None
+        self.binary_name = None
         self.application_name = application_name
         self.application_link = application_link
         self.traceappnames_api = None
@@ -364,18 +366,7 @@ class TraceStats:
         self.usage_dictionary = {}
         self.bind_flag_dictionary = {}
 
-        if apitrace_threads is None:
-            # default to 1 apitrace thread
-            self.thread_count = 1
-        else:
-            try:
-                self.thread_count = int(apitrace_threads)
-            except ValueError:
-                logger.warning('Invalid number of apitrace threads specified, defaulting to 1')
-                self.thread_count = 1
-
-        self.parse_queue = None
-        self.process_queue = None
+        self.process_queue = queue.Queue(maxsize=TRACE_PARSE_QUEUE_SIZE)
         self.api_skip = threading.Event()
         self.parse_loop = threading.Event()
         self.process_loop = threading.Event()
@@ -389,42 +380,41 @@ class TraceStats:
 
                 logger.info(f'Processing trace: {trace_path}')
 
-                binary_name_raw, file_extension = os.path.basename(trace_path).rsplit('.', 1)
+                self.binary_name_raw, file_extension = os.path.basename(trace_path).rsplit('.', 1)
                 if file_extension == 'zst':
-                    trace_path_final = os.path.join(os.path.dirname(trace_path), binary_name_raw)
-                    binary_name_raw = binary_name = binary_name_raw.rsplit('.', 1)[0]
+                    trace_path_final = os.path.join(os.path.dirname(trace_path), self.binary_name_raw)
+                    self.binary_name_raw = self.binary_name = self.binary_name_raw.rsplit('.', 1)[0]
                     self.compressed_trace = True
                 else:
                     trace_path_final = trace_path
-                    binary_name = binary_name_raw
-                    self.compressed_trace = False
+                    self.binary_name = self.binary_name_raw
                 # workaround for renamed generic game/Game.exe apitraces
-                if binary_name_raw.upper().startswith('GAME'):
-                    binary_name = binary_name_raw[:4]
+                if self.binary_name_raw.upper().startswith('GAME'):
+                    self.binary_name = self.binary_name_raw[:4]
                 # workaround for games with multiple editions or that support multiple APIs
-                elif binary_name_raw.endswith('_'):
-                    while binary_name.endswith('_'):
-                        binary_name = binary_name[:-1]
+                elif self.binary_name_raw.endswith('_'):
+                    while self.binary_name.endswith('_'):
+                        self.binary_name = self.binary_name[:-1]
 
                 if self.application_name is not None:
                     logger.info(f'Using application name: {self.application_name}')
                 elif TRACEAPPNAMES_IS_IMPORTED:
                     try:
-                        self.application_name = TraceAppNames.get(binary_name_raw)[0]
+                        self.application_name = TraceAppNames.get(self.binary_name_raw)[0]
                         if self.application_name is not None:
                             logger.info(f'Application name found in traceappnames repository: {self.application_name}')
                     except TypeError:
                         pass
                 # use the binary name as an application name if it is undertermined at this point
                 if self.application_name is None:
-                    logger.info(f'Defaulting application name to: {binary_name}')
-                    self.application_name = binary_name
+                    logger.info(f'Defaulting application name to: {self.binary_name}')
+                    self.application_name = self.binary_name
 
                 if self.application_link is not None:
                     logger.info(f'Using application link: {self.application_link}')
                 elif TRACEAPPNAMES_IS_IMPORTED:
                     try:
-                        self.application_link = TraceAppNames.get(binary_name_raw)[1]
+                        self.application_link = TraceAppNames.get(self.binary_name_raw)[1]
                         if self.application_link is not None:
                             logger.info(f'Application link found in traceappnames repository: {self.application_link}')
                     except TypeError:
@@ -432,7 +422,7 @@ class TraceStats:
 
                 if TRACEAPPNAMES_IS_IMPORTED:
                     try:
-                        self.traceappnames_api = TraceAppNames.get(binary_name_raw)[2]
+                        self.traceappnames_api = TraceAppNames.get(self.binary_name_raw)[2]
                         if self.traceappnames_api is not None:
                             logger.info(f'Application API found in traceappnames repository: {self.traceappnames_api}')
                     except TypeError:
@@ -452,17 +442,6 @@ class TraceStats:
                         logger.critical(f'Unable to decompress trace file: {trace_path}')
                         raise SystemExit(6)
 
-                self.parse_queue = queue.Queue(maxsize=self.thread_count)
-                self.parse_loop.set()
-
-                parse_threads = [None] * self.thread_count
-                # start trace parsing threads
-                for thread_id in range(self.thread_count):
-                    parse_threads[thread_id] = threading.Thread(target=self.trace_dump_worker, args=())
-                    parse_threads[thread_id].daemon = True
-                    parse_threads[thread_id].start()
-
-                self.process_queue = queue.Queue(maxsize=self.thread_count)
                 self.process_loop.set()
 
                 # start trace processing thread
@@ -470,31 +449,54 @@ class TraceStats:
                 process_thread.daemon = True
                 process_thread.start()
 
-                trace_start_call = 0
-                trace_end_call = TRACE_PARSE_CHUNK_CALLS
+                self.parse_loop.set()
 
-                while self.parse_loop.is_set():
-                    try:
-                        self.parse_queue.put((trace_start_call, trace_end_call, trace_path_final),
-                                             block=True, timeout=5)
+                # mind the -v (verbose) flag here, otherwise apitrace dump will skip various calls :/
+                if self.use_wine_for_apitrace:
+                    subprocess_params = ('wine', self.apitrace_path, 'dump', '-v', '--color=never', trace_path_final)
+                else:
+                    subprocess_params = (self.apitrace_path, 'dump', '-v', '--color=never', trace_path_final)
 
-                        trace_start_call = trace_end_call + 1
-                        trace_end_call = trace_end_call + TRACE_PARSE_CHUNK_CALLS
-                    except queue.Full:
-                        logger.debug('Main thread reset while waiting on full queue')
-                        pass
+                trace_chunk_line_count = 0
+                trace_chunk_lines = []
 
-                # ensure parsing threads have halted
-                for thread_id in range(self.thread_count):
-                    parse_threads[thread_id].join()
+                try:
+                    trace_dump_subprocess = subprocess.Popen(subprocess_params, bufsize=0,
+                                                             stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                                                             text=True)
+
+                    while self.parse_loop.is_set():
+                        trace_chunk_line = trace_dump_subprocess.stdout.readline()
+
+                        if trace_chunk_line == '' and trace_dump_subprocess.poll() is not None:
+                            # flush any pending chunk lines
+                            if len(trace_chunk_lines):
+                                self.process_queue.put(trace_chunk_lines)
+                            self.parse_loop.clear()
+                            logger.info('End of trace dump output detected')
+                        else:
+                            trace_chunk_line_count += 1
+                            trace_chunk_lines.append(trace_chunk_line)
+
+                            if trace_chunk_line_count == TRACE_PARSE_CHUNK_CALLS:
+                                self.process_queue.put(trace_chunk_lines)
+                                trace_chunk_line_count = 0
+                                trace_chunk_lines = []
+
+                except:
+                    logger.critical('Critical exception during the apitrace dump process')
+                    self.parse_loop.clear()
+
                 # signal the termination of the processing thread
                 self.process_loop.clear()
+                # ensure the process_queue is drained
+                self.process_queue.join()
                 # ensure the processsing thread has halted
                 process_thread.join()
 
                 if not self.api_skip.is_set():
                     return_dictionary = {}
-                    return_dictionary['binary_name'] = binary_name
+                    return_dictionary['binary_name'] = self.binary_name
                     return_dictionary['name'] = self.application_name
                     if self.application_link is not None:
                         return_dictionary['link'] = self.application_link
@@ -555,6 +557,10 @@ class TraceStats:
                         logger.error(f'Unable to clean up trace: {trace_path_final}')
 
                 # reset state between processed traces
+                self.compressed_trace = False
+                self.binary_name_raw = None
+                self.binary_name = None
+                self.traceappnames_api = None
                 self.api = None
                 self.api_call_dictionary = {}
                 self.vendor_hack_check_dictionary = {}
@@ -583,57 +589,20 @@ class TraceStats:
 
         if len(self.json_output[JSON_BASE_KEY]) > 0:
             json_export = json.dumps(self.json_output, sort_keys=True, indent=4,
-                                    separators=(',', ': '), ensure_ascii=False)
+                                     separators=(',', ': '), ensure_ascii=False)
             logger.debug(f'JSON export output is: {json_export}')
+
+            if os.path.exists(self.json_export_path):
+                backup_path = ''.join((self.json_export_path, '.bak'))
+                copy2(self.json_export_path, backup_path)
+                logger.info(f'Existing JSON export backed up as: {backup_path}')
 
             with open(self.json_export_path, 'w') as file:
                 file.write(json_export)
 
             logger.info(f'JSON export complete')
 
-    def trace_dump_worker(self):
-        # there is no need to drain the queue here, and workers can stop getting
-        # new work as soon as one of them has hit an end of trace dump output
-        while self.parse_loop.is_set():
-            try:
-                trace_start_call, trace_end_call, trace_path = self.parse_queue.get(block=True, timeout=5)
-
-                # mind the -v (verbose) flag here, otherwise apitrace dump will skip random calls :/
-                if self.use_wine_for_apitrace:
-                    subprocess_params = ('wine', self.apitrace_path, 'dump', '-v', '--color=never',
-                                        f'--calls={trace_start_call}-{trace_end_call}', trace_path)
-                else:
-                    subprocess_params = (self.apitrace_path, 'dump', '-v', '--color=never',
-                                        f'--calls={trace_start_call}-{trace_end_call}', trace_path)
-
-                try:
-                    trace_dump_subprocess = subprocess.run(subprocess_params,
-                                                            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
-                                                            check=True)
-                    trace_chunk_lines = trace_dump_subprocess.stdout.decode('utf-8').splitlines()
-                    trace_chunk_line_count = len(trace_chunk_lines)
-
-                    if trace_chunk_line_count < TRACE_PARSE_CHUNK_MIN_LINES:
-                        if self.parse_loop.is_set():
-                            self.parse_loop.clear()
-                            logger.info('End of trace dump output detected')
-
-                    else:
-                        self.process_queue.put(trace_chunk_lines)
-                        # don't hold onto the chunk as it's quite the heavy chonker
-                        trace_chunk_lines = None
-
-                except subprocess.CalledProcessError:
-                    logger.critical('Critical exception during the apitrace dump process')
-                    self.parse_loop.clear()
-
-            except queue.Empty:
-                logger.debug('Parsing thread reset while waiting on empty queue')
-                pass
-
     def trace_parse_worker(self):
-        trace_parsing_bug_warned = False
-        trace_call_counter_notification = 0
 
         while self.process_loop.is_set() or not self.process_queue.empty():
             # stop parsing if API skip is engaged
@@ -642,40 +611,41 @@ class TraceStats:
                 self.process_loop.clear()
                 break
 
+            logger.debug(f'Items in the processing queue: {self.process_queue.qsize()}')
+
             try:
                 trace_chunk_lines = self.process_queue.get(block=True, timeout=5)
-                trace_call_counter_prev = 0
                 trace_call_counter = 0
 
-                for trace_line in trace_chunk_lines:
-                    # logger.error(f'Processing line: {trace_line}')
+                for trace_line_raw in trace_chunk_lines:
+                    trace_line = trace_line_raw.rstrip()
+
+                    #logger.debug(f'Processing line: {trace_line}')
 
                     # there are, surprisingly, quite a lot of
                     # blank/padding lines in an apitrace dump
-                    if len(trace_line) == 0:
-                        continue
-                    # also early skip embedded comments
-                    elif trace_line.startswith('//'):
+                    if trace_line == '':
                         continue
                     # early skip whitespaced lines (not API calls)
-                    elif trace_line.startswith(' '):
+                    if trace_line.startswith(' '):
+                        logger.debug(f'Skipped parsing of line: {trace_line}')
+                        continue
+                    # also early skip embedded comments
+                    if trace_line.startswith('//'):
+                        logger.debug(f'Skipped parsing of line: {trace_line}')
                         continue
 
                     # no need to do more than 2 splits, as we only need
                     # the trace number and later on the api call name
                     split_line = trace_line.split(maxsplit=2)
 
-                    # otherwise unnumbered lines will raise a ValueError
+                    # unnumbered lines will raise a ValueError
                     try:
-                        trace_call_counter_prev = trace_call_counter
                         trace_call_counter = int(split_line[0])
                         logger.debug(f'Found call count: {trace_call_counter}')
-
-                        if not trace_parsing_bug_warned and trace_call_counter < trace_call_counter_prev:
-                            logger.debug('API call indexes are not ordered. Trace parsing may be inaccurate.')
-                            trace_parsing_bug_warned = True
                     except ValueError:
-                        pass
+                        logger.debug(f'Skipped parsing of line: {trace_line}')
+                        continue
 
                     if (API_ENTRY_CALL_IDENTIFIER in trace_line or
                         any(api_base_call in trace_line for api_base_call in API_BASE_CALLS.keys())):
@@ -684,10 +654,18 @@ class TraceStats:
                         if self.api is None:
                             for key, value in API_ENTRY_CALLS.items():
                                 if key in split_line[1]:
-                                    if self.traceappnames_api is not None and self.traceappnames_api != value:
-                                        logger.warning('Traceappnames API value is mismatched from trace')
                                     self.api = value
                                     logger.info(f'Detected API: {self.api}')
+
+                                    if self.traceappnames_api is not None and self.traceappnames_api != self.api:
+                                        api_override = TRACE_API_OVERRIDES.get(self.binary_name_raw, None)
+                                        if api_override is None:
+                                            logger.warning('Traceappnames API value is mismatched from trace')
+                                        elif self.traceappnames_api == api_override:
+                                            logger.info('Known API value override detected')
+                                        else:
+                                            logger.error('Unexpected API override value')
+
                                     # otherwise D3D9 will get added to D3D9Ex, heh
                                     break
                             if self.traceappnames_api is None and self.apis_to_skip is not None and self.api in self.apis_to_skip:
@@ -1067,14 +1045,13 @@ class TraceStats:
                                         self.bind_flag_dictionary[bind_flag_stripped] = existing_value + 1
 
                     else:
-                        logger.debug(f'Skipped parsing of line: {trace_line}')
+                        # these will usually be (numbered) memcpy lines
+                        logger.debug(f'Skipped parsing of numbered line: {trace_line}')
 
-                    if trace_call_counter != trace_call_counter_notification and trace_call_counter % TRACE_LOGGING_CHUNK_CALLS == 0:
+                    if trace_call_counter > 0 and trace_call_counter % TRACE_LOGGING_CHUNK_CALLS == 0:
                         logger.info(f'Proccessed {trace_call_counter} apitrace calls...')
-                        trace_call_counter_notification = trace_call_counter
 
-                # don't hold onto the chunk as it's quite the heavy chonker
-                trace_chunk_lines = None
+                self.process_queue.task_done()
 
             except queue.Empty:
                 logger.debug('Processsing thread reset while waiting on empty queue')
@@ -1131,7 +1108,6 @@ if __name__ == "__main__":
                                             f'into a single {JSON_EXPORT_DEFAULT_FILE_NAME} file', action='store_true')
 
     optional.add_argument('-h', '--help', action='help', help='show this help message and exit')
-    optional.add_argument('-t', '--threads', help='number of apitrace dump threads to spawn')
     optional.add_argument('-o', '--output', help='path and filename of the JSON export')
     optional.add_argument('-n', '--name', help='specify a name for the apitraced application, using double quotes')
     optional.add_argument('-l', '--link', help='specify a web link for the application')
@@ -1140,7 +1116,7 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    tracestats = TraceStats(args.input, args.output, args.name, args.link, args.skip, args.apitrace, args.threads)
+    tracestats = TraceStats(args.input, args.output, args.name, args.link, args.skip, args.apitrace)
     if not args.join:
         tracestats.process_traces()
     else:

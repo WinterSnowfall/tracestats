@@ -21,7 +21,7 @@ then
     do
         if [ -f "$file" ]
         then
-            ./tracestats.py -t 4 -i "$file" -a "$APITRACE_PATH" $API_FILTER 2>&1 | tee -a tracestats_bulk.log
+            ./tracestats.py -i "$file" -a "$APITRACE_PATH" $API_FILTER 2>&1 | tee -a tracestats_bulk.log
         fi
     done
 fi
@@ -30,7 +30,7 @@ for file in traces/*.trace
 do
     if [ -f "$file" ]
     then
-        ./tracestats.py -t 4 -i "$file" -a "$APITRACE_PATH" $API_FILTER 2>&1 | tee -a tracestats_bulk.log
+        ./tracestats.py -i "$file" -a "$APITRACE_PATH" $API_FILTER 2>&1 | tee -a tracestats_bulk.log
     fi
 done
 

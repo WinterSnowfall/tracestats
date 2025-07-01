@@ -17,9 +17,10 @@ python3 tracestats.py -i ~/a.trace b.trace /full/path/to/c.trace
 ```
 
 Optionally, you can also specify:
-- `-t number_of_threads`, to use multiple threads for apitrace dump calls, which will speed up processing of very large apitraces. Default behavior is to use a single thread.
 - `-o /path/to/filename.json`, to use a custom output path and file name. Default behavior is to create a `.json` file in the export folder using the trace name, or a `tracestats.json` file if multiple traces are specified.
 - `-n "friendly name"`, to specify a user friendly application name. Default behavior is to leave it blank.
+- `-l "link"`, to specify a custom link URL. Default behavior is to use a PCGW search link based on the application name.
+- `-s api_to_skip1,api_to_skip2`, to specify which APIs to skip. Useful for filtered batched processing.
 - `-a /path/to/apitrace`, to specify the path to the apitrace binary. Default behavior is to try and use the $PATH apitrace, if present.
 
 ### What about some other stats which I noticed are missing?
