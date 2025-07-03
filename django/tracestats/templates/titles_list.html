@@ -20,9 +20,9 @@
             </td>
             <td class="no-selection">
                 {% if title.link is None %}
-                    <a href="https://www.pcgamingwiki.com/w/index.php?search={{ title.name|urlize }}&title=Special:Search">🎮</a>
+                    <a target="_blank" href="https://www.pcgamingwiki.com/w/index.php?search={{ title.name|urlize }}&title=Special:Search">🎮</a>
                 {% else %}
-                    <a href="{{ title.link }}">🎮</a>
+                    <a target="_blank" href="{{ title.link }}">🎮</a>
                 {% endif %}
             </td>
             <td>{{ title.binary_name }}</td>

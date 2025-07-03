@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 '''
 @author: Winter Snowfall
-@version: 1.4
-@date: 28/06/2025
+@version: 1.41
+@date: 03/07/2025
 '''
 
 import os
@@ -52,7 +52,8 @@ API_ENTRY_CALLS = {'Direct3DCreate8': 'D3D8',
 API_BASE_CALLS = {**API_ENTRY_CALLS, 'CreateDXGIFactory': 'DXGI',
                                      'CreateDXGIFactory1': 'DXGI',
                                      'CreateDXGIFactory2': 'DGXI'}
-TRACE_API_OVERRIDES = {'wargame_': 'D3D9Ex'} # Ignore queries done on a plain D3D9 interface, as it's not used for rendering
+TRACE_API_OVERRIDES = {'wargame_'   : 'D3D9Ex', # Ignore queries done on a plain D3D9 interface, as it's not used for rendering
+                       'xrEngine___': 'D3D10'}  # Creates a D3D11 device first, but renders using D3D10
 # To convert, use: int.from_bytes(b'ATOC', 'little') or:
 # (1129272385).to_bytes(4, 'little').decode('ascii')
 VENDOR_HACK_VALUES = {'1515406674': 'RESZ',        # This is the FOURCC
@@ -995,12 +996,13 @@ class TraceStats:
 
                                 if BLEND_STATE_IDENTIFIER in trace_line:
                                     blend_states_start = trace_line.find(BLEND_STATE_IDENTIFIER) + BLEND_STATE_IDENTIFIER_LENGTH
-                                    if self.api == 'D3D10':
-                                        blend_states = trace_line[blend_states_start:trace_line.find(BLEND_STATE_IDENTIFIER_END_D3D10,
-                                                                                                     blend_states_start)].strip()
-                                    elif self.api == 'D3D11':
-                                        blend_states = trace_line[blend_states_start:trace_line.find(BLEND_STATE_IDENTIFIER_END_D3D11,
-                                                                                                     blend_states_start)].strip()
+                                    blend_states_end = trace_line.find(BLEND_STATE_IDENTIFIER_END_D3D11, blend_states_start)
+
+                                    # if the D3D11 end identifier is not found, look up the D3D10 end indetifier
+                                    if blend_states_end == -1:
+                                        blend_states_end = trace_line.find(BLEND_STATE_IDENTIFIER_END_D3D10, blend_states_start)
+
+                                    blend_states = trace_line[blend_states_start:blend_states_end].strip()
                                     blend_states = blend_states.split(API_ENTRY_VALUE_DELIMITER)
 
                                     for blend_state in blend_states:

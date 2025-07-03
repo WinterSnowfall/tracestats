@@ -26,7 +26,8 @@ API_ENTRY_CALLS = {'Direct3DCreate8': 'D3D8',
                    'D3D11CreateDeviceAndSwapChain': 'D3D11',
                    'D3D11CreateDevice': 'D3D11',
                    'D3D11CoreCreateDevice': 'D3D11'}
-TRACE_API_OVERRIDES = {'wargame_': 'D3D9Ex'} # Ignore queries done on a plain D3D9 interface, as it's not used for rendering
+TRACE_API_OVERRIDES = {'wargame_'   : 'D3D9Ex', # Ignore queries done on a plain D3D9 interface, as it's not used for rendering
+                       'xrEngine___': 'D3D10'}  # Creates a D3D11 device first, but renders using D3D10
 STATS_TYPE = {'api_calls': 1,
               'vendor_hack_checks': 2,
               'device_types': 3,
