@@ -53,7 +53,8 @@ API_BASE_CALLS = {**API_ENTRY_CALLS, 'CreateDXGIFactory': 'DXGI',
                                      'CreateDXGIFactory1': 'DXGI',
                                      'CreateDXGIFactory2': 'DGXI'}
 TRACE_API_OVERRIDES = {'wargame_'   : 'D3D9Ex', # Ignore queries done on a plain D3D9 interface, as it's not used for rendering
-                       'xrEngine___': 'D3D10'}  # Creates a D3D11 device first, but renders using D3D10
+                       'xrEngine___': 'D3D10',  # Creates a D3D11 device first, but renders using D3D10
+                       'RebelGalaxy': 'D3D11'}  # Creates a D3D10 device first, but renders using D3D11
 # To convert, use: int.from_bytes(b'ATOC', 'little') or:
 # (1129272385).to_bytes(4, 'little').decode('ascii')
 VENDOR_HACK_VALUES = {'1515406674': 'RESZ',        # This is the FOURCC
