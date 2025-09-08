@@ -13,9 +13,9 @@ def round_up_two_decimals(value):
     return math.ceil(value * 100) / 100
 
 class Tokens(models.Model):
-    owner           = models.CharField(max_length=255, unique=True)
-    token           = models.CharField(default=generate_client_secret, max_length=32, db_index=True)
-    created_on      = models.DateTimeField(default=now)
+    owner      = models.CharField(max_length=255, unique=True)
+    token      = models.CharField(default=generate_client_secret, max_length=32, db_index=True)
+    created_on = models.DateTimeField(default=now)
 
 class Trace(models.Model):
     name                = models.CharField(max_length=255, db_index=True)
@@ -24,7 +24,7 @@ class Trace(models.Model):
     updated_by          = models.ForeignKey(Tokens,
                                             on_delete=models.PROTECT)
     updated_last        = models.DateTimeField(default=now)
-    api                 = models.CharField(max_length=10)
+    api                 = models.IntegerField()
     api_calls_total     = models.IntegerField(null=True)
     render_states_total = models.IntegerField(null=True)
     query_types_total   = models.IntegerField(null=True)

@@ -15,6 +15,16 @@ logger = logging.getLogger('tracestats')
 
 #constants
 JSON_BASE_KEY = 'tracestats'
+API_VALUES_ENCODE = {'D3D8'  : 1,
+                     'D3D9'  : 2,
+                     'D3D9Ex': 3,
+                     'D3D10' : 4,
+                     'D3D11' : 5}
+API_VALUES_DECODE = {1: 'D3D8',
+                     2: 'D3D9',
+                     3: 'D3D9Ex',
+                     4: 'D3D10',
+                     5: 'D3D11'}
 API_ENTRY_CALLS = {'Direct3DCreate8': 'D3D8',
                    'Direct3DCreate9Ex': 'D3D9Ex', # ensure D3D9Ex gets checked before D3D9
                    'Direct3DCreate9': 'D3D9',
@@ -110,6 +120,9 @@ def tracestats(request):
                 logger.debug(f'API is: {entry_api}')
                 if entry_api is None:
                   raise Exception('Invalid JSON structure')
+                # convert API name to numeric value
+                else:
+                  entry_api = API_VALUES_ENCODE.get(entry_api)
 
                 # determine the total API call count in the trace
                 entry_api_calls_total = 0
@@ -425,8 +438,6 @@ def tracestats(request):
       search_form = forms.SearchForm(request.POST)
       if search_form.is_valid():
         search_input = request.POST['search_input'].strip()
-        logger.info(f'Search_Input: {search_input}')
-
         return redirect(f'{request.path}?search={quote(search_input)}')
 
     else:
@@ -436,6 +447,8 @@ def tracestats(request):
     search_input = request.GET.get('search', None)
 
     if search_input is not None:
+      logger.info(f'Search input: {search_input}')
+
       if len(search_input) < 2:
         return redirect(f'{request.path}')
 
@@ -451,27 +464,27 @@ def tracestats(request):
       # Note that all searches are case insensitive in SQLite
       if not exact_search:
         search_results = models.Stats.objects.filter(stat_name__icontains=search_input).order_by('stat_type',
-                                                                                                '-stat_count',
-                                                                                                'trace__name',
-                                                                                                '-trace__api')[:SEARCH_RESULTS_LIMIT]
+                                                                                                 '-stat_count',
+                                                                                                 'trace__name',
+                                                                                                 'trace__api')[:SEARCH_RESULTS_LIMIT]
       else:
         search_results = models.Stats.objects.filter(stat_name__exact=search_input).order_by('stat_type',
-                                                                                            '-stat_count',
-                                                                                            'trace__name',
-                                                                                            '-trace__api')[:SEARCH_RESULTS_LIMIT]
+                                                                                             '-stat_count',
+                                                                                             'trace__name',
+                                                                                             'trace__api')[:SEARCH_RESULTS_LIMIT]
 
       if len(search_results) == 0:
         # If no objects are found, do a search based on application names
         if not exact_search:
           search_results = models.Stats.objects.filter(trace__name__icontains=search_input).order_by('trace__name',
-                                                                                                    '-trace__api',
-                                                                                                    'stat_type',
-                                                                                                    '-stat_count')[:SEARCH_RESULTS_LIMIT]
+                                                                                                     'trace__api',
+                                                                                                     'stat_type',
+                                                                                                     '-stat_count')[:SEARCH_RESULTS_LIMIT]
         else:
           search_results = models.Stats.objects.filter(trace__name__exact=search_input).order_by('trace__name',
-                                                                                                '-trace__api',
-                                                                                                'stat_type',
-                                                                                                '-stat_count')[:SEARCH_RESULTS_LIMIT]
+                                                                                                 'trace__api',
+                                                                                                 'stat_type',
+                                                                                                 '-stat_count')[:SEARCH_RESULTS_LIMIT]
 
         if len(search_results) == 0:
           # If no results of any kind could be found, show a notification to that extent
@@ -494,6 +507,7 @@ def tracestats(request):
     search_form = forms.SearchForm()
   template = loader.get_template('home.html')
   context['form'] = search_form
+  context['api_values_decode'] = API_VALUES_DECODE
   context['search_results'] = search_results
   return render(request, 'home.html', context)
 
@@ -501,18 +515,35 @@ def generate_titles_list(request):
   if request.method != 'POST':
     return JsonResponse({'error': 'The Rabbit of Caerbannog pounces on you and you die!'}, status=403)
   else:
-    titles_list = models.Trace.objects.only('name', 'link', 'binary_name', 'api').order_by('name',
-                                                                                           '-api')
-
     try:
-      request.session['titles_list_visible'] = not request.session['titles_list_visible']
-      request.session.modified = True
-    except KeyError:
+      sort_by = int(request.POST.get('sort'))
+    except:
+      sort_by = None
+
+    if sort_by == 1:
+      titles_list = models.Trace.objects.only('name', 'link', 'binary_name', 'api').order_by('api',
+                                                                                             'name')
+    elif sort_by == 2:
+      titles_list = models.Trace.objects.only('name', 'link', 'binary_name', 'api').order_by('binary_name')
+    # Catch-all for 0 or None
+    else:
+      titles_list = models.Trace.objects.only('name', 'link', 'binary_name', 'api').order_by('name',
+                                                                                             'api')
+
+    if sort_by is None:
+      try:
+        request.session['titles_list_visible'] = not request.session['titles_list_visible']
+        request.session.modified = True
+      except KeyError:
+        request.session['titles_list_visible'] = True
+        request.session.modified = True
+    else:
       request.session['titles_list_visible'] = True
-      request.session.modified = True
 
     if request.session['titles_list_visible']:
-      context = {'titles_list': titles_list}
+      context = {}
+      context['titles_list'] = titles_list
+      context['api_values_decode'] = API_VALUES_DECODE
       context.update(csrf(request))
       content = loader.render_to_string('titles_list.html', context)
     else:
@@ -538,11 +569,11 @@ def generate_stats(request):
       request.session.modified = True
 
     if request.session['api_stats_visible']:
-      api_stats['d3d8']   = models.Trace.objects.filter(api='D3D8').count()
-      api_stats['d3d9']   = models.Trace.objects.filter(api='D3D9').count()
-      api_stats['d3d9ex'] = models.Trace.objects.filter(api='D3D9Ex').count()
-      api_stats['d3d10']  = models.Trace.objects.filter(api='D3D10').count()
-      api_stats['d3d11']  = models.Trace.objects.filter(api='D3D11').count()
+      api_stats['d3d8']   = models.Trace.objects.filter(api=1).count()
+      api_stats['d3d9']   = models.Trace.objects.filter(api=2).count()
+      api_stats['d3d9ex'] = models.Trace.objects.filter(api=3).count()
+      api_stats['d3d10']  = models.Trace.objects.filter(api=4).count()
+      api_stats['d3d11']  = models.Trace.objects.filter(api=5).count()
 
       context = {}
       context.update(csrf(request))

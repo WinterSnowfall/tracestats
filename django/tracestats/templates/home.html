@@ -47,7 +47,7 @@
                 <tr class="results-row">
                     <td class="no-selection"><b>{{ forloop.counter }}</b></td>
                     <td>{{ stat.trace.name }}</td>
-                    <td>{{ stat.trace.api }}</td>
+                    <td>{{ api_values_decode|decode_api:stat.trace.api }}</td>
                     <td class="no-selection">
                         <a href="{% url 'tracestats' %}?search={{ stat.trace.name|urlize }} !">🐦</a>
                     </td>

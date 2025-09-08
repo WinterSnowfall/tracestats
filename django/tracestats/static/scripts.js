@@ -223,3 +223,72 @@ $(document).on('click', '#reset-upload-form', function() {
     $('#upload-notification-area').html('');
 });
 
+$(document).on('click', '#sort-alphabetically', function() {
+    const csrftoken = getCookie('csrftoken');
+
+    $.ajax({
+        url: '/tracestats/titles-list/',
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': csrftoken
+        },
+        data: {
+            sort: 0
+        },
+        success: function(response) {
+            if (response.content) {
+                $('#titles-list-area').html(response.content);
+                $('#sort-alphabetically').attr('class', 'search-button-negative');
+                $('#sort-api').attr('class', 'search-button');
+                $('#sort-binary-name').attr('class', 'search-button');
+            }
+        }
+    });
+});
+
+$(document).on('click', '#sort-api', function() {
+    const csrftoken = getCookie('csrftoken');
+
+    $.ajax({
+        url: '/tracestats/titles-list/',
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': csrftoken
+        },
+        data: {
+            sort: 1
+        },
+        success: function(response) {
+            if (response.content) {
+                $('#titles-list-area').html(response.content);
+                $('#sort-alphabetically').attr('class', 'search-button');
+                $('#sort-api').attr('class', 'search-button-negative');
+                $('#sort-binary-name').attr('class', 'search-button');
+            }
+        }
+    });
+});
+
+$(document).on('click', '#sort-binary-name', function() {
+    const csrftoken = getCookie('csrftoken');
+
+    $.ajax({
+        url: '/tracestats/titles-list/',
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': csrftoken
+        },
+        data: {
+            sort: 2
+        },
+        success: function(response) {
+            if (response.content) {
+                $('#titles-list-area').html(response.content);
+                $('#sort-alphabetically').attr('class', 'search-button');
+                $('#sort-api').attr('class', 'search-button');
+                $('#sort-binary-name').attr('class', 'search-button-negative');
+            }
+        }
+    });
+});
+

@@ -1,33 +1,43 @@
 {% load static %}
 {% load filters %}
-<div class="table-margin" id="titles-list">
-    <table>
-        <tr>
-            <th><b>#</b></th>
-            <th>Application Name</th>
-            <th>API</th>
-            <th>🐦</th>
-            <th>🎮</th>
-            <th>Binary Name</th>
-        </tr>
-        {% for title in titles_list %}
-        <tr class="results-row">
-            <td class="no-selection"><b>{{ forloop.counter }}</b></td>
-            <td>{{ title.name }}</td>
-            <td>{{ title.api }}</td>
-            <td class="no-selection">
-                <a href="{% url 'tracestats' %}?search={{ title.name|urlize }} !">🐦</a>
-            </td>
-            <td class="no-selection">
-                {% if title.link is None %}
-                    <a target="_blank" href="https://www.pcgamingwiki.com/w/index.php?search={{ title.name|urlize }}&title=Special:Search">🎮</a>
-                {% else %}
-                    <a target="_blank" href="{{ title.link }}">🎮</a>
-                {% endif %}
-            </td>
-            <td>{{ title.binary_name }}</td>
-        </tr>
-        {% endfor %}
-    </table>
+<div id="titles-list">
+    <div class="search-container">
+        <h5 class="right-margin-small">Modern dinosaur lineup criterion:</h5>
+        <div class="no-selection">
+            <button class="search-button-negative" type="button" id="sort-alphabetically">Alphabetical</button>
+            <button class="search-button" type="button" id="sort-api">API</button>
+            <button class="search-button" type="button" id="sort-binary-name">Binary Name</button>
+        </div>
+    </div>
+    <div class="table-margin-small" id="titles-list">
+        <table>
+            <tr>
+                <th><b>#</b></th>
+                <th>Application Name</th>
+                <th>API</th>
+                <th>🐦</th>
+                <th>🎮</th>
+                <th>Binary Name</th>
+            </tr>
+            {% for title in titles_list %}
+            <tr class="results-row">
+                <td class="no-selection"><b>{{ forloop.counter }}</b></td>
+                <td>{{ title.name }}</td>
+                <td>{{ api_values_decode|decode_api:title.api }}</td>
+                <td class="no-selection">
+                    <a href="{% url 'tracestats' %}?search={{ title.name|urlize }} !">🐦</a>
+                </td>
+                <td class="no-selection">
+                    {% if title.link is None %}
+                        <a target="_blank" href="https://www.pcgamingwiki.com/w/index.php?search={{ title.name|urlize }}&title=Special:Search">🎮</a>
+                    {% else %}
+                        <a target="_blank" href="{{ title.link }}">🎮</a>
+                    {% endif %}
+                </td>
+                <td>{{ title.binary_name }}</td>
+            </tr>
+            {% endfor %}
+        </table>
+    </div>
 </div>
 

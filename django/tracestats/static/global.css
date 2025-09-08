@@ -139,6 +139,14 @@ a:hover {
     margin: 0;
 }
 
+.right-margin-small {
+    margin-right: 5px;
+}
+
+.table-margin-small {
+    margin-top: 10px;
+}
+
 .table-margin {
     margin-top: 30px;
 }

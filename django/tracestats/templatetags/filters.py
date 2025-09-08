@@ -12,3 +12,6 @@ def pcgwize(value):
     
     return return_string
 
+@register.filter(name='decode_api')
+def decode_api(dictionary, key):
+    return dictionary.get(key, "Unknown")
