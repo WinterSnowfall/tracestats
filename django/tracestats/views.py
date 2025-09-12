@@ -48,18 +48,19 @@ STATS_TYPE = {'api_calls': 1,
               'render_states': 7,
               'query_types': 8,
               'lock_flags': 9,
-              'usage': 10,
-              'formats': 11,
-              'vendor_hacks': 12,
-              'pools': 13,
-              'device_flags': 14,
-              'swapchain_parameters': 15,
-              'swapchain_buffer_usage': 16,
-              'swapchain_flags': 17,
-              'feature_levels': 18,
-              'rastizer_states': 19,
-              'blend_states': 20,
-              'bind_flags': 21}
+              'shader_versions': 10,
+              'usage': 11,
+              'formats': 12,
+              'vendor_hacks': 13,
+              'pools': 14,
+              'device_flags': 15,
+              'swapchain_parameters': 16,
+              'swapchain_buffer_usage': 17,
+              'swapchain_flags': 18,
+              'feature_levels': 19,
+              'rastizer_states': 20,
+              'blend_states': 21,
+              'bind_flags': 22}
 SEARCH_RESULTS_LIMIT = 999
 
 def tracestats(request):
@@ -274,6 +275,17 @@ def tracestats(request):
                 for key, value in entry_lock_flags.items():
                   stats.append(models.Stats(trace=trace,
                                             stat_type=STATS_TYPE['lock_flags'],
+                                            stat_name=key,
+                                            stat_count=value))
+                if len(stats) > 0:
+                  models.Stats.objects.bulk_create(stats)
+
+                # create child stats entries for shader versions
+                entry_shader_versions = entry.get('shader_versions', {})
+                stats = []
+                for key, value in entry_shader_versions.items():
+                  stats.append(models.Stats(trace=trace,
+                                            stat_type=STATS_TYPE['shader_versions'],
                                             stat_name=key,
                                             stat_count=value))
                 if len(stats) > 0:

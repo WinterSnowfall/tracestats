@@ -139,6 +139,15 @@ LOCK_FLAGS_IDENTIFIER_END = ')'
 LOCK_FLAGS_VALUE_IDENTIFIER = 'D3DLOCK_'
 LOCK_FLAGS_SKIP_IDENTIFIER = 'Flags = 0x0'
 LOCK_FLAGS_SPLIT_DELIMITER = '|'
+# shaders
+VERTEX_SHADER_CALL = '::CreateVertexShader'
+PIXEL_SHADER_CALL = '::CreatePixelShader'
+SHADER_LINE_WHITESPACE = ' '
+VERTEX_SHADER_IDENTIFIER = 'vs_'
+VERTEX_SHADER_IDENTIFIER_LENGTH = len(VERTEX_SHADER_IDENTIFIER)
+PIXEL_SHADER_IDENTIFIER = 'ps_'
+PIXEL_SHADER_IDENTIFIER_LENGTH = len(PIXEL_SHADER_IDENTIFIER)
+SHADER_VERSION_OFFSET = 3 # x_y (x = major version, y = minor version)
 # usage
 USAGE_IDENTIFIER = 'Usage = '
 USAGE_IDENTIFIER_LENGTH = len(USAGE_IDENTIFIER)
@@ -355,6 +364,7 @@ class TraceStats:
         self.render_state_dictionary = {}
         self.query_type_dictionary = {}
         self.lock_flag_dictionary = {}
+        self.shader_version_dictionary = {}
         self.format_dictionary = {}
         self.vendor_hack_dictionary = {}
         self.pool_dictionary = {}
@@ -520,6 +530,8 @@ class TraceStats:
                         return_dictionary['query_types'] = self.query_type_dictionary
                     if len(self.lock_flag_dictionary) > 0:
                         return_dictionary['lock_flags'] = self.lock_flag_dictionary
+                    if len(self.shader_version_dictionary) > 0:
+                        return_dictionary['shader_versions'] = self.shader_version_dictionary
                     if len(self.format_dictionary) > 0:
                         return_dictionary['formats'] = self.format_dictionary
                     if len(self.vendor_hack_dictionary) > 0:
@@ -573,6 +585,7 @@ class TraceStats:
                 self.render_state_dictionary = {}
                 self.query_type_dictionary = {}
                 self.lock_flag_dictionary = {}
+                self.shader_version_dictionary = {}
                 self.format_dictionary = {}
                 self.vendor_hack_dictionary = {}
                 self.pool_dictionary = {}
@@ -628,32 +641,37 @@ class TraceStats:
                     # blank/padding lines in an apitrace dump
                     if trace_line == '':
                         continue
-                    # early skip whitespaced lines (not API calls)
-                    if trace_line.startswith(' '):
-                        logger.debug(f'Skipped parsing of line: {trace_line}')
-                        continue
-                    # also early skip embedded comments
+                    # early skip embedded full line comments
                     if trace_line.startswith('//'):
                         logger.debug(f'Skipped parsing of line: {trace_line}')
                         continue
 
-                    # no need to do more than 2 splits, as we only need
-                    # the trace number and later on the api call name
-                    split_line = trace_line.split(maxsplit=2)
+                    # second and third matches should be rare,
+                    # but technically not an impossibility
+                    shader_line = (trace_line.startswith(SHADER_LINE_WHITESPACE) or
+                                   trace_line.startswith(VERTEX_SHADER_IDENTIFIER) or
+                                   trace_line.startswith(PIXEL_SHADER_IDENTIFIER))
 
-                    # unnumbered lines will raise a ValueError
-                    try:
-                        trace_call_counter = int(split_line[0])
-                        logger.debug(f'Found call count: {trace_call_counter}')
-                    except ValueError:
-                        logger.debug(f'Skipped parsing of line: {trace_line}')
-                        continue
+                    if not shader_line:
+                        # no need to do more than 2 splits, as we only need
+                        # the trace number and later on the api call name
+                        split_line = trace_line.split(maxsplit=2)
 
-                    if (API_ENTRY_CALL_IDENTIFIER in trace_line or
+                        # unnumbered lines will raise a ValueError
+                        try:
+                            trace_call_counter = int(split_line[0])
+                            logger.debug(f'Found call count: {trace_call_counter}')
+                        except ValueError:
+                            logger.debug(f'Skipped parsing of line: {trace_line}')
+                            continue
+                    else:
+                        split_line = None
+
+                    if (shader_line or API_ENTRY_CALL_IDENTIFIER in trace_line or
                         any(api_base_call in trace_line for api_base_call in API_BASE_CALLS.keys())):
                         # typically, the API entrypoint can be found
                         # on the fist line of an apitrace
-                        if self.api is None:
+                        if self.api is None and not shader_line:
                             for key, value in API_ENTRY_CALLS.items():
                                 if key in split_line[1]:
                                     self.api = value
@@ -675,11 +693,15 @@ class TraceStats:
                                 break
 
                         # parse API calls
-                        call = split_line[1].split('(', 1)[0]
-                        logger.debug(f'Found call: {call}')
+                        if not shader_line:
+                            call = split_line[1].split('(', 1)[0]
+                            logger.debug(f'Found call: {call}')
 
-                        existing_value = self.api_call_dictionary.get(call, 0)
-                        self.api_call_dictionary[call] = existing_value + 1
+                            existing_value = self.api_call_dictionary.get(call, 0)
+                            self.api_call_dictionary[call] = existing_value + 1
+                        else:
+                            # line starting with shader specific whitespace (not an actual call)
+                            call = ''
 
                         # parse device behavior flags, render states, format
                         # and pool values for D3D8, D3D9Ex, and D3D9 apitraces
@@ -835,6 +857,45 @@ class TraceStats:
                                     if lock_flag_stripped.startswith(LOCK_FLAGS_VALUE_IDENTIFIER):
                                         existing_value = self.lock_flag_dictionary.get(lock_flag_stripped, 0)
                                         self.lock_flag_dictionary[lock_flag_stripped] = existing_value + 1
+
+                            # shader version identifiers can either be part of CreateVertexShader/CreatePixelShader
+                            # calls, or included as part of an additional line below those calls in apitrace dumps
+                            elif VERTEX_SHADER_CALL in call or PIXEL_SHADER_CALL in call or shader_line:
+                                logger.debug(f'Found shader on line: {trace_line}')
+
+                                # Strip any comments from a shader line
+                                if shader_line:
+                                    trace_line = trace_line.split('//')[0].rstrip()
+
+                                # D3D8 handles FVF thourgh CreateVertexShader, and there is no way to
+                                # track these otherwise, so treat them as 'vs_fvf' shader versions instead
+                                if self.api == 'D3D8' and VERTEX_SHADER_CALL in call and 'pFunction = NULL' in trace_line:
+                                    shader_version = 'vs_fvf'
+                                    logger.debug(f'Shader version: {shader_version}')
+
+                                    existing_value = self.shader_version_dictionary.get(shader_version, 0)
+                                    self.shader_version_dictionary[shader_version] = existing_value + 1
+
+                                else:
+                                    shader_version = None
+
+                                    shader_version_start = trace_line.find(VERTEX_SHADER_IDENTIFIER)
+                                    if shader_version_start != -1:
+                                        shader_version = trace_line[shader_version_start:shader_version_start +
+                                                                                         VERTEX_SHADER_IDENTIFIER_LENGTH +
+                                                                                         SHADER_VERSION_OFFSET]
+                                    else:
+                                        shader_version_start = trace_line.find(PIXEL_SHADER_IDENTIFIER)
+                                        if shader_version_start != -1:
+                                            shader_version = trace_line[shader_version_start:shader_version_start +
+                                                                                             VERTEX_SHADER_IDENTIFIER_LENGTH +
+                                                                                             SHADER_VERSION_OFFSET]
+
+                                    if shader_version is not None:
+                                        logger.debug(f'Shader version: {shader_version}')
+
+                                        existing_value = self.shader_version_dictionary.get(shader_version, 0)
+                                        self.shader_version_dictionary[shader_version] = existing_value + 1
 
                             elif API_ENTRY_FORMAT_BASE_CALL in call:
                                 if FORMAT_IDENTIFIER in trace_line:
