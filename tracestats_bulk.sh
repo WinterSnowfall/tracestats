@@ -4,6 +4,8 @@
 APITRACE_PATH="$(which apitrace)"
 # (re)process zstd compressed traces
 PROCESS_COMPRESSED=true
+# only dump shaders from apitraces
+DUMP_SHADERS=false
 
 # API filter
 if [ $# -ge 1 ]
@@ -21,7 +23,26 @@ then
     do
         if [ -f "$file" ]
         then
-            ./tracestats.py -i "$file" -a "$APITRACE_PATH" $API_FILTER 2>&1 | tee -a tracestats_bulk.log
+            if $DUMP_SHADERS
+            then
+                PACKED_FILENAME="$(basename "$file" .trace.zst)_dumps.tar.zst"
+
+                if [ ! -f "dumps/$PACKED_FILENAME" ]
+                then
+                    ./tracestats.py -i "$file" -d -a "$APITRACE_PATH" $API_FILTER 2>&1 | tee -a tracestats_bulk.log
+                    DUMPS=$(ls dumps/*.bin 2>/dev/null | wc -l)
+
+                    if [ $DUMPS -gt 0 ]
+                    then
+                        cd dumps
+                        tar -I "zstd -z -T0 --long -19" -cvf "$PACKED_FILENAME""_dumps.tar.zst" *.bin > /dev/null
+                        rm -f *.bin
+                        cd ..
+                    fi
+                fi
+            else
+                ./tracestats.py -i "$file" -a "$APITRACE_PATH" $API_FILTER 2>&1 | tee -a tracestats_bulk.log
+            fi
         fi
     done
 fi
@@ -30,7 +51,26 @@ for file in traces/*.trace
 do
     if [ -f "$file" ]
     then
-        ./tracestats.py -i "$file" -a "$APITRACE_PATH" $API_FILTER 2>&1 | tee -a tracestats_bulk.log
+        if $DUMP_SHADERS
+        then
+            PACKED_FILENAME="$(basename "$file" .trace)"
+
+            if [ ! -f "dumps/$PACKED_FILENAME" ]
+            then
+                ./tracestats.py -i "$file" -d -a "$APITRACE_PATH" $API_FILTER 2>&1 | tee -a tracestats_bulk.log
+                DUMPS=$(ls dumps/*.bin 2>/dev/null | wc -l)
+
+                if [ $DUMPS -gt 0 ]
+                then
+                    cd dumps
+                    tar -I "zstd -z -T0 --long -19" -cvf "$PACKED_FILENAME""_dumps.tar.zst" *.bin > /dev/null
+                    rm -f *.bin
+                    cd ..
+                fi
+            fi
+        else
+            ./tracestats.py -i "$file" -a "$APITRACE_PATH" $API_FILTER 2>&1 | tee -a tracestats_bulk.log
+        fi
     fi
 done
 

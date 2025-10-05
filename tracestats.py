@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 '''
 @author: Winter Snowfall
-@version: 1.42
-@date: 12/09/2025
+@version: 1.43
+@date: 04/10/2025
 '''
 
 import os
@@ -36,6 +36,8 @@ TRACE_LOGGING_CHUNK_CALLS = 10000000
 JSON_BASE_KEY = 'tracestats'
 JSON_EXPORT_FOLDER_NAME = 'export'
 JSON_EXPORT_DEFAULT_FILE_NAME = 'tracestats.json'
+SHADER_DUMPS_FOLDER_NAME = 'dumps'
+SHADER_DUMPS_CALL_CHUNK_SIZE = 10000
 
 # parsing constants
 API_ENTRY_CALLS = {'Direct3DCreate8': 'D3D8',
@@ -87,6 +89,8 @@ KNOWN_FOURCC_FORMATS = ('EXT1', 'FXT1', 'GXT1', 'HXT1',
 
 API_ENTRY_CALL_IDENTIFIER = '::'
 API_ENTRY_VALUE_DELIMITER = ','
+SHADER_DUMP_SKIP_IDENTIFIER_D3D8_9 = 'pFunction = NULL'
+SHADER_DUMP_SKIP_IDENTIFIER_D3D10_11 = 'pShaderBytecode = NULL'
 ############################## D3D8, D3D9Ex, D3D9 ##############################
 # check device format vendor hacks
 CHECK_DEVICE_FORMAT_CALL = '::CheckDeviceFormat'
@@ -296,7 +300,7 @@ class TraceStats:
         return potential_vendor_hack_value
 
     def __init__(self, trace_input_paths, json_export_path, application_name,
-                 application_link, apis_to_skip, apitrace_path):
+                 application_link, apis_to_skip, shader_dump, apitrace_path):
         if trace_input_paths is not None:
             self.trace_input_paths = trace_input_paths[0]
         else:
@@ -364,6 +368,7 @@ class TraceStats:
         else:
             self.apis_to_skip = None
 
+        self.shader_dump = shader_dump
         self.compressed_trace = False
         self.binary_name_raw = None
         self.binary_name = None
@@ -371,6 +376,7 @@ class TraceStats:
         self.application_link = application_link
         self.traceappnames_api = None
         self.api = None
+        self.shader_dump_call_array = []
         self.api_call_dictionary = {}
         self.vendor_hack_check_dictionary = {}
         self.device_type_dictionary = {}
@@ -523,57 +529,80 @@ class TraceStats:
                 process_thread.join()
 
                 if not self.api_skip.is_set():
-                    return_dictionary = {}
-                    return_dictionary['binary_name'] = self.binary_name
-                    return_dictionary['name'] = self.application_name
-                    if self.application_link is not None:
-                        return_dictionary['link'] = self.application_link
-                    if len(self.api_call_dictionary) > 0:
-                        return_dictionary['api_calls'] = self.api_call_dictionary
-                    if len(self.vendor_hack_check_dictionary) > 0:
-                        return_dictionary['vendor_hack_checks'] = self.vendor_hack_check_dictionary
-                    if len(self.device_type_dictionary) > 0:
-                        return_dictionary['device_types'] = self.device_type_dictionary
-                    if len(self.present_parameter_dictionary) > 0:
-                        return_dictionary['present_parameters'] = self.present_parameter_dictionary
-                    if len(self.present_parameter_flag_dictionary) > 0:
-                        return_dictionary['present_parameter_flags'] = self.present_parameter_flag_dictionary
-                    if len(self.behavior_flag_dictionary) > 0:
-                        return_dictionary['behavior_flags'] = self.behavior_flag_dictionary
-                    if len(self.render_state_dictionary) > 0:
-                        return_dictionary['render_states'] = self.render_state_dictionary
-                    if len(self.query_type_dictionary) > 0:
-                        return_dictionary['query_types'] = self.query_type_dictionary
-                    if len(self.lock_flag_dictionary) > 0:
-                        return_dictionary['lock_flags'] = self.lock_flag_dictionary
-                    if len(self.shader_version_dictionary) > 0:
-                        return_dictionary['shader_versions'] = self.shader_version_dictionary
-                    if len(self.format_dictionary) > 0:
-                        return_dictionary['formats'] = self.format_dictionary
-                    if len(self.vendor_hack_dictionary) > 0:
-                        return_dictionary['vendor_hacks'] = self.vendor_hack_dictionary
-                    if len(self.pool_dictionary) > 0:
-                        return_dictionary['pools'] = self.pool_dictionary
-                    if len(self.device_flag_dictionary) > 0:
-                        return_dictionary['device_flags'] = self.device_flag_dictionary
-                    if len(self.swapchain_parameter_dictionary) > 0:
-                        return_dictionary['swapchain_parameters'] = self.swapchain_parameter_dictionary
-                    if len(self.swapchain_buffer_usage_dictionary) > 0:
-                        return_dictionary['swapchain_buffer_usage'] = self.swapchain_buffer_usage_dictionary
-                    if len(self.swapchain_flag_dictionary) > 0:
-                        return_dictionary['swapchain_flags'] = self.swapchain_flag_dictionary
-                    if len(self.feature_level_dictionary) > 0:
-                        return_dictionary['feature_levels'] = self.feature_level_dictionary
-                    if len(self.rastizer_state_dictionary) > 0:
-                        return_dictionary['rastizer_states'] = self.rastizer_state_dictionary
-                    if len(self.blend_state_dictionary) > 0:
-                        return_dictionary['blend_states'] = self.blend_state_dictionary
-                    if len(self.usage_dictionary) > 0:
-                        return_dictionary['usage'] = self.usage_dictionary
-                    if len(self.bind_flag_dictionary) > 0:
-                        return_dictionary['bind_flags'] = self.bind_flag_dictionary
+                    if not self.shader_dump:
+                        return_dictionary = {}
+                        return_dictionary['binary_name'] = self.binary_name
+                        return_dictionary['name'] = self.application_name
+                        if self.application_link is not None:
+                            return_dictionary['link'] = self.application_link
+                        if len(self.api_call_dictionary) > 0:
+                            return_dictionary['api_calls'] = self.api_call_dictionary
+                        if len(self.vendor_hack_check_dictionary) > 0:
+                            return_dictionary['vendor_hack_checks'] = self.vendor_hack_check_dictionary
+                        if len(self.device_type_dictionary) > 0:
+                            return_dictionary['device_types'] = self.device_type_dictionary
+                        if len(self.present_parameter_dictionary) > 0:
+                            return_dictionary['present_parameters'] = self.present_parameter_dictionary
+                        if len(self.present_parameter_flag_dictionary) > 0:
+                            return_dictionary['present_parameter_flags'] = self.present_parameter_flag_dictionary
+                        if len(self.behavior_flag_dictionary) > 0:
+                            return_dictionary['behavior_flags'] = self.behavior_flag_dictionary
+                        if len(self.render_state_dictionary) > 0:
+                            return_dictionary['render_states'] = self.render_state_dictionary
+                        if len(self.query_type_dictionary) > 0:
+                            return_dictionary['query_types'] = self.query_type_dictionary
+                        if len(self.lock_flag_dictionary) > 0:
+                            return_dictionary['lock_flags'] = self.lock_flag_dictionary
+                        if len(self.shader_version_dictionary) > 0:
+                            return_dictionary['shader_versions'] = self.shader_version_dictionary
+                        if len(self.format_dictionary) > 0:
+                            return_dictionary['formats'] = self.format_dictionary
+                        if len(self.vendor_hack_dictionary) > 0:
+                            return_dictionary['vendor_hacks'] = self.vendor_hack_dictionary
+                        if len(self.pool_dictionary) > 0:
+                            return_dictionary['pools'] = self.pool_dictionary
+                        if len(self.device_flag_dictionary) > 0:
+                            return_dictionary['device_flags'] = self.device_flag_dictionary
+                        if len(self.swapchain_parameter_dictionary) > 0:
+                            return_dictionary['swapchain_parameters'] = self.swapchain_parameter_dictionary
+                        if len(self.swapchain_buffer_usage_dictionary) > 0:
+                            return_dictionary['swapchain_buffer_usage'] = self.swapchain_buffer_usage_dictionary
+                        if len(self.swapchain_flag_dictionary) > 0:
+                            return_dictionary['swapchain_flags'] = self.swapchain_flag_dictionary
+                        if len(self.feature_level_dictionary) > 0:
+                            return_dictionary['feature_levels'] = self.feature_level_dictionary
+                        if len(self.rastizer_state_dictionary) > 0:
+                            return_dictionary['rastizer_states'] = self.rastizer_state_dictionary
+                        if len(self.blend_state_dictionary) > 0:
+                            return_dictionary['blend_states'] = self.blend_state_dictionary
+                        if len(self.usage_dictionary) > 0:
+                            return_dictionary['usage'] = self.usage_dictionary
+                        if len(self.bind_flag_dictionary) > 0:
+                            return_dictionary['bind_flags'] = self.bind_flag_dictionary
 
-                    self.json_output[JSON_BASE_KEY].append(return_dictionary)
+                        self.json_output[JSON_BASE_KEY].append(return_dictionary)
+
+                    elif len(self.shader_dump_call_array) > 0:
+                        logger.info(f'Dumping {len(self.shader_dump_call_array)} shader binaries...')
+
+                        # split the shader dump call numbers into strings of a size equal to SHADER_DUMPS_CALL_CHUNK_SIZE
+                        # in order to circumvent the "OSError: [Errno 7] Argument list too long" exception on shader heavy apitraces
+                        shader_dump_call_strings = [','.join(self.shader_dump_call_array[chunk:chunk + SHADER_DUMPS_CALL_CHUNK_SIZE])
+                                                    for chunk in range(0, len(self.shader_dump_call_array), SHADER_DUMPS_CALL_CHUNK_SIZE)]
+                        current_path = os.getcwd()
+                        trace_path_final_absolute = os.path.join(current_path, trace_path_final)
+                        dump_path_final_absolute = os.path.join(current_path, SHADER_DUMPS_FOLDER_NAME)
+
+                        for shader_dump_call_string in shader_dump_call_strings:
+                            logger.debug(f'Dumping shader binaries on calls: {shader_dump_call_string}')
+
+                            if self.use_wine_for_apitrace:
+                                subprocess_params = ('wine', self.apitrace_path, 'dump', '--blob', f'--calls={shader_dump_call_string}', trace_path_final_absolute)
+                            else:
+                                subprocess_params = (self.apitrace_path, 'dump', '--blob', f'--calls={shader_dump_call_string}', trace_path_final_absolute)
+
+                            subprocess.run(subprocess_params, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                                            cwd=dump_path_final_absolute, check=True)
 
                     logger.info('Trace processing complete')
                 else:
@@ -592,6 +621,7 @@ class TraceStats:
                 self.binary_name = None
                 self.traceappnames_api = None
                 self.api = None
+                self.shader_dump_call_array = []
                 self.api_call_dictionary = {}
                 self.vendor_hack_check_dictionary = {}
                 self.device_type_dictionary = {}
@@ -618,7 +648,7 @@ class TraceStats:
             else:
                 logger.warning(f'File not found, skipping: {trace_path}')
 
-        if len(self.json_output[JSON_BASE_KEY]) > 0:
+        if not self.shader_dump and len(self.json_output[JSON_BASE_KEY]) > 0:
             json_export = json.dumps(self.json_output, sort_keys=True, indent=4,
                                      separators=(',', ': '), ensure_ascii=False)
             logger.debug(f'JSON export output is: {json_export}')
@@ -886,6 +916,9 @@ class TraceStats:
 
                                 # not having a shader line means it's a shader creation call
                                 if not shader_line:
+                                    if self.shader_dump and trace_call_counter > 0 and SHADER_DUMP_SKIP_IDENTIFIER_D3D8_9 not in trace_line:
+                                        self.shader_dump_call_array.append(str(trace_call_counter))
+
                                     # shader dissasebly can fail, in which case apitrace will dump bytecode blobs
                                     if not SHADER_NO_DISASSEMBLY_D3D8_9 in trace_line:
                                         if not shader_call_context:
@@ -1122,6 +1155,9 @@ class TraceStats:
 
                                 # not having a shader line means it's a shader creation call
                                 if not shader_line:
+                                    if self.shader_dump and trace_call_counter > 0 and SHADER_DUMP_SKIP_IDENTIFIER_D3D10_11 not in trace_line:
+                                        self.shader_dump_call_array.append(str(trace_call_counter))
+
                                     # shader dissasebly can fail, in which case apitrace will dump bytecode blobs
                                     if not SHADER_NO_DISASSEMBLY_D3D10_11 in trace_line:
                                         if not shader_call_context:
@@ -1190,6 +1226,9 @@ class TraceStats:
                                     format_value = trace_line[format_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
                                                                                            format_start)].strip()
 
+                                    # at times the format value can end in a '},' block
+                                    format_value = format_value.replace('}', '')
+
                                     existing_value = self.format_dictionary.get(format_value, 0)
                                     self.format_dictionary[format_value] = existing_value + 1
 
@@ -1199,6 +1238,9 @@ class TraceStats:
                                     usage_start = trace_line.find(USAGE_IDENTIFIER) + USAGE_IDENTIFIER_LENGTH
                                     usage_value = trace_line[usage_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
                                                                                          usage_start)].strip()
+
+                                    # at times there can be a single usage flag, ending in '},'
+                                    usage_value = usage_value.replace('}', '')
 
                                     if not USAGE_SKIP_IDENTIFIER_D3D10_11 in usage_value:
                                         existing_value = self.usage_dictionary.get(usage_value, 0)
@@ -1286,11 +1328,12 @@ if __name__ == "__main__":
     optional.add_argument('-n', '--name', help='specify a name for the apitraced application, using double quotes')
     optional.add_argument('-l', '--link', help='specify a web link for the application')
     optional.add_argument('-s', '--skip', help='specify apis to skip, e.g.: d3d9, d3d11')
+    optional.add_argument('-d', '--dump', help='dumps the shader binaries included in an apitrace', action='store_true')
     optional.add_argument('-a', '--apitrace', help='path to the apitrace executable')
 
     args = parser.parse_args()
 
-    tracestats = TraceStats(args.input, args.output, args.name, args.link, args.skip, args.apitrace)
+    tracestats = TraceStats(args.input, args.output, args.name, args.link, args.skip, args.dump, args.apitrace)
     if not args.join:
         tracestats.process_traces()
     else:
