@@ -135,6 +135,11 @@ a:hover {
     user-select: none;
 }
 
+.no-selection-align-right {
+    user-select: none;
+    text-align: right;
+}
+
 .no-margin {
     margin: 0;
 }

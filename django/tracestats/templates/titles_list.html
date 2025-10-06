@@ -12,7 +12,7 @@
     <div class="table-margin-small" id="titles-list">
         <table>
             <tr>
-                <th><b>#</b></th>
+                <th class="no-selection-align-right"><b>#</b></th>
                 <th>Application Name</th>
                 <th>API</th>
                 <th>🐦</th>
@@ -21,7 +21,7 @@
             </tr>
             {% for title in titles_list %}
             <tr class="results-row">
-                <td class="no-selection"><b>{{ forloop.counter }}</b></td>
+                <td class="no-selection-align-right"><b>{{ forloop.counter }}</b></td>
                 <td>{{ title.name }}</td>
                 <td>{{ api_values_decode|decode_api:title.api }}</td>
                 <td class="no-selection">

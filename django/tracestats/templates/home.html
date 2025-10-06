@@ -34,7 +34,7 @@
         <div class="table-margin" id="search-results">
             <table>
                 <tr>
-                    <th><b>#</b></th>
+                    <th class="no-selection-align-right"><b>#</b></th>
                     <th>Application Name</th>
                     <th>API</th>
                     <th>🐦</th>
@@ -45,7 +45,7 @@
                 </tr>
                 {% for stat in search_results %}
                 <tr class="results-row">
-                    <td class="no-selection"><b>{{ forloop.counter }}</b></td>
+                    <td class="no-selection-align-right"><b>{{ forloop.counter }}</b></td>
                     <td>{{ stat.trace.name }}</td>
                     <td>{{ api_values_decode|decode_api:stat.trace.api }}</td>
                     <td class="no-selection">
