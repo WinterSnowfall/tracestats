@@ -83,6 +83,7 @@ $(document).on('click', '#toggle-stats', function() {
                 $('#toggle-stats').attr('class', 'search-button-negative');
 
                 const backgroundColors = [
+                    '#9C27B0', // Vibrant Purple
                     '#F57C23', // Light Orange
                     '#FFEA00', // Bright Yellow
                     '#33CC33', // Dark Green
@@ -94,10 +95,11 @@ $(document).on('click', '#toggle-stats', function() {
                 const myPieChart = new Chart(ctx, {
                     type: 'pie',
                     data: {
-                        labels: ['D3D8', 'D3D9', 'D3D9Ex', 'D3D10', 'D3D11'],
+                        labels: ['D3D7', 'D3D8', 'D3D9', 'D3D9Ex', 'D3D10', 'D3D11'],
                         datasets: [{
                             label: 'apitraces',
-                            data: [response.api_stats['d3d8'],
+                            data: [response.api_stats['d3d7'],
+                                   response.api_stats['d3d8'],
                                    response.api_stats['d3d9'],
                                    response.api_stats['d3d9ex'],
                                    response.api_stats['d3d10'],

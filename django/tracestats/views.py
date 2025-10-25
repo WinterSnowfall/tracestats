@@ -15,17 +15,20 @@ logger = logging.getLogger('tracestats')
 
 #constants
 JSON_BASE_KEY = 'tracestats'
-API_VALUES_ENCODE = {'D3D8'  : 1,
-                     'D3D9'  : 2,
-                     'D3D9Ex': 3,
-                     'D3D10' : 4,
-                     'D3D11' : 5}
-API_VALUES_DECODE = {1: 'D3D8',
-                     2: 'D3D9',
-                     3: 'D3D9Ex',
-                     4: 'D3D10',
-                     5: 'D3D11'}
-API_ENTRY_CALLS = {'Direct3DCreate8': 'D3D8',
+API_VALUES_ENCODE = {'D3D7'  : 1,
+                     'D3D8'  : 2,
+                     'D3D9'  : 3,
+                     'D3D9Ex': 4,
+                     'D3D10' : 5,
+                     'D3D11' : 6}
+API_VALUES_DECODE = {1: 'D3D7',
+                     2: 'D3D8',
+                     3: 'D3D9',
+                     4: 'D3D9Ex',
+                     5: 'D3D10',
+                     6: 'D3D11'}
+API_ENTRY_CALLS = {'DirectDrawCreateEx': 'D3D7',
+                   'Direct3DCreate8': 'D3D8',
                    'Direct3DCreate9Ex': 'D3D9Ex', # ensure D3D9Ex gets checked before D3D9
                    'Direct3DCreate9': 'D3D9',
                    'D3D10CreateDeviceAndSwapChain1': 'D3D10',
@@ -581,11 +584,12 @@ def generate_stats(request):
       request.session.modified = True
 
     if request.session['api_stats_visible']:
-      api_stats['d3d8']   = models.Trace.objects.filter(api=1).count()
-      api_stats['d3d9']   = models.Trace.objects.filter(api=2).count()
-      api_stats['d3d9ex'] = models.Trace.objects.filter(api=3).count()
-      api_stats['d3d10']  = models.Trace.objects.filter(api=4).count()
-      api_stats['d3d11']  = models.Trace.objects.filter(api=5).count()
+      api_stats['d3d7']   = models.Trace.objects.filter(api=1).count()
+      api_stats['d3d8']   = models.Trace.objects.filter(api=2).count()
+      api_stats['d3d9']   = models.Trace.objects.filter(api=3).count()
+      api_stats['d3d9ex'] = models.Trace.objects.filter(api=4).count()
+      api_stats['d3d10']  = models.Trace.objects.filter(api=5).count()
+      api_stats['d3d11']  = models.Trace.objects.filter(api=6).count()
 
       context = {}
       context.update(csrf(request))

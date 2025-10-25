@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 '''
 @author: Winter Snowfall
-@version: 1.43
-@date: 04/10/2025
+@version: 1.50
+@date: 25/10/2025
 '''
 
 import os
@@ -40,7 +40,8 @@ SHADER_DUMPS_FOLDER_NAME = 'dumps'
 SHADER_DUMPS_CALL_CHUNK_SIZE = 10000
 
 # parsing constants
-API_ENTRY_CALLS = {'Direct3DCreate8': 'D3D8',
+API_ENTRY_CALLS = {'DirectDrawCreateEx': 'D3D7',
+                   'Direct3DCreate8': 'D3D8',
                    'Direct3DCreate9Ex': 'D3D9Ex', # ensure D3D9Ex gets checked before D3D9
                    'Direct3DCreate9': 'D3D9',
                    'D3D10CreateDeviceAndSwapChain1': 'D3D10',
@@ -51,7 +52,8 @@ API_ENTRY_CALLS = {'Direct3DCreate8': 'D3D8',
                    'D3D11CreateDeviceAndSwapChain': 'D3D11',
                    'D3D11CreateDevice': 'D3D11',
                    'D3D11CoreCreateDevice': 'D3D11'}
-API_BASE_CALLS = {**API_ENTRY_CALLS, 'CreateDXGIFactory': 'DXGI',
+API_BASE_CALLS = {**API_ENTRY_CALLS, 'DirectDrawEnumerateExA': 'D3D7',
+                                     'CreateDXGIFactory': 'DXGI',
                                      'CreateDXGIFactory1': 'DXGI',
                                      'CreateDXGIFactory2': 'DGXI'}
 TRACE_API_OVERRIDES = {'wargame_'   : 'D3D9Ex', # Ignore queries done on a plain D3D9 interface, as it's not used for rendering
@@ -91,6 +93,15 @@ API_ENTRY_CALL_IDENTIFIER = '::'
 API_ENTRY_VALUE_DELIMITER = ','
 SHADER_DUMP_SKIP_IDENTIFIER_D3D8_9 = 'pFunction = NULL'
 SHADER_DUMP_SKIP_IDENTIFIER_D3D10_11 = 'pShaderBytecode = NULL'
+
+################################# DDRAW7, D3D7 #################################
+# render states
+RENDER_STATES_CALL = '::SetRenderState'
+RENDER_STATES_IDENTIFIER7 = 'D3DRENDERSTATE_'
+RENDER_STATES_IDENTIFIER7_LENGTH = len(RENDER_STATES_IDENTIFIER7)
+RENDER_STATES_IDENTIFIER7_END = ','
+################################# DDRAW7, D3D7 #################################
+
 ############################## D3D8, D3D9Ex, D3D9 ##############################
 # check device format vendor hacks
 CHECK_DEVICE_FORMAT_CALL = '::CheckDeviceFormat'
@@ -755,8 +766,22 @@ class TraceStats:
                             call = ''
 
                         # parse device behavior flags, render states, format
+                        # and pool values for DDRAW7 and D3D7 apitraces
+                        if self.api =='D3D7':
+                            if RENDER_STATES_CALL in call:
+                                logger.debug(f'Found render states on line: {trace_line}')
+
+                                render_state_start = trace_line.find(RENDER_STATES_IDENTIFIER7) + RENDER_STATES_IDENTIFIER7_LENGTH
+                                if render_state_start != -1:
+                                    render_state = RENDER_STATES_IDENTIFIER7 + trace_line[render_state_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
+                                                                                                                             render_state_start)].strip()
+
+                                    existing_value = self.render_state_dictionary.get(render_state, 0)
+                                    self.render_state_dictionary[render_state] = existing_value + 1
+
+                        # parse device behavior flags, render states, format
                         # and pool values for D3D8, D3D9Ex, and D3D9 apitraces
-                        if self.api == 'D3D8' or self.api == 'D3D9Ex' or self.api == 'D3D9':
+                        elif self.api == 'D3D8' or self.api == 'D3D9Ex' or self.api == 'D3D9':
                             if CHECK_DEVICE_FORMAT_CALL in call:
                                 check_device_format_start = trace_line.find(CHECK_DEVICE_FORMAT_IDENTIFIER) + CHECK_DEVICE_FORMAT_IDENTIFIER_LENGTH
                                 check_device_format_value = trace_line[check_device_format_start:trace_line.find(CHECK_DEVICE_FORMAT_IDENTIFIER_END,
