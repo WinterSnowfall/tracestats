@@ -771,8 +771,9 @@ class TraceStats:
                             if RENDER_STATES_CALL in call:
                                 logger.debug(f'Found render states on line: {trace_line}')
 
-                                render_state_start = trace_line.find(RENDER_STATES_IDENTIFIER7) + RENDER_STATES_IDENTIFIER7_LENGTH
+                                render_state_start = trace_line.find(RENDER_STATES_IDENTIFIER7)
                                 if render_state_start != -1:
+                                    render_state_start += RENDER_STATES_IDENTIFIER7_LENGTH
                                     render_state = RENDER_STATES_IDENTIFIER7 + trace_line[render_state_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
                                                                                                                              render_state_start)].strip()
 
