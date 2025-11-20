@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 '''
 @author: Winter Snowfall
-@version: 1.50
-@date: 25/10/2025
+@version: 1.60
+@date: 20/11/2025
 '''
 
 import os
@@ -13,7 +13,7 @@ import subprocess
 import queue
 import threading
 import signal
-from shutil import copy2
+import shutil
 
 try:
     from traceappnames import TraceAppNames
@@ -310,8 +310,8 @@ class TraceStats:
 
         return potential_vendor_hack_value
 
-    def __init__(self, trace_input_paths, json_export_path, application_name,
-                 application_link, apis_to_skip, shader_dump, apitrace_path):
+    def __init__(self, trace_input_paths, json_export_path, application_name, application_link,
+                 apis_to_skip, shader_dump, apitrace_path, use_wine_for_apitrace):
         if trace_input_paths is not None:
             self.trace_input_paths = trace_input_paths[0]
         else:
@@ -331,15 +331,11 @@ class TraceStats:
             self.json_export_path = json_export_path
 
         if apitrace_path is None:
-            try:
-                apitrace_find_subprocess = subprocess.run(['which', 'apitrace'],
-                                                          stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
-                                                          check=True)
-                self.apitrace_path = apitrace_find_subprocess.stdout.decode('utf-8').strip()
-
-            except subprocess.CalledProcessError:
+            self.apitrace_path = shutil.which('apitrace')
+            if self.apitrace_path is None:
                 logger.critical('Unable to find apitrace. Please ensure it is in $PATH or use -a to specify the full path.')
                 raise SystemExit(1)
+
         else:
             if os.path.isfile(apitrace_path):
                 self.apitrace_path = apitrace_path
@@ -347,13 +343,12 @@ class TraceStats:
                 logger.critical('Invalid apitrace path specified.')
                 raise SystemExit(2)
 
+        self.use_wine_for_apitrace = use_wine_for_apitrace
+
         try:
-            if '.exe' in self.apitrace_path:
-                # Use Wine if an .exe file is specified
-                self.use_wine_for_apitrace = True
+            if self.use_wine_for_apitrace:
                 subprocess_params = ('wine', self.apitrace_path, 'version')
             else:
-                self.use_wine_for_apitrace = False
                 subprocess_params = (self.apitrace_path, 'version')
 
             apitrace_check_subprocess = subprocess.run(subprocess_params,
@@ -362,6 +357,7 @@ class TraceStats:
             apitrace_check_output = apitrace_check_subprocess.stdout.decode('utf-8').split()
 
             try:
+                logger.debug(f'Using apitrace version {apitrace_check_output[1]}')
                 if apitrace_check_output[0] != 'apitrace' and float(apitrace_check_output[1]) < 12.0:
                     logger.critical('Invalid apitrace version. Please use at least apitrace 12.0.')
                     raise SystemExit(3)
@@ -369,7 +365,7 @@ class TraceStats:
                 logger.critical('Invalid apitrace executable')
                 raise SystemExit(4)
 
-        except subprocess.CalledProcessError:
+        except:
             logger.critical('Invalid apitrace executable')
             raise SystemExit(5)
 
@@ -666,7 +662,7 @@ class TraceStats:
 
             if os.path.exists(self.json_export_path):
                 backup_path = ''.join((self.json_export_path, '.bak'))
-                copy2(self.json_export_path, backup_path)
+                shutil.copy2(self.json_export_path, backup_path)
                 logger.info(f'Existing JSON export backed up as: {backup_path}')
 
             with open(self.json_export_path, 'w') as file:
@@ -1356,10 +1352,11 @@ if __name__ == "__main__":
     optional.add_argument('-s', '--skip', help='specify apis to skip, e.g.: d3d9, d3d11')
     optional.add_argument('-d', '--dump', help='dumps the shader binaries included in an apitrace', action='store_true')
     optional.add_argument('-a', '--apitrace', help='path to the apitrace executable')
+    optional.add_argument('-w', '--wine', help='use wine to launch the apitrace executable', action='store_true')
 
     args = parser.parse_args()
 
-    tracestats = TraceStats(args.input, args.output, args.name, args.link, args.skip, args.dump, args.apitrace)
+    tracestats = TraceStats(args.input, args.output, args.name, args.link, args.skip, args.dump, args.apitrace, args.wine)
     if not args.join:
         tracestats.process_traces()
     else:

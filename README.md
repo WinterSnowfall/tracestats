@@ -17,11 +17,13 @@ python3 tracestats.py -i ~/a.trace b.trace /full/path/to/c.trace
 ```
 
 Optionally, you can also specify:
-- `-o /path/to/filename.json`, to use a custom output path and file name. Default behavior is to create a `.json` file in the export folder using the trace name, or a `tracestats.json` file if multiple traces are specified.
+- `-o /path/to/filename.json`, to use a custom output path and file name. Default behavior is to create a `.json` file in the `export` folder using the trace name, or a `tracestats.json` file if multiple traces are specified.
 - `-n "friendly name"`, to specify a user friendly application name. Default behavior is to leave it blank.
 - `-l "link"`, to specify a custom link URL. Default behavior is to use a PCGW search link based on the application name.
 - `-s api_to_skip1,api_to_skip2`, to specify which APIs to skip. Useful for filtered batched processing.
+- `-d`, to dump the shader binaries included in an apitrace, instead of parsing the apitrace for stats generation. The `dumps` directory will be used to store all shader binary dumps.
 - `-a /path/to/apitrace`, to specify the path to the apitrace binary. Default behavior is to try and use the $PATH apitrace, if present.
+- `-w`, to attempt to use Wine when launching apitrace commands. This is only needed when using the Windows version of apitrace on Linux, and will cause issues in other situations.
 
 ### What about some other stats which I noticed are missing?
 

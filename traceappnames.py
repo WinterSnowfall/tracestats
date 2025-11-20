@@ -392,6 +392,7 @@ class TraceAppNames:
         'GameEmperor':                                     ('Emperor: Battle for Dune', None, 'D3D7'),
         'GameGrayMatter':                                  ('Gray Matter', None, 'D3D9'),
         'GameHaegemonia':                                  ('Haegemonia: Legions of Iron', None, 'D3D8'),
+        'GameHP':                                          ('Harry Potter and the Chamber of Secrets', None, 'D3D7'),
         'gameInfernal':                                    ('Infernal', None, 'D3D9'),
         'GameInsane':                                      ('Insane', None, 'D3D7'),
         'gameJourney':                                     ('Journey to the Center of the Earth', None, 'D3D8'),
@@ -479,6 +480,7 @@ class TraceAppNames:
         'HotlineMiami_Original':                           ('Hotline Miami', None, 'D3D8'), # Original version (GameMaker)
         'HotlineMiami2':                                   ('Hotline Miami 2: Wrong Number', None, 'D3D9Ex'),
         'HoverAce':                                        ('Hover Ace', None, 'D3D8'),
+        'HP':                                              ('Harry Potter and the Philosopher\'s Stone', None, 'D3D7'),
         'hppoa':                                           ('Harry Potter and the Prisoner of Azkaban', None, 'D3D8'),
         'hr.x64':                                          ('Hard Reset Redux', None, 'D3D11'),
         'hulk':                                            ('Hulk', None, 'D3D8'),
