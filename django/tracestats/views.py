@@ -63,7 +63,9 @@ STATS_TYPE = {'api_calls': 1,
               'feature_levels': 19,
               'rastizer_states': 20,
               'blend_states': 21,
-              'bind_flags': 22}
+              'bind_flags': 22,
+              'cooperative_level_flags': 23,
+              'surface_caps': 24}
 SEARCH_RESULTS_LIMIT = 999
 
 def tracestats(request):
@@ -187,244 +189,16 @@ def tracestats(request):
                   trace.query_types_total = entry_query_types_total
                   trace.save()
 
-                # create child stats entries for API calls
-                stats = []
-                for key, value in entry_call_stats.items():
-                  stats.append(models.Stats(trace=trace,
-                                            stat_type=STATS_TYPE['api_calls'],
-                                            stat_name=key,
-                                            stat_count=value))
-                if len(stats) > 0:
-                  models.Stats.objects.bulk_create(stats)
-
-                # create child stats entries for vendor hack checks
-                entry_vendor_hack_checks = entry.get('vendor_hack_checks', {})
-                stats = []
-                for key, value in entry_vendor_hack_checks.items():
-                  stats.append(models.Stats(trace=trace,
-                                            stat_type=STATS_TYPE['vendor_hack_checks'],
-                                            stat_name=key,
-                                            stat_count=value))
-                if len(stats) > 0:
-                  models.Stats.objects.bulk_create(stats)
-
-                # create child stats entries for device types
-                entry_device_types = entry.get('device_types', {})
-                stats = []
-                for key, value in entry_device_types.items():
-                  stats.append(models.Stats(trace=trace,
-                                            stat_type=STATS_TYPE['device_types'],
-                                            stat_name=key,
-                                            stat_count=value))
-                if len(stats) > 0:
-                  models.Stats.objects.bulk_create(stats)
-
-                # create child stats entries for behavior flags
-                entry_behavior_flags = entry.get('behavior_flags', {})
-                stats = []
-                for key, value in entry_behavior_flags.items():
-                  stats.append(models.Stats(trace=trace,
-                                            stat_type=STATS_TYPE['behavior_flags'],
-                                            stat_name=key,
-                                            stat_count=value))
-                if len(stats) > 0:
-                  models.Stats.objects.bulk_create(stats)
-
-                # create child stats entries for present parameter flags
-                entry_present_parameter_flags = entry.get('present_parameter_flags', {})
-                stats = []
-                for key, value in entry_present_parameter_flags.items():
-                  stats.append(models.Stats(trace=trace,
-                                            stat_type=STATS_TYPE['present_parameter_flags'],
-                                            stat_name=key,
-                                            stat_count=value))
-                if len(stats) > 0:
-                  models.Stats.objects.bulk_create(stats)
-
-                # create child stats entries for present parameters
-                entry_present_parameters = entry.get('present_parameters', {})
-                stats = []
-                for key, value in entry_present_parameters.items():
-                  stats.append(models.Stats(trace=trace,
-                                            stat_type=STATS_TYPE['present_parameters'],
-                                            stat_name=key,
-                                            stat_count=value))
-                if len(stats) > 0:
-                  models.Stats.objects.bulk_create(stats)
-
-                # create child stats entries for render states
-                stats = []
-                for key, value in entry_render_states.items():
-                  stats.append(models.Stats(trace=trace,
-                                            stat_type=STATS_TYPE['render_states'],
-                                            stat_name=key,
-                                            stat_count=value))
-                if len(stats) > 0:
-                  models.Stats.objects.bulk_create(stats)
-
-                # create child stats entries for query types
-                stats = []
-                for key, value in entry_query_types.items():
-                  stats.append(models.Stats(trace=trace,
-                                            stat_type=STATS_TYPE['query_types'],
-                                            stat_name=key,
-                                            stat_count=value))
-                if len(stats) > 0:
-                  models.Stats.objects.bulk_create(stats)
-
-                # create child stats entries for lock flags
-                entry_lock_flags = entry.get('lock_flags', {})
-                stats = []
-                for key, value in entry_lock_flags.items():
-                  stats.append(models.Stats(trace=trace,
-                                            stat_type=STATS_TYPE['lock_flags'],
-                                            stat_name=key,
-                                            stat_count=value))
-                if len(stats) > 0:
-                  models.Stats.objects.bulk_create(stats)
-
-                # create child stats entries for shader versions
-                entry_shader_versions = entry.get('shader_versions', {})
-                stats = []
-                for key, value in entry_shader_versions.items():
-                  stats.append(models.Stats(trace=trace,
-                                            stat_type=STATS_TYPE['shader_versions'],
-                                            stat_name=key,
-                                            stat_count=value))
-                if len(stats) > 0:
-                  models.Stats.objects.bulk_create(stats)
-
-                # create child stats entries for formats
-                entry_formats = entry.get('formats', {})
-                stats = []
-                for key, value in entry_formats.items():
-                  stats.append(models.Stats(trace=trace,
-                                            stat_type=STATS_TYPE['formats'],
-                                            stat_name=key,
-                                            stat_count=value))
-                if len(stats) > 0:
-                  models.Stats.objects.bulk_create(stats)
-
-                # create child stats entries for vendor hacks
-                entry_vendor_hacks = entry.get('vendor_hacks', {})
-                stats = []
-                for key, value in entry_vendor_hacks.items():
-                  stats.append(models.Stats(trace=trace,
-                                            stat_type=STATS_TYPE['vendor_hacks'],
-                                            stat_name=key,
-                                            stat_count=value))
-                if len(stats) > 0:
-                  models.Stats.objects.bulk_create(stats)
-
-                # create child stats entries for pools
-                entry_pools = entry.get('pools', {})
-                stats = []
-                for key, value in entry_pools.items():
-                  stats.append(models.Stats(trace=trace,
-                                            stat_type=STATS_TYPE['pools'],
-                                            stat_name=key,
-                                            stat_count=value))
-                if len(stats) > 0:
-                  models.Stats.objects.bulk_create(stats)
-
-                # create child stats entries for device flags
-                entry_device_flags = entry.get('device_flags', {})
-                stats = []
-                for key, value in entry_device_flags.items():
-                  stats.append(models.Stats(trace=trace,
-                                            stat_type=STATS_TYPE['device_flags'],
-                                            stat_name=key,
-                                            stat_count=value))
-                if len(stats) > 0:
-                  models.Stats.objects.bulk_create(stats)
-
-                # create child stats entries for swapchain parameters
-                entry_swapchain_parameters = entry.get('swapchain_parameters', {})
-                stats = []
-                for key, value in entry_swapchain_parameters.items():
-                  stats.append(models.Stats(trace=trace,
-                                            stat_type=STATS_TYPE['swapchain_parameters'],
-                                            stat_name=key,
-                                            stat_count=value))
-                if len(stats) > 0:
-                  models.Stats.objects.bulk_create(stats)
-
-                # create child stats entries for swapchain buffer usage
-                entry_swapchain_buffer_usage = entry.get('swapchain_buffer_usage', {})
-                stats = []
-                for key, value in entry_swapchain_buffer_usage.items():
-                  stats.append(models.Stats(trace=trace,
-                                            stat_type=STATS_TYPE['swapchain_buffer_usage'],
-                                            stat_name=key,
-                                            stat_count=value))
-                if len(stats) > 0:
-                  models.Stats.objects.bulk_create(stats)
-
-                # create child stats entries for swapchain flags
-                entry_swapchain_flags = entry.get('swapchain_flags', {})
-                stats = []
-                for key, value in entry_swapchain_flags.items():
-                  stats.append(models.Stats(trace=trace,
-                                            stat_type=STATS_TYPE['swapchain_flags'],
-                                            stat_name=key,
-                                            stat_count=value))
-                if len(stats) > 0:
-                  models.Stats.objects.bulk_create(stats)
-
-                # create child stats entries for feature levels
-                entry_feature_levels = entry.get('feature_levels', {})
-                stats = []
-                for key, value in entry_feature_levels.items():
-                  stats.append(models.Stats(trace=trace,
-                                            stat_type=STATS_TYPE['feature_levels'],
-                                            stat_name=key,
-                                            stat_count=value))
-                if len(stats) > 0:
-                  models.Stats.objects.bulk_create(stats)
-
-                # create child stats entries for raster states
-                entry_rastizer_states = entry.get('rastizer_states', {})
-                stats = []
-                for key, value in entry_rastizer_states.items():
-                  stats.append(models.Stats(trace=trace,
-                                            stat_type=STATS_TYPE['rastizer_states'],
-                                            stat_name=key,
-                                            stat_count=value))
-                if len(stats) > 0:
-                  models.Stats.objects.bulk_create(stats)
-
-                # create child stats entries for blend states
-                entry_blend_states = entry.get('blend_states', {})
-                stats = []
-                for key, value in entry_blend_states.items():
-                  stats.append(models.Stats(trace=trace,
-                                            stat_type=STATS_TYPE['blend_states'],
-                                            stat_name=key,
-                                            stat_count=value))
-                if len(stats) > 0:
-                  models.Stats.objects.bulk_create(stats)
-
-                # create child stats entries for usage
-                entry_usage = entry.get('usage', {})
-                stats = []
-                for key, value in entry_usage.items():
-                  stats.append(models.Stats(trace=trace,
-                                            stat_type=STATS_TYPE['usage'],
-                                            stat_name=key,
-                                            stat_count=value))
-                if len(stats) > 0:
-                  models.Stats.objects.bulk_create(stats)
-
-                # create child stats entries for bind flags
-                entry_bind_flags = entry.get('bind_flags', {})
-                stats = []
-                for key, value in entry_bind_flags.items():
-                  stats.append(models.Stats(trace=trace,
-                                            stat_type=STATS_TYPE['bind_flags'],
-                                            stat_name=key,
-                                            stat_count=value))
-                if len(stats) > 0:
-                  models.Stats.objects.bulk_create(stats)
+                for stat_type in STATS_TYPE.keys():
+                  entry_stats_values = entry.get(stat_type, {})
+                  stats = []
+                  for key, value in entry_stats_values.items():
+                    stats.append(models.Stats(trace=trace,
+                                              stat_type=STATS_TYPE[stat_type],
+                                              stat_name=key,
+                                              stat_count=value))
+                  if len(stats) > 0:
+                    models.Stats.objects.bulk_create(stats)
 
               context = {'notification_message': 'All good. You\'ve cossed the Bridge of Death.',
                          'notification_type': 'notification-success'}

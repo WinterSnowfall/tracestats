@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 '''
 @author: Winter Snowfall
-@version: 1.60
-@date: 20/11/2025
+@version: 1.70
+@date: 27/11/2025
 '''
 
 import os
@@ -95,8 +95,23 @@ SHADER_DUMP_SKIP_IDENTIFIER_D3D8_9 = 'pFunction = NULL'
 SHADER_DUMP_SKIP_IDENTIFIER_D3D10_11 = 'pShaderBytecode = NULL'
 
 ################################# DDRAW7, D3D7 #################################
+# cooperative level flags
+COOPERATIVE_LEVEL_FLAGS_CALL = 'IDirectDraw7::SetCooperativeLevel'
+COOPERATIVE_LEVEL_FLAGS_IDENTIFIER = 'dwFlags = '
+COOPERATIVE_LEVEL_FLAGS_IDENTIFIER_LENGTH = len(COOPERATIVE_LEVEL_FLAGS_IDENTIFIER)
+COOPERATIVE_LEVEL_FLAGS_IDENTIFIER_END = ')'
+COOPERATIVE_LEVEL_FLAGS_SPLIT_DELIMITER = '|'
+# surface caps
+SURFACE_CAPS_CALL = 'IDirectDraw7::CreateSurface'
+SURFACE_CAPS_IDENTIFIER = 'dwCaps = '
+SURFACE_CAPS2_IDENTIFIER = 'dwCaps2 = '
+SURFACE_CAPS_IDENTIFIER_LENGTH = len(SURFACE_CAPS_IDENTIFIER)
+SURFACE_CAPS2_IDENTIFIER_LENGTH = len(SURFACE_CAPS2_IDENTIFIER)
+SURFACE_CAPS_SPLIT_DELIMITER = '|'
+SURFACE_CAPS_SKIP_IDENTIFIER = 'dwCaps = 0x0'
+SURFACE_CAPS2_SKIP_IDENTIFIER = 'dwCaps2 = 0x0'
 # render states
-RENDER_STATES_CALL = '::SetRenderState'
+RENDER_STATES_CALL = 'IDirect3DDevice7::SetRenderState'
 RENDER_STATES_IDENTIFIER7 = 'D3DRENDERSTATE_'
 RENDER_STATES_IDENTIFIER7_LENGTH = len(RENDER_STATES_IDENTIFIER7)
 RENDER_STATES_IDENTIFIER7_END = ','
@@ -406,6 +421,8 @@ class TraceStats:
         self.blend_state_dictionary = {}
         self.usage_dictionary = {}
         self.bind_flag_dictionary = {}
+        self.cooperative_level_flags_dictionary = {}
+        self.surface_caps_dictionary = {}
 
         self.process_queue = queue.Queue(maxsize=TRACE_PARSE_QUEUE_SIZE)
         self.api_skip = threading.Event()
@@ -586,6 +603,10 @@ class TraceStats:
                             return_dictionary['usage'] = self.usage_dictionary
                         if len(self.bind_flag_dictionary) > 0:
                             return_dictionary['bind_flags'] = self.bind_flag_dictionary
+                        if len(self.cooperative_level_flags_dictionary) > 0:
+                            return_dictionary['cooperative_level_flags'] = self.cooperative_level_flags_dictionary
+                        if len(self.surface_caps_dictionary) > 0:
+                            return_dictionary['surface_caps'] = self.surface_caps_dictionary
 
                         self.json_output[JSON_BASE_KEY].append(return_dictionary)
 
@@ -651,6 +672,8 @@ class TraceStats:
                 self.blend_state_dictionary = {}
                 self.usage_dictionary = {}
                 self.bind_flag_dictionary = {}
+                self.cooperative_level_flags_dictionary = {}
+                self.surface_caps_dictionary = {}
 
             else:
                 logger.warning(f'File not found, skipping: {trace_path}')
@@ -764,6 +787,44 @@ class TraceStats:
                         # parse device behavior flags, render states, format
                         # and pool values for DDRAW7 and D3D7 apitraces
                         if self.api =='D3D7':
+                            if COOPERATIVE_LEVEL_FLAGS_CALL in call:
+                                logger.debug(f'Found cooperative level flags on line: {trace_line}')
+
+                                cooperative_level_flags_start = trace_line.find(COOPERATIVE_LEVEL_FLAGS_IDENTIFIER) + COOPERATIVE_LEVEL_FLAGS_IDENTIFIER_LENGTH
+                                cooperative_level_flags = trace_line[cooperative_level_flags_start:trace_line.find(COOPERATIVE_LEVEL_FLAGS_IDENTIFIER_END,
+                                                                                                                   cooperative_level_flags_start)].strip()
+                                cooperative_level_flags = cooperative_level_flags.split(COOPERATIVE_LEVEL_FLAGS_SPLIT_DELIMITER)
+
+                                for cooperative_level_flag in cooperative_level_flags:
+                                    cooperative_level_flag_stripped = cooperative_level_flag.strip()
+                                    existing_value = self.cooperative_level_flags_dictionary.get(cooperative_level_flag_stripped, 0)
+                                    self.cooperative_level_flags_dictionary[cooperative_level_flag_stripped] = existing_value + 1
+
+                            if SURFACE_CAPS_CALL in call:
+                                logger.debug(f'Found surface caps on line: {trace_line}')
+
+                                if SURFACE_CAPS_SKIP_IDENTIFIER not in trace_line:
+                                    surface_caps_start = trace_line.find(SURFACE_CAPS_IDENTIFIER) + SURFACE_CAPS_IDENTIFIER_LENGTH
+                                    surface_caps = trace_line[surface_caps_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
+                                                                                                 surface_caps_start)].strip()
+                                    surface_caps = surface_caps.split(SURFACE_CAPS_SPLIT_DELIMITER)
+
+                                    for surface_cap in surface_caps:
+                                        surface_cap_stripped = surface_cap.strip()
+                                        existing_value = self.surface_caps_dictionary.get(surface_cap_stripped, 0)
+                                        self.surface_caps_dictionary[surface_cap_stripped] = existing_value + 1
+
+                                if SURFACE_CAPS2_SKIP_IDENTIFIER not in trace_line:
+                                    surface_caps2_start = trace_line.find(SURFACE_CAPS2_IDENTIFIER) + SURFACE_CAPS2_IDENTIFIER_LENGTH
+                                    surface_caps2 = trace_line[surface_caps2_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
+                                                                                                   surface_caps2_start)].strip()
+                                    surface_caps2 = surface_caps2.split(SURFACE_CAPS_SPLIT_DELIMITER)
+
+                                    for surface_cap2 in surface_caps2:
+                                        surface_cap2_stripped = surface_cap2.strip()
+                                        existing_value = self.surface_caps_dictionary.get(surface_cap2_stripped, 0)
+                                        self.surface_caps_dictionary[surface_cap2_stripped] = existing_value + 1
+
                             if RENDER_STATES_CALL in call:
                                 logger.debug(f'Found render states on line: {trace_line}')
 
