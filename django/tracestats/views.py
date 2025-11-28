@@ -65,7 +65,8 @@ STATS_TYPE = {'api_calls': 1,
               'blend_states': 21,
               'bind_flags': 22,
               'cooperative_level_flags': 23,
-              'surface_caps': 24}
+              'flip_flags': 24,
+              'surface_caps': 25}
 SEARCH_RESULTS_LIMIT = 999
 
 def tracestats(request):

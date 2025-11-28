@@ -200,6 +200,7 @@ class TraceAppNames:
         'CSDGOGBuild':                                     ('Cook, Serve, Delicious!', None, 'D3D9Ex'),
         'CSD2':                                            ('Cook, Serve, Delicious! 2!!', None, 'D3D11'),
         'cs2':                                             ('Counter-Strike 2', None, 'D3D11'),
+        'csgo':                                            ('Counter-Strike: Global Offensive', None, 'D3D9Ex'),
         'CT3':                                             ('Crazy Taxi 3: High Roller', None, 'D3D9'),
         'Cuphead':                                         (None, None, 'D3D11'),
         'Curse':                                           ('Curse: The Eye of Isis', None, 'D3D8'),

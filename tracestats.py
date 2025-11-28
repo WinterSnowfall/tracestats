@@ -110,11 +110,26 @@ SURFACE_CAPS2_IDENTIFIER_LENGTH = len(SURFACE_CAPS2_IDENTIFIER)
 SURFACE_CAPS_SPLIT_DELIMITER = '|'
 SURFACE_CAPS_SKIP_IDENTIFIER = 'dwCaps = 0x0'
 SURFACE_CAPS2_SKIP_IDENTIFIER = 'dwCaps2 = 0x0'
+# flip flags
+FLIP_FLAGS_CALL = 'IDirectDrawSurface7::Flip'
+FLIP_FLAGS_IDENTIFIER = 'dwFlags = '
+FLIP_FLAGS_IDENTIFIER_LENGTH = len(FLIP_FLAGS_IDENTIFIER)
+FLIP_FLAGS_IDENTIFIER_END = ')'
+FLIP_FLAGS_SPLIT_DELIMITER = '|'
+FLIP_FLAGS_SKIP_IDENTIFIER = 'dwFlags = 0x0'
 # render states
 RENDER_STATES_CALL = 'IDirect3DDevice7::SetRenderState'
 RENDER_STATES_IDENTIFIER7 = 'D3DRENDERSTATE_'
 RENDER_STATES_IDENTIFIER7_LENGTH = len(RENDER_STATES_IDENTIFIER7)
 RENDER_STATES_IDENTIFIER7_END = ','
+# lock flags
+LOCK_FLAGS_SURFACE_CALL7 = 'IDirectDrawSurface7::Lock'
+LOCK_FLAGS_BUFFER_CALL7 = 'IDirect3DVertexBuffer7::Lock'
+LOCK_FLAGS_IDENTIFIER7 = 'dwFlags = '
+LOCK_FLAGS_IDENTIFIER7_LENGTH = len(LOCK_FLAGS_IDENTIFIER7)
+LOCK_FLAGS_VALUE_IDENTIFIER7 = 'DDLOCK_'
+LOCK_FLAGS_SKIP_IDENTIFIER7 = 'dwFlags = 0x0'
+LOCK_FLAGS_SPLIT_DELIMITER7 = '|'
 ################################# DDRAW7, D3D7 #################################
 
 ############################## D3D8, D3D9Ex, D3D9 ##############################
@@ -422,6 +437,7 @@ class TraceStats:
         self.usage_dictionary = {}
         self.bind_flag_dictionary = {}
         self.cooperative_level_flags_dictionary = {}
+        self.flip_flags_dictionary = {}
         self.surface_caps_dictionary = {}
 
         self.process_queue = queue.Queue(maxsize=TRACE_PARSE_QUEUE_SIZE)
@@ -605,6 +621,8 @@ class TraceStats:
                             return_dictionary['bind_flags'] = self.bind_flag_dictionary
                         if len(self.cooperative_level_flags_dictionary) > 0:
                             return_dictionary['cooperative_level_flags'] = self.cooperative_level_flags_dictionary
+                        if len(self.flip_flags_dictionary) > 0:
+                            return_dictionary['flip_flags'] = self.flip_flags_dictionary
                         if len(self.surface_caps_dictionary) > 0:
                             return_dictionary['surface_caps'] = self.surface_caps_dictionary
 
@@ -673,6 +691,7 @@ class TraceStats:
                 self.usage_dictionary = {}
                 self.bind_flag_dictionary = {}
                 self.cooperative_level_flags_dictionary = {}
+                self.flip_flags_dictionary = {}
                 self.surface_caps_dictionary = {}
 
             else:
@@ -800,7 +819,7 @@ class TraceStats:
                                     existing_value = self.cooperative_level_flags_dictionary.get(cooperative_level_flag_stripped, 0)
                                     self.cooperative_level_flags_dictionary[cooperative_level_flag_stripped] = existing_value + 1
 
-                            if SURFACE_CAPS_CALL in call:
+                            elif SURFACE_CAPS_CALL in call:
                                 logger.debug(f'Found surface caps on line: {trace_line}')
 
                                 if SURFACE_CAPS_SKIP_IDENTIFIER not in trace_line:
@@ -825,7 +844,41 @@ class TraceStats:
                                         existing_value = self.surface_caps_dictionary.get(surface_cap2_stripped, 0)
                                         self.surface_caps_dictionary[surface_cap2_stripped] = existing_value + 1
 
-                            if RENDER_STATES_CALL in call:
+                            elif FLIP_FLAGS_CALL in call:
+                                logger.debug(f'Found flip flags on line: {trace_line}')
+
+                                if FLIP_FLAGS_SKIP_IDENTIFIER not in trace_line:
+                                    flip_flags_start = trace_line.find(FLIP_FLAGS_IDENTIFIER) + FLIP_FLAGS_IDENTIFIER_LENGTH
+                                    flip_flags = trace_line[flip_flags_start:trace_line.find(FLIP_FLAGS_IDENTIFIER_END,
+                                                                                            flip_flags_start)].strip()
+                                    flip_flags = flip_flags.split(FLIP_FLAGS_SPLIT_DELIMITER)
+
+                                    for flip_flag in flip_flags:
+                                        flip_flag_stripped = flip_flag.strip()
+                                        existing_value = self.flip_flags_dictionary.get(flip_flag_stripped, 0)
+                                        self.flip_flags_dictionary[flip_flag_stripped] = existing_value + 1
+
+                            elif LOCK_FLAGS_SURFACE_CALL7 in call or LOCK_FLAGS_BUFFER_CALL7 in call:
+                                logger.debug(f'Found lock flags on line: {trace_line}')
+
+                                # IDirectDrawSurface7::Lock actually has two sets of dwFlags, with the latter
+                                # being the one related to the actual locks, and what we are interested in
+                                if LOCK_FLAGS_SKIP_IDENTIFIER7 not in trace_line:
+                                    lock_flags_start = trace_line.rfind(LOCK_FLAGS_IDENTIFIER7) + LOCK_FLAGS_IDENTIFIER7_LENGTH
+                                    lock_flags = trace_line[lock_flags_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
+                                                                                             lock_flags_start)].strip()
+
+                                    lock_flags = lock_flags.split(LOCK_FLAGS_SPLIT_DELIMITER7)
+
+                                    for lock_flag in lock_flags:
+                                        lock_flag_stripped = lock_flag.strip()
+
+                                        # Praetorians sets several bogus lock values (not part of the enum)
+                                        if lock_flag_stripped.startswith(LOCK_FLAGS_VALUE_IDENTIFIER7):
+                                            existing_value = self.lock_flag_dictionary.get(lock_flag_stripped, 0)
+                                            self.lock_flag_dictionary[lock_flag_stripped] = existing_value + 1
+
+                            elif RENDER_STATES_CALL in call:
                                 logger.debug(f'Found render states on line: {trace_line}')
 
                                 render_state_start = trace_line.find(RENDER_STATES_IDENTIFIER7)
@@ -975,22 +1028,23 @@ class TraceStats:
                                 existing_value = self.query_type_dictionary.get(query_type, 0)
                                 self.query_type_dictionary[query_type] = existing_value + 1
 
-                            elif LOCK_FLAGS_CALL in call and LOCK_FLAGS_SKIP_IDENTIFIER not in trace_line:
+                            elif LOCK_FLAGS_CALL in call:
                                 logger.debug(f'Found lock flags on line: {trace_line}')
 
-                                lock_flags_start = trace_line.find(LOCK_FLAGS_IDENTIFIER) + LOCK_FLAGS_IDENTIFIER_LENGTH
-                                lock_flags = trace_line[lock_flags_start:trace_line.find(LOCK_FLAGS_IDENTIFIER_END,
-                                                                                         lock_flags_start)].strip()
+                                if LOCK_FLAGS_SKIP_IDENTIFIER not in trace_line:
+                                    lock_flags_start = trace_line.find(LOCK_FLAGS_IDENTIFIER) + LOCK_FLAGS_IDENTIFIER_LENGTH
+                                    lock_flags = trace_line[lock_flags_start:trace_line.find(LOCK_FLAGS_IDENTIFIER_END,
+                                                                                            lock_flags_start)].strip()
 
-                                lock_flags = lock_flags.split(LOCK_FLAGS_SPLIT_DELIMITER)
+                                    lock_flags = lock_flags.split(LOCK_FLAGS_SPLIT_DELIMITER)
 
-                                for lock_flag in lock_flags:
-                                    lock_flag_stripped = lock_flag.strip()
+                                    for lock_flag in lock_flags:
+                                        lock_flag_stripped = lock_flag.strip()
 
-                                    # Mafia sets several bogus lock values (not part of the enum)
-                                    if lock_flag_stripped.startswith(LOCK_FLAGS_VALUE_IDENTIFIER):
-                                        existing_value = self.lock_flag_dictionary.get(lock_flag_stripped, 0)
-                                        self.lock_flag_dictionary[lock_flag_stripped] = existing_value + 1
+                                        # Mafia sets several bogus lock values (not part of the enum)
+                                        if lock_flag_stripped.startswith(LOCK_FLAGS_VALUE_IDENTIFIER):
+                                            existing_value = self.lock_flag_dictionary.get(lock_flag_stripped, 0)
+                                            self.lock_flag_dictionary[lock_flag_stripped] = existing_value + 1
 
                             # shader version identifiers can either be part of CreateVertexShader/CreatePixelShader
                             # calls, or included as part of an additional line below those calls in apitrace dumps
@@ -1065,24 +1119,25 @@ class TraceStats:
                                     existing_value = self.format_dictionary.get(format_value, 0)
                                     self.format_dictionary[format_value] = existing_value + 1
 
-                                if USAGE_IDENTIFIER in trace_line and USAGE_SKIP_IDENTIFIER not in trace_line:
+                                if USAGE_IDENTIFIER in trace_line:
                                     logger.debug(f'Found usage on line: {trace_line}')
 
-                                    usage_start = trace_line.find(USAGE_IDENTIFIER) + USAGE_IDENTIFIER_LENGTH
-                                    # Usually, usage values will end on a comma
-                                    usage_end = trace_line.find(API_ENTRY_VALUE_DELIMITER, usage_start)
-                                    # In D3D8, usage values are also included in CreateVertexShader
-                                    # calls, where they sit at the end of the parameter list
-                                    if usage_end == -1:
-                                        usage_end = trace_line.find(USAGE_IDENTIFIER_END_D3D8, usage_start)
-                                    usage_values = trace_line[usage_start:usage_end].strip()
-                                    usage_values = usage_values.split(USAGE_SPLIT_DELIMITER)
+                                    if USAGE_SKIP_IDENTIFIER not in trace_line:
+                                        usage_start = trace_line.find(USAGE_IDENTIFIER) + USAGE_IDENTIFIER_LENGTH
+                                        # Usually, usage values will end on a comma
+                                        usage_end = trace_line.find(API_ENTRY_VALUE_DELIMITER, usage_start)
+                                        # In D3D8, usage values are also included in CreateVertexShader
+                                        # calls, where they sit at the end of the parameter list
+                                        if usage_end == -1:
+                                            usage_end = trace_line.find(USAGE_IDENTIFIER_END_D3D8, usage_start)
+                                        usage_values = trace_line[usage_start:usage_end].strip()
+                                        usage_values = usage_values.split(USAGE_SPLIT_DELIMITER)
 
-                                    for usage_value in usage_values:
-                                        usage_value_stripped = usage_value.strip()
-                                        if usage_value_stripped.startswith(USAGE_VALUE_IDENTIFIER):
-                                            existing_value = self.usage_dictionary.get(usage_value_stripped, 0)
-                                            self.usage_dictionary[usage_value_stripped] = existing_value + 1
+                                        for usage_value in usage_values:
+                                            usage_value_stripped = usage_value.strip()
+                                            if usage_value_stripped.startswith(USAGE_VALUE_IDENTIFIER):
+                                                existing_value = self.usage_dictionary.get(usage_value_stripped, 0)
+                                                self.usage_dictionary[usage_value_stripped] = existing_value + 1
 
                                 if POOL_IDENTIFIER in trace_line:
                                     logger.debug(f'Found pool on line: {trace_line}')
@@ -1329,19 +1384,20 @@ class TraceStats:
                                         existing_value = self.usage_dictionary.get(usage_value, 0)
                                         self.usage_dictionary[usage_value] = existing_value + 1
 
-                                if BIND_FLAGS_IDENTIFIER in trace_line and BIND_FLAGS_SKIP_IDENTIFIER not in trace_line:
+                                if BIND_FLAGS_IDENTIFIER in trace_line:
                                     logger.debug(f'Found bind flags on line: {trace_line}')
 
-                                    bind_flags_start = trace_line.find(BIND_FLAGS_IDENTIFIER) + BIND_FLAGS_IDENTIFIER_LENGTH
-                                    bind_flags = trace_line[bind_flags_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
-                                                                                             bind_flags_start)].strip()
+                                    if BIND_FLAGS_SKIP_IDENTIFIER not in trace_line:
+                                        bind_flags_start = trace_line.find(BIND_FLAGS_IDENTIFIER) + BIND_FLAGS_IDENTIFIER_LENGTH
+                                        bind_flags = trace_line[bind_flags_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
+                                                                                                bind_flags_start)].strip()
 
-                                    bind_flags = bind_flags.split(BIND_FLAGS_SPLIT_DELIMITER)
+                                        bind_flags = bind_flags.split(BIND_FLAGS_SPLIT_DELIMITER)
 
-                                    for bind_flag in bind_flags:
-                                        bind_flag_stripped = bind_flag.strip()
-                                        existing_value = self.bind_flag_dictionary.get(bind_flag_stripped, 0)
-                                        self.bind_flag_dictionary[bind_flag_stripped] = existing_value + 1
+                                        for bind_flag in bind_flags:
+                                            bind_flag_stripped = bind_flag.strip()
+                                            existing_value = self.bind_flag_dictionary.get(bind_flag_stripped, 0)
+                                            self.bind_flag_dictionary[bind_flag_stripped] = existing_value + 1
 
                     else:
                         # these will usually be (numbered) memcpy lines
