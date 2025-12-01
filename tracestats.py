@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 '''
 @author: Winter Snowfall
-@version: 1.70
-@date: 27/11/2025
+@version: 1.71
+@date: 30/11/2025
 '''
 
 import os
@@ -118,7 +118,7 @@ FLIP_FLAGS_IDENTIFIER_END = ')'
 FLIP_FLAGS_SPLIT_DELIMITER = '|'
 FLIP_FLAGS_SKIP_IDENTIFIER = 'dwFlags = 0x0'
 # render states
-RENDER_STATES_CALL = 'IDirect3DDevice7::SetRenderState'
+RENDER_STATES_CALL7 = 'IDirect3DDevice7::SetRenderState'
 RENDER_STATES_IDENTIFIER7 = 'D3DRENDERSTATE_'
 RENDER_STATES_IDENTIFIER7_LENGTH = len(RENDER_STATES_IDENTIFIER7)
 RENDER_STATES_IDENTIFIER7_END = ','
@@ -130,6 +130,10 @@ LOCK_FLAGS_IDENTIFIER7_LENGTH = len(LOCK_FLAGS_IDENTIFIER7)
 LOCK_FLAGS_VALUE_IDENTIFIER7 = 'DDLOCK_'
 LOCK_FLAGS_SKIP_IDENTIFIER7 = 'dwFlags = 0x0'
 LOCK_FLAGS_SPLIT_DELIMITER7 = '|'
+# device type
+DEVICE_CREATION_CALL7 = 'IDirect3D7::CreateDevice'
+DEVICE_TYPE_IDENTIFIER7 = 'rclsid = '
+DEVICE_TYPE_IDENTIFIER7_LENGTH = len(DEVICE_TYPE_IDENTIFIER7)
 ################################# DDRAW7, D3D7 #################################
 
 ############################## D3D8, D3D9Ex, D3D9 ##############################
@@ -436,9 +440,9 @@ class TraceStats:
         self.blend_state_dictionary = {}
         self.usage_dictionary = {}
         self.bind_flag_dictionary = {}
-        self.cooperative_level_flags_dictionary = {}
-        self.flip_flags_dictionary = {}
-        self.surface_caps_dictionary = {}
+        self.cooperative_level_flag_dictionary = {}
+        self.flip_flag_dictionary = {}
+        self.surface_cap_dictionary = {}
 
         self.process_queue = queue.Queue(maxsize=TRACE_PARSE_QUEUE_SIZE)
         self.api_skip = threading.Event()
@@ -619,12 +623,12 @@ class TraceStats:
                             return_dictionary['usage'] = self.usage_dictionary
                         if len(self.bind_flag_dictionary) > 0:
                             return_dictionary['bind_flags'] = self.bind_flag_dictionary
-                        if len(self.cooperative_level_flags_dictionary) > 0:
-                            return_dictionary['cooperative_level_flags'] = self.cooperative_level_flags_dictionary
-                        if len(self.flip_flags_dictionary) > 0:
-                            return_dictionary['flip_flags'] = self.flip_flags_dictionary
-                        if len(self.surface_caps_dictionary) > 0:
-                            return_dictionary['surface_caps'] = self.surface_caps_dictionary
+                        if len(self.cooperative_level_flag_dictionary) > 0:
+                            return_dictionary['cooperative_level_flags'] = self.cooperative_level_flag_dictionary
+                        if len(self.flip_flag_dictionary) > 0:
+                            return_dictionary['flip_flags'] = self.flip_flag_dictionary
+                        if len(self.surface_cap_dictionary) > 0:
+                            return_dictionary['surface_caps'] = self.surface_cap_dictionary
 
                         self.json_output[JSON_BASE_KEY].append(return_dictionary)
 
@@ -690,9 +694,9 @@ class TraceStats:
                 self.blend_state_dictionary = {}
                 self.usage_dictionary = {}
                 self.bind_flag_dictionary = {}
-                self.cooperative_level_flags_dictionary = {}
-                self.flip_flags_dictionary = {}
-                self.surface_caps_dictionary = {}
+                self.cooperative_level_flag_dictionary = {}
+                self.flip_flag_dictionary = {}
+                self.surface_cap_dictionary = {}
 
             else:
                 logger.warning(f'File not found, skipping: {trace_path}')
@@ -816,8 +820,8 @@ class TraceStats:
 
                                 for cooperative_level_flag in cooperative_level_flags:
                                     cooperative_level_flag_stripped = cooperative_level_flag.strip()
-                                    existing_value = self.cooperative_level_flags_dictionary.get(cooperative_level_flag_stripped, 0)
-                                    self.cooperative_level_flags_dictionary[cooperative_level_flag_stripped] = existing_value + 1
+                                    existing_value = self.cooperative_level_flag_dictionary.get(cooperative_level_flag_stripped, 0)
+                                    self.cooperative_level_flag_dictionary[cooperative_level_flag_stripped] = existing_value + 1
 
                             elif SURFACE_CAPS_CALL in call:
                                 logger.debug(f'Found surface caps on line: {trace_line}')
@@ -830,8 +834,8 @@ class TraceStats:
 
                                     for surface_cap in surface_caps:
                                         surface_cap_stripped = surface_cap.strip()
-                                        existing_value = self.surface_caps_dictionary.get(surface_cap_stripped, 0)
-                                        self.surface_caps_dictionary[surface_cap_stripped] = existing_value + 1
+                                        existing_value = self.surface_cap_dictionary.get(surface_cap_stripped, 0)
+                                        self.surface_cap_dictionary[surface_cap_stripped] = existing_value + 1
 
                                 if SURFACE_CAPS2_SKIP_IDENTIFIER not in trace_line:
                                     surface_caps2_start = trace_line.find(SURFACE_CAPS2_IDENTIFIER) + SURFACE_CAPS2_IDENTIFIER_LENGTH
@@ -841,8 +845,8 @@ class TraceStats:
 
                                     for surface_cap2 in surface_caps2:
                                         surface_cap2_stripped = surface_cap2.strip()
-                                        existing_value = self.surface_caps_dictionary.get(surface_cap2_stripped, 0)
-                                        self.surface_caps_dictionary[surface_cap2_stripped] = existing_value + 1
+                                        existing_value = self.surface_cap_dictionary.get(surface_cap2_stripped, 0)
+                                        self.surface_cap_dictionary[surface_cap2_stripped] = existing_value + 1
 
                             elif FLIP_FLAGS_CALL in call:
                                 logger.debug(f'Found flip flags on line: {trace_line}')
@@ -855,8 +859,8 @@ class TraceStats:
 
                                     for flip_flag in flip_flags:
                                         flip_flag_stripped = flip_flag.strip()
-                                        existing_value = self.flip_flags_dictionary.get(flip_flag_stripped, 0)
-                                        self.flip_flags_dictionary[flip_flag_stripped] = existing_value + 1
+                                        existing_value = self.flip_flag_dictionary.get(flip_flag_stripped, 0)
+                                        self.flip_flag_dictionary[flip_flag_stripped] = existing_value + 1
 
                             elif LOCK_FLAGS_SURFACE_CALL7 in call or LOCK_FLAGS_BUFFER_CALL7 in call:
                                 logger.debug(f'Found lock flags on line: {trace_line}')
@@ -878,7 +882,7 @@ class TraceStats:
                                             existing_value = self.lock_flag_dictionary.get(lock_flag_stripped, 0)
                                             self.lock_flag_dictionary[lock_flag_stripped] = existing_value + 1
 
-                            elif RENDER_STATES_CALL in call:
+                            elif RENDER_STATES_CALL7 in call:
                                 logger.debug(f'Found render states on line: {trace_line}')
 
                                 render_state_start = trace_line.find(RENDER_STATES_IDENTIFIER7)
@@ -889,6 +893,16 @@ class TraceStats:
 
                                     existing_value = self.render_state_dictionary.get(render_state, 0)
                                     self.render_state_dictionary[render_state] = existing_value + 1
+
+                            elif DEVICE_CREATION_CALL7 in call:
+                                logger.debug(f'Found device type flags on line: {trace_line}')
+
+                                device_type_start = trace_line.find(DEVICE_TYPE_IDENTIFIER7) + DEVICE_TYPE_IDENTIFIER7_LENGTH
+                                device_type = trace_line[device_type_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
+                                                                                           device_type_start)].strip()
+
+                                existing_value = self.device_type_dictionary.get(device_type, 0)
+                                self.device_type_dictionary[device_type] = existing_value + 1
 
                         # parse device behavior flags, render states, format
                         # and pool values for D3D8, D3D9Ex, and D3D9 apitraces
