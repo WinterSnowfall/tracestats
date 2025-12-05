@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 '''
 @author: Winter Snowfall
-@version: 1.71
-@date: 30/11/2025
+@version: 1.72
+@date: 05/12/2025
 '''
 
 import os
@@ -94,6 +94,12 @@ API_ENTRY_VALUE_DELIMITER = ','
 SHADER_DUMP_SKIP_IDENTIFIER_D3D8_9 = 'pFunction = NULL'
 SHADER_DUMP_SKIP_IDENTIFIER_D3D10_11 = 'pShaderBytecode = NULL'
 
+# D3D7 vertex buffer capability flags
+D3DVBCAPS_SYSTEMMEMORY = 0x00000800
+D3DVBCAPS_WRITEONLY    = 0x00010000
+D3DVBCAPS_OPTIMIZED    = 0x80000000
+D3DVBCAPS_DONOTCLIP    = 0x00000001
+
 ################################# DDRAW7, D3D7 #################################
 # cooperative level flags
 COOPERATIVE_LEVEL_FLAGS_CALL = 'IDirectDraw7::SetCooperativeLevel'
@@ -110,6 +116,12 @@ SURFACE_CAPS2_IDENTIFIER_LENGTH = len(SURFACE_CAPS2_IDENTIFIER)
 SURFACE_CAPS_SPLIT_DELIMITER = '|'
 SURFACE_CAPS_SKIP_IDENTIFIER = 'dwCaps = 0x0'
 SURFACE_CAPS2_SKIP_IDENTIFIER = 'dwCaps2 = 0x0'
+# vertex buffer caps
+VERTEX_BUFFER_CAPS_CALL = 'IDirect3D7::CreateVertexBuffer'
+VERTEX_BUFFER_CAPS_IDENTIFIER = 'dwCaps = '
+VERTEX_BUFFER_CAPS_IDENTIFIER_LENGTH = len(SURFACE_CAPS_IDENTIFIER)
+VERTEX_BUFFER_CAPS_SPLIT_DELIMITER = '|'
+VERTEX_BUFFER_CAPS_SKIP_IDENTIFIER = 'dwCaps = 0x0'
 # flip flags
 FLIP_FLAGS_CALL = 'IDirectDrawSurface7::Flip'
 FLIP_FLAGS_IDENTIFIER = 'dwFlags = '
@@ -443,6 +455,7 @@ class TraceStats:
         self.cooperative_level_flag_dictionary = {}
         self.flip_flag_dictionary = {}
         self.surface_cap_dictionary = {}
+        self.vertex_buffer_cap_dictionary = {}
 
         self.process_queue = queue.Queue(maxsize=TRACE_PARSE_QUEUE_SIZE)
         self.api_skip = threading.Event()
@@ -629,6 +642,8 @@ class TraceStats:
                             return_dictionary['flip_flags'] = self.flip_flag_dictionary
                         if len(self.surface_cap_dictionary) > 0:
                             return_dictionary['surface_caps'] = self.surface_cap_dictionary
+                        if len(self.vertex_buffer_cap_dictionary) > 0:
+                            return_dictionary['vertex_buffer_caps'] = self.vertex_buffer_cap_dictionary
 
                         self.json_output[JSON_BASE_KEY].append(return_dictionary)
 
@@ -697,6 +712,7 @@ class TraceStats:
                 self.cooperative_level_flag_dictionary = {}
                 self.flip_flag_dictionary = {}
                 self.surface_cap_dictionary = {}
+                self.vertex_buffer_cap_dictionary = {}
 
             else:
                 logger.warning(f'File not found, skipping: {trace_path}')
@@ -847,6 +863,32 @@ class TraceStats:
                                         surface_cap2_stripped = surface_cap2.strip()
                                         existing_value = self.surface_cap_dictionary.get(surface_cap2_stripped, 0)
                                         self.surface_cap_dictionary[surface_cap2_stripped] = existing_value + 1
+
+                            elif VERTEX_BUFFER_CAPS_CALL in call:
+                                logger.debug(f'Found vertex buffer caps on line: {trace_line}')
+
+                                if VERTEX_BUFFER_CAPS_SKIP_IDENTIFIER not in trace_line:
+                                    vertex_buffer_caps_start = trace_line.find(VERTEX_BUFFER_CAPS_IDENTIFIER) + VERTEX_BUFFER_CAPS_IDENTIFIER_LENGTH
+                                    vertex_buffer_caps = trace_line[vertex_buffer_caps_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
+                                                                                                             vertex_buffer_caps_start)].strip()
+                                    #vertex_buffer_caps = vertex_buffer_caps.split(VERTEX_BUFFER_CAPS_SPLIT_DELIMITER)
+                                    vertex_buffer_caps = int(vertex_buffer_caps)
+
+                                    # apitrace does not currently convert any of these, so we'll have to do it ourselves
+                                    vertex_buffer_caps_actual = []
+                                    if vertex_buffer_caps & D3DVBCAPS_SYSTEMMEMORY:
+                                        vertex_buffer_caps_actual.append('D3DVBCAPS_SYSTEMMEMORY')
+                                    if vertex_buffer_caps & D3DVBCAPS_WRITEONLY:
+                                        vertex_buffer_caps_actual.append('D3DVBCAPS_WRITEONLY')
+                                    if vertex_buffer_caps & D3DVBCAPS_OPTIMIZED:
+                                        vertex_buffer_caps_actual.append('D3DVBCAPS_OPTIMIZED')
+                                    if vertex_buffer_caps & D3DVBCAPS_DONOTCLIP:
+                                        vertex_buffer_caps_actual.append('D3DVBCAPS_DONOTCLIP')
+
+                                    for vertex_buffer_cap in vertex_buffer_caps_actual:
+                                        vertex_buffer_cap_stripped = vertex_buffer_cap.strip()
+                                        existing_value = self.vertex_buffer_cap_dictionary.get(vertex_buffer_cap_stripped, 0)
+                                        self.vertex_buffer_cap_dictionary[vertex_buffer_cap_stripped] = existing_value + 1
 
                             elif FLIP_FLAGS_CALL in call:
                                 logger.debug(f'Found flip flags on line: {trace_line}')
