@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 '''
 @author: Winter Snowfall
-@version: 1.72
-@date: 05/12/2025
+@version: 1.73
+@date: 09/12/2025
 '''
 
 import os
@@ -89,6 +89,13 @@ KNOWN_FOURCC_FORMATS = ('EXT1', 'FXT1', 'GXT1', 'HXT1',
                        # FOURCCs specific to Freelancer
                         'DAA1', 'DAA8', 'DAOP', 'DAOT')
 
+# list of known D3D7 FOURCCs (to check for completion)
+D3D7_FOURCC_FORMATS = {'827611204': 'DXT1',
+                       '844388420': 'DXT2',
+                       '861165636': 'DXT3',
+                       '877942852': 'DXT4',
+                       '894720068': 'DXT5'}
+
 API_ENTRY_CALL_IDENTIFIER = '::'
 API_ENTRY_VALUE_DELIMITER = ','
 SHADER_DUMP_SKIP_IDENTIFIER_D3D8_9 = 'pFunction = NULL'
@@ -116,6 +123,16 @@ SURFACE_CAPS2_IDENTIFIER_LENGTH = len(SURFACE_CAPS2_IDENTIFIER)
 SURFACE_CAPS_SPLIT_DELIMITER = '|'
 SURFACE_CAPS_SKIP_IDENTIFIER = 'dwCaps = 0x0'
 SURFACE_CAPS2_SKIP_IDENTIFIER = 'dwCaps2 = 0x0'
+# pixel formats
+PIXEL_FORMAT_IDENTIFIER = 'ddpfPixelFormat = '
+PIXEL_FORMAT_SKIP_IDENTIFIER = 'ddpfPixelFormat = {dwSize = 0'
+PIXEL_FORMAT_FLAGS_IDENTIFIER = 'dwFlags = '
+PIXEL_FORMAT_FLAGS_IDENTIFIER_LENGTH = len(PIXEL_FORMAT_FLAGS_IDENTIFIER)
+PIXEL_FORMAT_FLAGS_DELIMITER = '|'
+PIXEL_FORMAT_FLAGS_SKIP_VALUE = '0x0'
+PIXEL_FORMAT_IDENTIFIER_FOURCC = 'dwFourCC = '
+PIXEL_FORMAT_IDENTIFIER_FOURCC_LENGTH = len(PIXEL_FORMAT_IDENTIFIER_FOURCC)
+PIXEL_FORMAT_PREFIX = 'D3DFMT_'
 # vertex buffer caps
 VERTEX_BUFFER_CAPS_CALL = 'IDirect3D7::CreateVertexBuffer'
 VERTEX_BUFFER_CAPS_IDENTIFIER = 'dwCaps = '
@@ -440,6 +457,7 @@ class TraceStats:
         self.query_type_dictionary = {}
         self.lock_flag_dictionary = {}
         self.shader_version_dictionary = {}
+        self.pixel_format_dictionary = {}
         self.format_dictionary = {}
         self.vendor_hack_dictionary = {}
         self.pool_dictionary = {}
@@ -612,6 +630,8 @@ class TraceStats:
                             return_dictionary['lock_flags'] = self.lock_flag_dictionary
                         if len(self.shader_version_dictionary) > 0:
                             return_dictionary['shader_versions'] = self.shader_version_dictionary
+                        if len(self.pixel_format_dictionary) > 0:
+                            return_dictionary['pixel_formats'] = self.pixel_format_dictionary
                         if len(self.format_dictionary) > 0:
                             return_dictionary['formats'] = self.format_dictionary
                         if len(self.vendor_hack_dictionary) > 0:
@@ -697,6 +717,7 @@ class TraceStats:
                 self.query_type_dictionary = {}
                 self.lock_flag_dictionary = {}
                 self.shader_version_dictionary = {}
+                self.pixel_format_dictionary = {}
                 self.format_dictionary = {}
                 self.vendor_hack_dictionary = {}
                 self.pool_dictionary = {}
@@ -840,8 +861,9 @@ class TraceStats:
                                     self.cooperative_level_flag_dictionary[cooperative_level_flag_stripped] = existing_value + 1
 
                             elif SURFACE_CAPS_CALL in call:
-                                logger.debug(f'Found surface caps on line: {trace_line}')
+                                logger.debug(f'Found surface caps and pixel format flags on line: {trace_line}')
 
+                                # dwCaps
                                 if SURFACE_CAPS_SKIP_IDENTIFIER not in trace_line:
                                     surface_caps_start = trace_line.find(SURFACE_CAPS_IDENTIFIER) + SURFACE_CAPS_IDENTIFIER_LENGTH
                                     surface_caps = trace_line[surface_caps_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
@@ -853,6 +875,7 @@ class TraceStats:
                                         existing_value = self.surface_cap_dictionary.get(surface_cap_stripped, 0)
                                         self.surface_cap_dictionary[surface_cap_stripped] = existing_value + 1
 
+                                # dwCaps2
                                 if SURFACE_CAPS2_SKIP_IDENTIFIER not in trace_line:
                                     surface_caps2_start = trace_line.find(SURFACE_CAPS2_IDENTIFIER) + SURFACE_CAPS2_IDENTIFIER_LENGTH
                                     surface_caps2 = trace_line[surface_caps2_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
@@ -863,6 +886,32 @@ class TraceStats:
                                         surface_cap2_stripped = surface_cap2.strip()
                                         existing_value = self.surface_cap_dictionary.get(surface_cap2_stripped, 0)
                                         self.surface_cap_dictionary[surface_cap2_stripped] = existing_value + 1
+
+                                # ddpfPixelFormat
+                                if PIXEL_FORMAT_IDENTIFIER in trace_line and PIXEL_FORMAT_SKIP_IDENTIFIER not in trace_line:
+                                    pixel_formats_start = trace_line.rfind(PIXEL_FORMAT_FLAGS_IDENTIFIER) + PIXEL_FORMAT_FLAGS_IDENTIFIER_LENGTH
+                                    pixel_formats = trace_line[pixel_formats_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
+                                                                                                   pixel_formats_start)].strip()
+                                    if pixel_formats != PIXEL_FORMAT_FLAGS_SKIP_VALUE:
+                                        pixel_formats = pixel_formats.split(PIXEL_FORMAT_FLAGS_DELIMITER)
+
+                                        for pixel_format in pixel_formats:
+                                            pixel_format_stripped = pixel_format.strip()
+                                            existing_value = self.pixel_format_dictionary.get(pixel_format_stripped, 0)
+                                            self.pixel_format_dictionary[pixel_format_stripped] = existing_value + 1
+
+                                        # FOURCC detection
+                                        pixel_format_fourcc_start = trace_line.find(PIXEL_FORMAT_IDENTIFIER_FOURCC) + PIXEL_FORMAT_IDENTIFIER_FOURCC_LENGTH
+                                        pixel_format_fourcc = trace_line[pixel_format_fourcc_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
+                                                                                                                   pixel_format_fourcc_start)].strip()
+
+                                        if pixel_format_fourcc in D3D7_FOURCC_FORMATS.keys():
+                                            logger.debug(f'Found FOURCC on line: {trace_line}')
+
+                                            pixel_format_fourcc_lookup = D3D7_FOURCC_FORMATS[pixel_format_fourcc]
+                                            pixel_format_fourcc_decoded = ''.join((PIXEL_FORMAT_PREFIX, pixel_format_fourcc_lookup))
+                                            existing_value = self.format_dictionary.get(pixel_format_fourcc_decoded, 0)
+                                            self.format_dictionary[pixel_format_fourcc_decoded] = existing_value + 1
 
                             elif VERTEX_BUFFER_CAPS_CALL in call:
                                 logger.debug(f'Found vertex buffer caps on line: {trace_line}')
