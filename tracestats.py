@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 '''
 @author: Winter Snowfall
-@version: 1.73
-@date: 09/12/2025
+@version: 1.80
+@date: 20/12/2025
 '''
 
 import os
@@ -40,7 +40,15 @@ SHADER_DUMPS_FOLDER_NAME = 'dumps'
 SHADER_DUMPS_CALL_CHUNK_SIZE = 10000
 
 # parsing constants
-API_ENTRY_CALLS = {'DirectDrawCreateEx': 'D3D7',
+API_ENTRY_CALL_IDENTIFIER = '::'
+API_ENTRY_VALUE_DELIMITER = ','
+SHADER_DUMP_SKIP_IDENTIFIER_D3D8_9 = 'pFunction = NULL'
+SHADER_DUMP_SKIP_IDENTIFIER_D3D10_11 = 'pShaderBytecode = NULL'
+
+# use IDirectDraw versions to identify D3D7 and D3D6, as call order matters
+# during apitrace parsing, but fall back to IDirect3D for tracestats JSON parsing
+API_ENTRY_CALLS = {'IDirectDraw7': 'D3D7', # ensure D3D7 gets checked before D3D6
+                   'IDirectDraw4': 'D3D6',
                    'Direct3DCreate8': 'D3D8',
                    'Direct3DCreate9Ex': 'D3D9Ex', # ensure D3D9Ex gets checked before D3D9
                    'Direct3DCreate9': 'D3D9',
@@ -52,13 +60,24 @@ API_ENTRY_CALLS = {'DirectDrawCreateEx': 'D3D7',
                    'D3D11CreateDeviceAndSwapChain': 'D3D11',
                    'D3D11CreateDevice': 'D3D11',
                    'D3D11CoreCreateDevice': 'D3D11'}
-API_BASE_CALLS = {**API_ENTRY_CALLS, 'DirectDrawEnumerateExA': 'D3D7',
+
+API_BASE_CALLS = {**API_ENTRY_CALLS, 'DirectDrawCreateEx': 'DDraw7',
+                                     'DirectDrawEnumerateExA': 'DDraw7',
+                                     'DirectDrawEnumerateExW': 'DDraw7',
+                                     'DirectDrawCreate': 'DDraw',
+                                     'DirectDrawEnumerateA': 'DDraw',
+                                     'DirectDrawEnumerateW': 'DDraw',
+                                     'DirectDrawCreateClipper': 'DDraw',
+                                     'GetDDSurfaceLocal': 'DDraw',
+                                     'GetSurfaceFromDC': 'DDraw',
                                      'CreateDXGIFactory': 'DXGI',
                                      'CreateDXGIFactory1': 'DXGI',
-                                     'CreateDXGIFactory2': 'DGXI'}
+                                     'CreateDXGIFactory2': 'DXGI'}
+
 TRACE_API_OVERRIDES = {'wargame_'   : 'D3D9Ex', # Ignore queries done on a plain D3D9 interface, as it's not used for rendering
                        'xrEngine___': 'D3D10',  # Creates a D3D11 device first, but renders using D3D10
                        'RebelGalaxy': 'D3D11'}  # Creates a D3D10 device first, but renders using D3D11
+
 # To convert, use: int.from_bytes(b'ATOC', 'little') or:
 # (1129272385).to_bytes(4, 'little').decode('ascii')
 VENDOR_HACK_VALUES = {'1515406674': 'RESZ',        # This is the FOURCC
@@ -82,6 +101,7 @@ VENDOR_HACK_VALUES = {'1515406674': 'RESZ',        # This is the FOURCC
                       '1094800211': 'SSAA',
                       '1297108803': 'COPM',
                       '1111774798': 'NVDB'}
+
                        # Checked by D3D9 SAGE engine games
 KNOWN_FOURCC_FORMATS = ('EXT1', 'FXT1', 'GXT1', 'HXT1',
                        # Checked by various D3D8 and D3D9 games
@@ -89,33 +109,30 @@ KNOWN_FOURCC_FORMATS = ('EXT1', 'FXT1', 'GXT1', 'HXT1',
                        # FOURCCs specific to Freelancer
                         'DAA1', 'DAA8', 'DAOP', 'DAOT')
 
-# list of known D3D7 FOURCCs (to check for completion)
-D3D7_FOURCC_FORMATS = {'827611204': 'DXT1',
-                       '844388420': 'DXT2',
-                       '861165636': 'DXT3',
-                       '877942852': 'DXT4',
-                       '894720068': 'DXT5'}
+# list of known DDraw FOURCCs
+DDRAW_FOURCC_FORMATS = {'827611204': 'DXT1',
+                        '844388420': 'DXT2',
+                        '861165636': 'DXT3',
+                        '877942852': 'DXT4',
+                        '894720068': 'DXT5',
+                        '808801865': 'IV50', # Used by Conquest: Frontier Wars
+                        '844715353': 'YUY2'}
 
-API_ENTRY_CALL_IDENTIFIER = '::'
-API_ENTRY_VALUE_DELIMITER = ','
-SHADER_DUMP_SKIP_IDENTIFIER_D3D8_9 = 'pFunction = NULL'
-SHADER_DUMP_SKIP_IDENTIFIER_D3D10_11 = 'pShaderBytecode = NULL'
-
-# D3D7 vertex buffer capability flags
+# D3D vertex buffer capability flags
 D3DVBCAPS_SYSTEMMEMORY = 0x00000800
 D3DVBCAPS_WRITEONLY    = 0x00010000
 D3DVBCAPS_OPTIMIZED    = 0x80000000
 D3DVBCAPS_DONOTCLIP    = 0x00000001
 
-################################# DDRAW7, D3D7 #################################
+########################## DDRAW4, D3D6, DDRAW7, D3D7 ##########################
 # cooperative level flags
-COOPERATIVE_LEVEL_FLAGS_CALL = 'IDirectDraw7::SetCooperativeLevel'
+COOPERATIVE_LEVEL_FLAGS_CALL = '::SetCooperativeLevel'
 COOPERATIVE_LEVEL_FLAGS_IDENTIFIER = 'dwFlags = '
 COOPERATIVE_LEVEL_FLAGS_IDENTIFIER_LENGTH = len(COOPERATIVE_LEVEL_FLAGS_IDENTIFIER)
 COOPERATIVE_LEVEL_FLAGS_IDENTIFIER_END = ')'
 COOPERATIVE_LEVEL_FLAGS_SPLIT_DELIMITER = '|'
 # surface caps
-SURFACE_CAPS_CALL = 'IDirectDraw7::CreateSurface'
+SURFACE_CAPS_CALL = '::CreateSurface'
 SURFACE_CAPS_IDENTIFIER = 'dwCaps = '
 SURFACE_CAPS2_IDENTIFIER = 'dwCaps2 = '
 SURFACE_CAPS_IDENTIFIER_LENGTH = len(SURFACE_CAPS_IDENTIFIER)
@@ -132,38 +149,38 @@ PIXEL_FORMAT_FLAGS_DELIMITER = '|'
 PIXEL_FORMAT_FLAGS_SKIP_VALUE = '0x0'
 PIXEL_FORMAT_IDENTIFIER_FOURCC = 'dwFourCC = '
 PIXEL_FORMAT_IDENTIFIER_FOURCC_LENGTH = len(PIXEL_FORMAT_IDENTIFIER_FOURCC)
+PIXEL_FORMAT_FOURCC_SKIP_VALUES = ('0', '0x0')
 PIXEL_FORMAT_PREFIX = 'D3DFMT_'
 # vertex buffer caps
-VERTEX_BUFFER_CAPS_CALL = 'IDirect3D7::CreateVertexBuffer'
+VERTEX_BUFFER_CAPS_CALL = '::CreateVertexBuffer'
 VERTEX_BUFFER_CAPS_IDENTIFIER = 'dwCaps = '
 VERTEX_BUFFER_CAPS_IDENTIFIER_LENGTH = len(SURFACE_CAPS_IDENTIFIER)
 VERTEX_BUFFER_CAPS_SPLIT_DELIMITER = '|'
 VERTEX_BUFFER_CAPS_SKIP_IDENTIFIER = 'dwCaps = 0x0'
 # flip flags
-FLIP_FLAGS_CALL = 'IDirectDrawSurface7::Flip'
+FLIP_FLAGS_CALL = '::Flip'
+FLIP_TO_GDI_CALL = '::FlipToGDISurface'
 FLIP_FLAGS_IDENTIFIER = 'dwFlags = '
 FLIP_FLAGS_IDENTIFIER_LENGTH = len(FLIP_FLAGS_IDENTIFIER)
 FLIP_FLAGS_IDENTIFIER_END = ')'
 FLIP_FLAGS_SPLIT_DELIMITER = '|'
 FLIP_FLAGS_SKIP_IDENTIFIER = 'dwFlags = 0x0'
 # render states
-RENDER_STATES_CALL7 = 'IDirect3DDevice7::SetRenderState'
-RENDER_STATES_IDENTIFIER7 = 'D3DRENDERSTATE_'
-RENDER_STATES_IDENTIFIER7_LENGTH = len(RENDER_STATES_IDENTIFIER7)
-RENDER_STATES_IDENTIFIER7_END = ','
+RENDER_STATES_CALL_D3D6_7 = '::SetRenderState'
+RENDER_STATES_IDENTIFIER_D3D6_7 = 'D3DRENDERSTATE_'
+RENDER_STATES_IDENTIFIER_D3D6_7_END = ','
 # lock flags
-LOCK_FLAGS_SURFACE_CALL7 = 'IDirectDrawSurface7::Lock'
-LOCK_FLAGS_BUFFER_CALL7 = 'IDirect3DVertexBuffer7::Lock'
-LOCK_FLAGS_IDENTIFIER7 = 'dwFlags = '
-LOCK_FLAGS_IDENTIFIER7_LENGTH = len(LOCK_FLAGS_IDENTIFIER7)
-LOCK_FLAGS_VALUE_IDENTIFIER7 = 'DDLOCK_'
-LOCK_FLAGS_SKIP_IDENTIFIER7 = 'dwFlags = 0x0'
-LOCK_FLAGS_SPLIT_DELIMITER7 = '|'
+LOCK_FLAGS_CALL_D3D6_7 = '::Lock'
+LOCK_FLAGS_IDENTIFIER_D3D6_7 = 'dwFlags = '
+LOCK_FLAGS_IDENTIFIER_D3D6_7_LENGTH = len(LOCK_FLAGS_IDENTIFIER_D3D6_7)
+LOCK_FLAGS_VALUE_IDENTIFIER_D3D6_7 = 'DDLOCK_'
+LOCK_FLAGS_SKIP_IDENTIFIER_D3D6_7 = 'dwFlags = 0x0'
+LOCK_FLAGS_SPLIT_DELIMITER_D3D6_7 = '|'
 # device type
-DEVICE_CREATION_CALL7 = 'IDirect3D7::CreateDevice'
-DEVICE_TYPE_IDENTIFIER7 = 'rclsid = '
-DEVICE_TYPE_IDENTIFIER7_LENGTH = len(DEVICE_TYPE_IDENTIFIER7)
-################################# DDRAW7, D3D7 #################################
+DEVICE_CREATION_CALL_D3D6_7 = '::CreateDevice'
+DEVICE_TYPE_IDENTIFIER_D3D6_7 = 'rclsid = '
+DEVICE_TYPE_IDENTIFIER_D3D6_7_LENGTH = len(DEVICE_TYPE_IDENTIFIER_D3D6_7)
+########################## DDRAW4, D3D6, DDRAW7, D3D7 ##########################
 
 ############################## D3D8, D3D9Ex, D3D9 ##############################
 # check device format vendor hacks
@@ -844,9 +861,7 @@ class TraceStats:
                             # line starting with shader specific whitespace (not an actual call)
                             call = ''
 
-                        # parse device behavior flags, render states, format
-                        # and pool values for DDRAW7 and D3D7 apitraces
-                        if self.api =='D3D7':
+                        if self.api =='D3D7' or self.api == 'D3D6':
                             if COOPERATIVE_LEVEL_FLAGS_CALL in call:
                                 logger.debug(f'Found cooperative level flags on line: {trace_line}')
 
@@ -871,21 +886,28 @@ class TraceStats:
                                     surface_caps = surface_caps.split(SURFACE_CAPS_SPLIT_DELIMITER)
 
                                     for surface_cap in surface_caps:
-                                        surface_cap_stripped = surface_cap.strip()
+                                        # IDirectDraw::CreateSurface and IDirectDraw2::CreateSurface calls
+                                        # will have a dwCaps field which will end in '}}', so strip that out
+                                        surface_cap_stripped = surface_cap.replace('}}', '').strip()
                                         existing_value = self.surface_cap_dictionary.get(surface_cap_stripped, 0)
                                         self.surface_cap_dictionary[surface_cap_stripped] = existing_value + 1
 
                                 # dwCaps2
                                 if SURFACE_CAPS2_SKIP_IDENTIFIER not in trace_line:
-                                    surface_caps2_start = trace_line.find(SURFACE_CAPS2_IDENTIFIER) + SURFACE_CAPS2_IDENTIFIER_LENGTH
-                                    surface_caps2 = trace_line[surface_caps2_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
-                                                                                                   surface_caps2_start)].strip()
-                                    surface_caps2 = surface_caps2.split(SURFACE_CAPS_SPLIT_DELIMITER)
+                                    surface_caps2_start = trace_line.find(SURFACE_CAPS2_IDENTIFIER)
 
-                                    for surface_cap2 in surface_caps2:
-                                        surface_cap2_stripped = surface_cap2.strip()
-                                        existing_value = self.surface_cap_dictionary.get(surface_cap2_stripped, 0)
-                                        self.surface_cap_dictionary[surface_cap2_stripped] = existing_value + 1
+                                    # IDirectDraw::CreateSurface and IDirectDraw2::CreateSurface calls
+                                    # won't have a dwCaps2 field at all in ddsCaps, only dwCaps
+                                    if surface_caps2_start != -1:
+                                        surface_caps2_start += SURFACE_CAPS2_IDENTIFIER_LENGTH
+                                        surface_caps2 = trace_line[surface_caps2_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
+                                                                                                    surface_caps2_start)].strip()
+                                        surface_caps2 = surface_caps2.split(SURFACE_CAPS_SPLIT_DELIMITER)
+
+                                        for surface_cap2 in surface_caps2:
+                                            surface_cap2_stripped = surface_cap2.strip()
+                                            existing_value = self.surface_cap_dictionary.get(surface_cap2_stripped, 0)
+                                            self.surface_cap_dictionary[surface_cap2_stripped] = existing_value + 1
 
                                 # ddpfPixelFormat
                                 if PIXEL_FORMAT_IDENTIFIER in trace_line and PIXEL_FORMAT_SKIP_IDENTIFIER not in trace_line:
@@ -905,13 +927,16 @@ class TraceStats:
                                         pixel_format_fourcc = trace_line[pixel_format_fourcc_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
                                                                                                                    pixel_format_fourcc_start)].strip()
 
-                                        if pixel_format_fourcc in D3D7_FOURCC_FORMATS.keys():
+                                        if pixel_format_fourcc in DDRAW_FOURCC_FORMATS.keys():
                                             logger.debug(f'Found FOURCC on line: {trace_line}')
 
-                                            pixel_format_fourcc_lookup = D3D7_FOURCC_FORMATS[pixel_format_fourcc]
+                                            pixel_format_fourcc_lookup = DDRAW_FOURCC_FORMATS[pixel_format_fourcc]
                                             pixel_format_fourcc_decoded = ''.join((PIXEL_FORMAT_PREFIX, pixel_format_fourcc_lookup))
                                             existing_value = self.format_dictionary.get(pixel_format_fourcc_decoded, 0)
                                             self.format_dictionary[pixel_format_fourcc_decoded] = existing_value + 1
+
+                                        elif pixel_format_fourcc not in PIXEL_FORMAT_FOURCC_SKIP_VALUES:
+                                            logger.warning(f'Detected an unhandled FOURCC: {pixel_format_fourcc}')
 
                             elif VERTEX_BUFFER_CAPS_CALL in call:
                                 logger.debug(f'Found vertex buffer caps on line: {trace_line}')
@@ -920,32 +945,36 @@ class TraceStats:
                                     vertex_buffer_caps_start = trace_line.find(VERTEX_BUFFER_CAPS_IDENTIFIER) + VERTEX_BUFFER_CAPS_IDENTIFIER_LENGTH
                                     vertex_buffer_caps = trace_line[vertex_buffer_caps_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
                                                                                                              vertex_buffer_caps_start)].strip()
-                                    #vertex_buffer_caps = vertex_buffer_caps.split(VERTEX_BUFFER_CAPS_SPLIT_DELIMITER)
-                                    vertex_buffer_caps = int(vertex_buffer_caps)
 
-                                    # apitrace does not currently convert any of these, so we'll have to do it ourselves
                                     vertex_buffer_caps_actual = []
-                                    if vertex_buffer_caps & D3DVBCAPS_SYSTEMMEMORY:
-                                        vertex_buffer_caps_actual.append('D3DVBCAPS_SYSTEMMEMORY')
-                                    if vertex_buffer_caps & D3DVBCAPS_WRITEONLY:
-                                        vertex_buffer_caps_actual.append('D3DVBCAPS_WRITEONLY')
-                                    if vertex_buffer_caps & D3DVBCAPS_OPTIMIZED:
-                                        vertex_buffer_caps_actual.append('D3DVBCAPS_OPTIMIZED')
-                                    if vertex_buffer_caps & D3DVBCAPS_DONOTCLIP:
-                                        vertex_buffer_caps_actual.append('D3DVBCAPS_DONOTCLIP')
+                                    try:
+                                        # apitrace may not do the conversion, so we'll have to do it ourselves
+                                        vertex_buffer_caps = int(vertex_buffer_caps)
+
+                                        if vertex_buffer_caps & D3DVBCAPS_SYSTEMMEMORY:
+                                            vertex_buffer_caps_actual.append('D3DVBCAPS_SYSTEMMEMORY')
+                                        if vertex_buffer_caps & D3DVBCAPS_WRITEONLY:
+                                            vertex_buffer_caps_actual.append('D3DVBCAPS_WRITEONLY')
+                                        if vertex_buffer_caps & D3DVBCAPS_OPTIMIZED:
+                                            vertex_buffer_caps_actual.append('D3DVBCAPS_OPTIMIZED')
+                                        if vertex_buffer_caps & D3DVBCAPS_DONOTCLIP:
+                                            vertex_buffer_caps_actual.append('D3DVBCAPS_DONOTCLIP')
+
+                                    except ValueError:
+                                        vertex_buffer_caps_actual = vertex_buffer_caps.split(VERTEX_BUFFER_CAPS_SPLIT_DELIMITER)
 
                                     for vertex_buffer_cap in vertex_buffer_caps_actual:
                                         vertex_buffer_cap_stripped = vertex_buffer_cap.strip()
                                         existing_value = self.vertex_buffer_cap_dictionary.get(vertex_buffer_cap_stripped, 0)
                                         self.vertex_buffer_cap_dictionary[vertex_buffer_cap_stripped] = existing_value + 1
 
-                            elif FLIP_FLAGS_CALL in call:
+                            elif FLIP_FLAGS_CALL in call and FLIP_TO_GDI_CALL not in call:
                                 logger.debug(f'Found flip flags on line: {trace_line}')
 
                                 if FLIP_FLAGS_SKIP_IDENTIFIER not in trace_line:
                                     flip_flags_start = trace_line.find(FLIP_FLAGS_IDENTIFIER) + FLIP_FLAGS_IDENTIFIER_LENGTH
                                     flip_flags = trace_line[flip_flags_start:trace_line.find(FLIP_FLAGS_IDENTIFIER_END,
-                                                                                            flip_flags_start)].strip()
+                                                                                             flip_flags_start)].strip()
                                     flip_flags = flip_flags.split(FLIP_FLAGS_SPLIT_DELIMITER)
 
                                     for flip_flag in flip_flags:
@@ -953,50 +982,47 @@ class TraceStats:
                                         existing_value = self.flip_flag_dictionary.get(flip_flag_stripped, 0)
                                         self.flip_flag_dictionary[flip_flag_stripped] = existing_value + 1
 
-                            elif LOCK_FLAGS_SURFACE_CALL7 in call or LOCK_FLAGS_BUFFER_CALL7 in call:
+                            elif LOCK_FLAGS_CALL_D3D6_7 in call:
                                 logger.debug(f'Found lock flags on line: {trace_line}')
 
                                 # IDirectDrawSurface7::Lock actually has two sets of dwFlags, with the latter
                                 # being the one related to the actual locks, and what we are interested in
-                                if LOCK_FLAGS_SKIP_IDENTIFIER7 not in trace_line:
-                                    lock_flags_start = trace_line.rfind(LOCK_FLAGS_IDENTIFIER7) + LOCK_FLAGS_IDENTIFIER7_LENGTH
+                                if LOCK_FLAGS_SKIP_IDENTIFIER_D3D6_7 not in trace_line:
+                                    lock_flags_start = trace_line.rfind(LOCK_FLAGS_IDENTIFIER_D3D6_7) + LOCK_FLAGS_IDENTIFIER_D3D6_7_LENGTH
                                     lock_flags = trace_line[lock_flags_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
                                                                                              lock_flags_start)].strip()
 
-                                    lock_flags = lock_flags.split(LOCK_FLAGS_SPLIT_DELIMITER7)
+                                    lock_flags = lock_flags.split(LOCK_FLAGS_SPLIT_DELIMITER_D3D6_7)
 
                                     for lock_flag in lock_flags:
                                         lock_flag_stripped = lock_flag.strip()
 
                                         # Praetorians sets several bogus lock values (not part of the enum)
-                                        if lock_flag_stripped.startswith(LOCK_FLAGS_VALUE_IDENTIFIER7):
+                                        if lock_flag_stripped.startswith(LOCK_FLAGS_VALUE_IDENTIFIER_D3D6_7):
                                             existing_value = self.lock_flag_dictionary.get(lock_flag_stripped, 0)
                                             self.lock_flag_dictionary[lock_flag_stripped] = existing_value + 1
 
-                            elif RENDER_STATES_CALL7 in call:
+                            elif RENDER_STATES_CALL_D3D6_7 in call:
                                 logger.debug(f'Found render states on line: {trace_line}')
 
-                                render_state_start = trace_line.find(RENDER_STATES_IDENTIFIER7)
+                                render_state_start = trace_line.find(RENDER_STATES_IDENTIFIER_D3D6_7)
                                 if render_state_start != -1:
-                                    render_state_start += RENDER_STATES_IDENTIFIER7_LENGTH
-                                    render_state = RENDER_STATES_IDENTIFIER7 + trace_line[render_state_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
-                                                                                                                             render_state_start)].strip()
+                                    render_state = trace_line[render_state_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
+                                                                                                 render_state_start)].strip()
 
                                     existing_value = self.render_state_dictionary.get(render_state, 0)
                                     self.render_state_dictionary[render_state] = existing_value + 1
 
-                            elif DEVICE_CREATION_CALL7 in call:
+                            elif DEVICE_CREATION_CALL_D3D6_7 in call:
                                 logger.debug(f'Found device type flags on line: {trace_line}')
 
-                                device_type_start = trace_line.find(DEVICE_TYPE_IDENTIFIER7) + DEVICE_TYPE_IDENTIFIER7_LENGTH
+                                device_type_start = trace_line.find(DEVICE_TYPE_IDENTIFIER_D3D6_7) + DEVICE_TYPE_IDENTIFIER_D3D6_7_LENGTH
                                 device_type = trace_line[device_type_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
-                                                                                           device_type_start)].strip()
+                                                                                            device_type_start)].strip()
 
                                 existing_value = self.device_type_dictionary.get(device_type, 0)
                                 self.device_type_dictionary[device_type] = existing_value + 1
 
-                        # parse device behavior flags, render states, format
-                        # and pool values for D3D8, D3D9Ex, and D3D9 apitraces
                         elif self.api == 'D3D8' or self.api == 'D3D9Ex' or self.api == 'D3D9':
                             if CHECK_DEVICE_FORMAT_CALL in call:
                                 check_device_format_start = trace_line.find(CHECK_DEVICE_FORMAT_IDENTIFIER) + CHECK_DEVICE_FORMAT_IDENTIFIER_LENGTH

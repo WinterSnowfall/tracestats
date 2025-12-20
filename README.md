@@ -1,6 +1,6 @@
 # tracestats
 
-A humble apitrace trace parser and API call stats exporter, covering APIs from d3d7 to d3d11, with an included web app/search engine. It collects statistical data from apitrace files, which it then exports in JSON format. The JSON files can in turn be uploaded to the included web app/search engine and queried from a consolidated database.
+A humble apitrace trace parser and API call stats exporter, covering APIs from D3D6 to D3D11, with an included web app/search engine. It collects statistical data from apitrace files, which it then exports in JSON format. The JSON files can in turn be uploaded to the included web app/search engine and queried from a consolidated database.
 
 ### How to use
 

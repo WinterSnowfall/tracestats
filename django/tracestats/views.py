@@ -15,19 +15,30 @@ logger = logging.getLogger('tracestats')
 
 #constants
 JSON_BASE_KEY = 'tracestats'
-API_VALUES_ENCODE = {'D3D7'  : 1,
-                     'D3D8'  : 2,
-                     'D3D9'  : 3,
-                     'D3D9Ex': 4,
-                     'D3D10' : 5,
-                     'D3D11' : 6}
-API_VALUES_DECODE = {1: 'D3D7',
-                     2: 'D3D8',
-                     3: 'D3D9',
-                     4: 'D3D9Ex',
-                     5: 'D3D10',
-                     6: 'D3D11'}
-API_ENTRY_CALLS = {'DirectDrawCreateEx': 'D3D7',
+
+API_VALUES_ENCODE = {'D3D6'  : 1,
+                     'D3D7'  : 2,
+                     'D3D8'  : 3,
+                     'D3D9'  : 4,
+                     'D3D9Ex': 5,
+                     'D3D10' : 6,
+                     'D3D11' : 7}
+
+API_VALUES_DECODE = {1: 'D3D6',
+                     2: 'D3D7',
+                     3: 'D3D8',
+                     4: 'D3D9',
+                     5: 'D3D9Ex',
+                     6: 'D3D10',
+                     7: 'D3D11'}
+
+API_ENTRY_CALL_IDENTIFIER = '::'
+
+# use IDirect3D calls to segregate between D3D6 and D3D7 when parsing
+# tracestats JSONs, as it's entirely more accurate than using DDraw versions,
+# and parsing order does not matter, since entries are sorted alpahbetically
+API_ENTRY_CALLS = {'IDirect3D7': 'D3D7', # ensure D3D7 gets checked before D3D6
+                   'IDirect3D3': 'D3D6',
                    'Direct3DCreate8': 'D3D8',
                    'Direct3DCreate9Ex': 'D3D9Ex', # ensure D3D9Ex gets checked before D3D9
                    'Direct3DCreate9': 'D3D9',
@@ -39,9 +50,11 @@ API_ENTRY_CALLS = {'DirectDrawCreateEx': 'D3D7',
                    'D3D11CreateDeviceAndSwapChain': 'D3D11',
                    'D3D11CreateDevice': 'D3D11',
                    'D3D11CoreCreateDevice': 'D3D11'}
+
 TRACE_API_OVERRIDES = {'wargame_'   : 'D3D9Ex', # Ignore queries done on a plain D3D9 interface, as it's not used for rendering
                        'xrEngine___': 'D3D10',  # Creates a D3D11 device first, but renders using D3D10
                        'RebelGalaxy': 'D3D11'}  # Creates a D3D10 device first, but renders using D3D11
+
 STATS_TYPE = {'api_calls': 1,
               'vendor_hack_checks': 2,
               'device_types': 3,
@@ -69,6 +82,7 @@ STATS_TYPE = {'api_calls': 1,
               'flip_flags': 25,
               'surface_caps': 26,
               'vertex_buffer_caps': 27}
+
 SEARCH_RESULTS_LIMIT = 999
 
 def tracestats(request):
@@ -122,7 +136,9 @@ def tracestats(request):
                   entry_api = entry_api_override
                 else:
                   for key, value in API_ENTRY_CALLS.items():
-                    if key in entry_call_stats.keys():
+                    # D3D6/D3D7 entry call identifiers aren't stand alone strings,
+                    # but rather part of a D3D subcall, due to the nature of those APIs
+                    if key in [entry_call.split(API_ENTRY_CALL_IDENTIFIER)[0] for entry_call in entry_call_stats.keys()]:
                       entry_api = value
                       logger.debug(f'Found an entry call for: {entry_api}')
                       break
@@ -361,12 +377,13 @@ def generate_stats(request):
       request.session.modified = True
 
     if request.session['api_stats_visible']:
-      api_stats['d3d7']   = models.Trace.objects.filter(api=1).count()
-      api_stats['d3d8']   = models.Trace.objects.filter(api=2).count()
-      api_stats['d3d9']   = models.Trace.objects.filter(api=3).count()
-      api_stats['d3d9ex'] = models.Trace.objects.filter(api=4).count()
-      api_stats['d3d10']  = models.Trace.objects.filter(api=5).count()
-      api_stats['d3d11']  = models.Trace.objects.filter(api=6).count()
+      api_stats['d3d6']   = models.Trace.objects.filter(api=1).count()
+      api_stats['d3d7']   = models.Trace.objects.filter(api=2).count()
+      api_stats['d3d8']   = models.Trace.objects.filter(api=3).count()
+      api_stats['d3d9']   = models.Trace.objects.filter(api=4).count()
+      api_stats['d3d9ex'] = models.Trace.objects.filter(api=5).count()
+      api_stats['d3d10']  = models.Trace.objects.filter(api=6).count()
+      api_stats['d3d11']  = models.Trace.objects.filter(api=7).count()
 
       context = {}
       context.update(csrf(request))
