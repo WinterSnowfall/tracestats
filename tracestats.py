@@ -124,6 +124,13 @@ D3DVBCAPS_WRITEONLY    = 0x00010000
 D3DVBCAPS_OPTIMIZED    = 0x80000000
 D3DVBCAPS_DONOTCLIP    = 0x00000001
 
+# D3D draw flags
+D3DDP_WAIT               = 0x00000001
+D3DDP_OUTOFORDER         = 0x00000002
+D3DDP_DONOTCLIP          = 0x00000004
+D3DDP_DONOTUPDATEEXTENTS = 0x00000008
+D3DDP_DONOTLIGHT         = 0x00000010
+
 ########################## DDRAW4, D3D6, DDRAW7, D3D7 ##########################
 # cooperative level flags
 COOPERATIVE_LEVEL_FLAGS_CALL = '::SetCooperativeLevel'
@@ -165,6 +172,13 @@ FLIP_FLAGS_IDENTIFIER_LENGTH = len(FLIP_FLAGS_IDENTIFIER)
 FLIP_FLAGS_IDENTIFIER_END = ')'
 FLIP_FLAGS_SPLIT_DELIMITER = '|'
 FLIP_FLAGS_SKIP_IDENTIFIER = 'dwFlags = 0x0'
+# draw flags
+DRAW_FLAGS_CALL = '::Draw'
+DRAW_FLAGS_IDENTIFIER = 'dwFlags ='
+DRAW_FLAGS_IDENTIFIER_LENGTH = len(DRAW_FLAGS_IDENTIFIER)
+DRAW_FLAGS_IDENTIFIER_END = ')'
+DRAW_FLAGS_SPLIT_DELIMITER = '|'
+DRAW_FLAGS_SKIP_IDENTIFIER = 'dwFlags = 0' # can be 0 or 0x0
 # render states
 RENDER_STATES_CALL_D3D6_7 = '::SetRenderState'
 RENDER_STATES_IDENTIFIER_D3D6_7 = 'D3DRENDERSTATE_'
@@ -489,6 +503,7 @@ class TraceStats:
         self.bind_flag_dictionary = {}
         self.cooperative_level_flag_dictionary = {}
         self.flip_flag_dictionary = {}
+        self.draw_flag_dictionary = {}
         self.surface_cap_dictionary = {}
         self.vertex_buffer_cap_dictionary = {}
 
@@ -677,6 +692,8 @@ class TraceStats:
                             return_dictionary['cooperative_level_flags'] = self.cooperative_level_flag_dictionary
                         if len(self.flip_flag_dictionary) > 0:
                             return_dictionary['flip_flags'] = self.flip_flag_dictionary
+                        if len(self.draw_flag_dictionary) > 0:
+                            return_dictionary['draw_flags'] = self.draw_flag_dictionary
                         if len(self.surface_cap_dictionary) > 0:
                             return_dictionary['surface_caps'] = self.surface_cap_dictionary
                         if len(self.vertex_buffer_cap_dictionary) > 0:
@@ -749,6 +766,7 @@ class TraceStats:
                 self.bind_flag_dictionary = {}
                 self.cooperative_level_flag_dictionary = {}
                 self.flip_flag_dictionary = {}
+                self.draw_flag_dictionary = {}
                 self.surface_cap_dictionary = {}
                 self.vertex_buffer_cap_dictionary = {}
 
@@ -981,6 +999,38 @@ class TraceStats:
                                         flip_flag_stripped = flip_flag.strip()
                                         existing_value = self.flip_flag_dictionary.get(flip_flag_stripped, 0)
                                         self.flip_flag_dictionary[flip_flag_stripped] = existing_value + 1
+
+                            elif DRAW_FLAGS_CALL in call:
+                                logger.debug(f'Found draw flags on line: {trace_line}')
+
+                                if DRAW_FLAGS_SKIP_IDENTIFIER not in trace_line:
+                                    draw_flags_start = trace_line.find(DRAW_FLAGS_IDENTIFIER) + DRAW_FLAGS_IDENTIFIER_LENGTH
+                                    draw_flags = trace_line[draw_flags_start:trace_line.find(DRAW_FLAGS_IDENTIFIER_END,
+                                                                                             draw_flags_start)].strip()
+
+                                    draw_flags_actual = []
+                                    try:
+                                        # apitrace may not do the conversion, so we'll have to do it ourselves
+                                        draw_flags = int(draw_flags)
+
+                                        if draw_flags & D3DDP_WAIT:
+                                            draw_flags_actual.append('D3DDP_WAIT')
+                                        if draw_flags & D3DDP_OUTOFORDER:
+                                            draw_flags_actual.append('D3DDP_OUTOFORDER')
+                                        if draw_flags & D3DDP_DONOTCLIP:
+                                            draw_flags_actual.append('D3DDP_DONOTCLIP')
+                                        if draw_flags & D3DDP_DONOTUPDATEEXTENTS:
+                                            draw_flags_actual.append('D3DDP_DONOTUPDATEEXTENTS')
+                                        if draw_flags & D3DDP_DONOTLIGHT:
+                                            draw_flags_actual.append('D3DDP_DONOTLIGHT')
+
+                                    except ValueError:
+                                        draw_flags_actual = draw_flags.split(DRAW_FLAGS_SPLIT_DELIMITER)
+
+                                    for draw_flag in draw_flags_actual:
+                                        draw_flag_stripped = draw_flag.strip()
+                                        existing_value = self.draw_flag_dictionary.get(draw_flag_stripped, 0)
+                                        self.draw_flag_dictionary[draw_flag_stripped] = existing_value + 1
 
                             elif LOCK_FLAGS_CALL_D3D6_7 in call:
                                 logger.debug(f'Found lock flags on line: {trace_line}')

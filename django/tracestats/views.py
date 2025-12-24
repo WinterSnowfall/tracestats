@@ -80,8 +80,9 @@ STATS_TYPE = {'api_calls': 1,
               'bind_flags': 23,
               'cooperative_level_flags': 24,
               'flip_flags': 25,
-              'surface_caps': 26,
-              'vertex_buffer_caps': 27}
+              'draw_flags': 26,
+              'surface_caps': 27,
+              'vertex_buffer_caps': 28}
 
 SEARCH_RESULTS_LIMIT = 999
 
