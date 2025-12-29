@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 '''
 @author: Winter Snowfall
-@version: 1.80
-@date: 20/12/2025
+@version: 1.81
+@date: 30/12/2025
 '''
 
 import os
@@ -78,6 +78,8 @@ TRACE_API_OVERRIDES = {'wargame_'   : 'D3D9Ex', # Ignore queries done on a plain
                        'xrEngine___': 'D3D10',  # Creates a D3D11 device first, but renders using D3D10
                        'RebelGalaxy': 'D3D11'}  # Creates a D3D10 device first, but renders using D3D11
 
+TRACE_NAME_EXCEPTION_LIST = ('gameProject', 'warhogs_')
+
 # To convert, use: int.from_bytes(b'ATOC', 'little') or:
 # (1129272385).to_bytes(4, 'little').decode('ascii')
 VENDOR_HACK_VALUES = {'1515406674': 'RESZ',        # This is the FOURCC
@@ -131,6 +133,12 @@ D3DDP_DONOTCLIP          = 0x00000004
 D3DDP_DONOTUPDATEEXTENTS = 0x00000008
 D3DDP_DONOTLIGHT         = 0x00000010
 
+# D3D process vertices flags
+D3DVOP_TRANSFORM = 0x00000001
+D3DVOP_CLIP      = 0x00000004
+D3DVOP_EXTENTS   = 0x00000008
+D3DVOP_LIGHT     = 0x00000400
+
 ########################## DDRAW4, D3D6, DDRAW7, D3D7 ##########################
 # cooperative level flags
 COOPERATIVE_LEVEL_FLAGS_CALL = '::SetCooperativeLevel'
@@ -154,9 +162,12 @@ PIXEL_FORMAT_FLAGS_IDENTIFIER = 'dwFlags = '
 PIXEL_FORMAT_FLAGS_IDENTIFIER_LENGTH = len(PIXEL_FORMAT_FLAGS_IDENTIFIER)
 PIXEL_FORMAT_FLAGS_DELIMITER = '|'
 PIXEL_FORMAT_FLAGS_SKIP_VALUE = '0x0'
+PIXEL_FORMAT_KNOWN_BOGUS_VALUES = ('0x79c00000', '0x79510000')
 PIXEL_FORMAT_IDENTIFIER_FOURCC = 'dwFourCC = '
 PIXEL_FORMAT_IDENTIFIER_FOURCC_LENGTH = len(PIXEL_FORMAT_IDENTIFIER_FOURCC)
-PIXEL_FORMAT_FOURCC_SKIP_VALUES = ('0', '0x0')
+PIXEL_FORMAT_FOURCC_SKIP_VALUE = '0'
+PIXEL_FORMAT_FOURCC_SKIP_VALUE_HEX = '0x0'
+PIXEL_FORMAT_KNOWN_BOGUS_FOURCC_VALUES = ('0x79461264', )
 PIXEL_FORMAT_PREFIX = 'D3DFMT_'
 # vertex buffer caps
 VERTEX_BUFFER_CAPS_CALL = '::CreateVertexBuffer'
@@ -179,6 +190,12 @@ DRAW_FLAGS_IDENTIFIER_LENGTH = len(DRAW_FLAGS_IDENTIFIER)
 DRAW_FLAGS_IDENTIFIER_END = ')'
 DRAW_FLAGS_SPLIT_DELIMITER = '|'
 DRAW_FLAGS_SKIP_IDENTIFIER = 'dwFlags = 0' # can be 0 or 0x0
+# process vertices flags
+PROCESS_VERTICES_FLAGS_CALL = '::ProcessVertices'
+PROCESS_VERTICES_FLAGS_IDENTIFIER = 'dwVertexOp ='
+PROCESS_VERTICES_FLAGS_IDENTIFIER_LENGTH = len(PROCESS_VERTICES_FLAGS_IDENTIFIER)
+PROCESS_VERTICES_FLAGS_SPLIT_DELIMITER = '|'
+PROCESS_VERTICES_FLAGS_SKIP_IDENTIFIER = 'dwVertexOp = 0' # can be 0 or 0x0
 # render states
 RENDER_STATES_CALL_D3D6_7 = '::SetRenderState'
 RENDER_STATES_IDENTIFIER_D3D6_7 = 'D3DRENDERSTATE_'
@@ -504,6 +521,7 @@ class TraceStats:
         self.cooperative_level_flag_dictionary = {}
         self.flip_flag_dictionary = {}
         self.draw_flag_dictionary = {}
+        self.process_vertices_flag_dictionary = {}
         self.surface_cap_dictionary = {}
         self.vertex_buffer_cap_dictionary = {}
 
@@ -530,10 +548,12 @@ class TraceStats:
                     trace_path_final = trace_path
                     self.binary_name = self.binary_name_raw
                 # workaround for renamed generic game/Game.exe apitraces
-                if self.binary_name_raw.upper().startswith('GAME'):
+                if (self.binary_name_raw.upper().startswith('GAME') and
+                    self.binary_name_raw not in TRACE_NAME_EXCEPTION_LIST):
                     self.binary_name = self.binary_name_raw[:4]
                 # workaround for games with multiple editions or that support multiple APIs
-                elif self.binary_name_raw.endswith('_'):
+                elif (self.binary_name_raw.endswith('_') and
+                      self.binary_name_raw not in TRACE_NAME_EXCEPTION_LIST):
                     while self.binary_name.endswith('_'):
                         self.binary_name = self.binary_name[:-1]
 
@@ -694,6 +714,8 @@ class TraceStats:
                             return_dictionary['flip_flags'] = self.flip_flag_dictionary
                         if len(self.draw_flag_dictionary) > 0:
                             return_dictionary['draw_flags'] = self.draw_flag_dictionary
+                        if len(self.process_vertices_flag_dictionary) > 0:
+                            return_dictionary['process_vertices_flags'] = self.process_vertices_flag_dictionary
                         if len(self.surface_cap_dictionary) > 0:
                             return_dictionary['surface_caps'] = self.surface_cap_dictionary
                         if len(self.vertex_buffer_cap_dictionary) > 0:
@@ -767,6 +789,7 @@ class TraceStats:
                 self.cooperative_level_flag_dictionary = {}
                 self.flip_flag_dictionary = {}
                 self.draw_flag_dictionary = {}
+                self.process_vertices_flag_dictionary = {}
                 self.surface_cap_dictionary = {}
                 self.vertex_buffer_cap_dictionary = {}
 
@@ -880,7 +903,28 @@ class TraceStats:
                             call = ''
 
                         if self.api =='D3D7' or self.api == 'D3D6':
-                            if COOPERATIVE_LEVEL_FLAGS_CALL in call:
+                            if DEVICE_CREATION_CALL_D3D6_7 in call:
+                                logger.debug(f'Found device type flags on line: {trace_line}')
+
+                                device_type_start = trace_line.find(DEVICE_TYPE_IDENTIFIER_D3D6_7) + DEVICE_TYPE_IDENTIFIER_D3D6_7_LENGTH
+                                device_type = trace_line[device_type_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
+                                                                                            device_type_start)].strip()
+
+                                existing_value = self.device_type_dictionary.get(device_type, 0)
+                                self.device_type_dictionary[device_type] = existing_value + 1
+
+                            elif RENDER_STATES_CALL_D3D6_7 in call:
+                                logger.debug(f'Found render states on line: {trace_line}')
+
+                                render_state_start = trace_line.find(RENDER_STATES_IDENTIFIER_D3D6_7)
+                                if render_state_start != -1:
+                                    render_state = trace_line[render_state_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
+                                                                                                 render_state_start)].strip()
+
+                                    existing_value = self.render_state_dictionary.get(render_state, 0)
+                                    self.render_state_dictionary[render_state] = existing_value + 1
+
+                            elif COOPERATIVE_LEVEL_FLAGS_CALL in call:
                                 logger.debug(f'Found cooperative level flags on line: {trace_line}')
 
                                 cooperative_level_flags_start = trace_line.find(COOPERATIVE_LEVEL_FLAGS_IDENTIFIER) + COOPERATIVE_LEVEL_FLAGS_IDENTIFIER_LENGTH
@@ -937,24 +981,44 @@ class TraceStats:
 
                                         for pixel_format in pixel_formats:
                                             pixel_format_stripped = pixel_format.strip()
-                                            existing_value = self.pixel_format_dictionary.get(pixel_format_stripped, 0)
-                                            self.pixel_format_dictionary[pixel_format_stripped] = existing_value + 1
+                                            if not pixel_format_stripped.startswith('0x'):
+                                                existing_value = self.pixel_format_dictionary.get(pixel_format_stripped, 0)
+                                                self.pixel_format_dictionary[pixel_format_stripped] = existing_value + 1
+                                            elif pixel_format_stripped not in PIXEL_FORMAT_KNOWN_BOGUS_VALUES:
+                                                logger.warning(f'Detected an unhandled pixel format flag: {pixel_format}')
 
                                         # FOURCC detection
                                         pixel_format_fourcc_start = trace_line.find(PIXEL_FORMAT_IDENTIFIER_FOURCC) + PIXEL_FORMAT_IDENTIFIER_FOURCC_LENGTH
                                         pixel_format_fourcc = trace_line[pixel_format_fourcc_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
                                                                                                                    pixel_format_fourcc_start)].strip()
+                                        # in some rare cases we might get an enumeration ending with a FOURCC
+                                        pixel_format_fourcc = pixel_format_fourcc.replace('}', '')
 
-                                        if pixel_format_fourcc in DDRAW_FOURCC_FORMATS.keys():
-                                            logger.debug(f'Found FOURCC on line: {trace_line}')
+                                        if pixel_format_fourcc.startswith('0x'):
+                                            if pixel_format_fourcc != PIXEL_FORMAT_FOURCC_SKIP_VALUE_HEX:
+                                                try:
+                                                    pixel_format_fourcc_decoded = int(pixel_format_fourcc, 16).to_bytes(4, 'little').decode('ascii')
+                                                    if pixel_format_fourcc_decoded in DDRAW_FOURCC_FORMATS.values():
+                                                        logger.debug(f'Found FOURCC on line: {trace_line}')
 
-                                            pixel_format_fourcc_lookup = DDRAW_FOURCC_FORMATS[pixel_format_fourcc]
-                                            pixel_format_fourcc_decoded = ''.join((PIXEL_FORMAT_PREFIX, pixel_format_fourcc_lookup))
-                                            existing_value = self.format_dictionary.get(pixel_format_fourcc_decoded, 0)
-                                            self.format_dictionary[pixel_format_fourcc_decoded] = existing_value + 1
+                                                        existing_value = self.format_dictionary.get(pixel_format_fourcc_decoded, 0)
+                                                        self.format_dictionary[pixel_format_fourcc_decoded] = existing_value + 1
+                                                    elif pixel_format_fourcc not in PIXEL_FORMAT_KNOWN_BOGUS_FOURCC_VALUES:
+                                                        logger.warning(f'Detected an unhandled FOURCC: {pixel_format_fourcc}')
+                                                except ValueError:
+                                                    logger.warning(f'Detected an unparsable FOURCC: {pixel_format_fourcc}')
 
-                                        elif pixel_format_fourcc not in PIXEL_FORMAT_FOURCC_SKIP_VALUES:
-                                            logger.warning(f'Detected an unhandled FOURCC: {pixel_format_fourcc}')
+                                        else:
+                                            if pixel_format_fourcc in DDRAW_FOURCC_FORMATS.keys():
+                                                logger.debug(f'Found FOURCC on line: {trace_line}')
+
+                                                pixel_format_fourcc_lookup = DDRAW_FOURCC_FORMATS[pixel_format_fourcc]
+                                                pixel_format_fourcc_decoded = ''.join((PIXEL_FORMAT_PREFIX, pixel_format_fourcc_lookup))
+                                                existing_value = self.format_dictionary.get(pixel_format_fourcc_decoded, 0)
+                                                self.format_dictionary[pixel_format_fourcc_decoded] = existing_value + 1
+
+                                            elif pixel_format_fourcc != PIXEL_FORMAT_FOURCC_SKIP_VALUE:
+                                                logger.warning(f'Detected an unhandled FOURCC: {pixel_format_fourcc}')
 
                             elif VERTEX_BUFFER_CAPS_CALL in call:
                                 logger.debug(f'Found vertex buffer caps on line: {trace_line}')
@@ -1032,6 +1096,36 @@ class TraceStats:
                                         existing_value = self.draw_flag_dictionary.get(draw_flag_stripped, 0)
                                         self.draw_flag_dictionary[draw_flag_stripped] = existing_value + 1
 
+                            elif PROCESS_VERTICES_FLAGS_CALL in call:
+                                logger.debug(f'Found process vertices flags on line: {trace_line}')
+
+                                if PROCESS_VERTICES_FLAGS_SKIP_IDENTIFIER not in trace_line:
+                                    process_vertices_flags_start = trace_line.find(PROCESS_VERTICES_FLAGS_IDENTIFIER) + PROCESS_VERTICES_FLAGS_IDENTIFIER_LENGTH
+                                    process_vertices_flags = trace_line[process_vertices_flags_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
+                                                                                                                     process_vertices_flags_start)].strip()
+
+                                    process_vertices_flags_actual = []
+                                    try:
+                                        # apitrace may not do the conversion, so we'll have to do it ourselves
+                                        process_vertices_flags = int(process_vertices_flags)
+
+                                        if process_vertices_flags & D3DVOP_TRANSFORM:
+                                            process_vertices_flags_actual.append('D3DVOP_TRANSFORM')
+                                        if process_vertices_flags & D3DVOP_CLIP:
+                                            process_vertices_flags_actual.append('D3DVOP_CLIP')
+                                        if process_vertices_flags & D3DVOP_EXTENTS:
+                                            process_vertices_flags_actual.append('D3DVOP_EXTENTS')
+                                        if process_vertices_flags & D3DVOP_LIGHT:
+                                            process_vertices_flags_actual.append('D3DVOP_LIGHT')
+
+                                    except ValueError:
+                                        process_vertices_flags_actual = process_vertices_flags.split(PROCESS_VERTICES_FLAGS_SPLIT_DELIMITER)
+
+                                    for process_vertices_flag in process_vertices_flags_actual:
+                                        process_vertices_flag_stripped = process_vertices_flag.strip()
+                                        existing_value = self.process_vertices_flag_dictionary.get(process_vertices_flag_stripped, 0)
+                                        self.process_vertices_flag_dictionary[process_vertices_flag_stripped] = existing_value + 1
+
                             elif LOCK_FLAGS_CALL_D3D6_7 in call:
                                 logger.debug(f'Found lock flags on line: {trace_line}')
 
@@ -1051,27 +1145,6 @@ class TraceStats:
                                         if lock_flag_stripped.startswith(LOCK_FLAGS_VALUE_IDENTIFIER_D3D6_7):
                                             existing_value = self.lock_flag_dictionary.get(lock_flag_stripped, 0)
                                             self.lock_flag_dictionary[lock_flag_stripped] = existing_value + 1
-
-                            elif RENDER_STATES_CALL_D3D6_7 in call:
-                                logger.debug(f'Found render states on line: {trace_line}')
-
-                                render_state_start = trace_line.find(RENDER_STATES_IDENTIFIER_D3D6_7)
-                                if render_state_start != -1:
-                                    render_state = trace_line[render_state_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
-                                                                                                 render_state_start)].strip()
-
-                                    existing_value = self.render_state_dictionary.get(render_state, 0)
-                                    self.render_state_dictionary[render_state] = existing_value + 1
-
-                            elif DEVICE_CREATION_CALL_D3D6_7 in call:
-                                logger.debug(f'Found device type flags on line: {trace_line}')
-
-                                device_type_start = trace_line.find(DEVICE_TYPE_IDENTIFIER_D3D6_7) + DEVICE_TYPE_IDENTIFIER_D3D6_7_LENGTH
-                                device_type = trace_line[device_type_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
-                                                                                            device_type_start)].strip()
-
-                                existing_value = self.device_type_dictionary.get(device_type, 0)
-                                self.device_type_dictionary[device_type] = existing_value + 1
 
                         elif self.api == 'D3D8' or self.api == 'D3D9Ex' or self.api == 'D3D9':
                             if CHECK_DEVICE_FORMAT_CALL in call:

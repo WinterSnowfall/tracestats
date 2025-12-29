@@ -81,8 +81,9 @@ STATS_TYPE = {'api_calls': 1,
               'cooperative_level_flags': 24,
               'flip_flags': 25,
               'draw_flags': 26,
-              'surface_caps': 27,
-              'vertex_buffer_caps': 28}
+              'process_vertices_flags': 27,
+              'surface_caps': 28,
+              'vertex_buffer_caps': 29}
 
 SEARCH_RESULTS_LIMIT = 999
 
