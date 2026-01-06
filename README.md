@@ -1,6 +1,6 @@
 # tracestats
 
-A humble apitrace trace parser and API call stats exporter, covering APIs from D3D6 to D3D11, with an included web app/search engine. It collects statistical data from apitrace files, which it then exports in JSON format. The JSON files can in turn be uploaded to the included web app/search engine and queried from a consolidated database.
+A humble apitrace trace parser and API call stats exporter, covering APIs from D3D5 to D3D11, with an included web app/search engine. It collects statistical data from apitrace files, which it then exports in JSON format. The JSON files can in turn be uploaded to the included web app/search engine and queried from a consolidated database.
 
 ### How to use
 
@@ -24,6 +24,7 @@ Optionally, you can also specify:
 - `-d`, to dump the shader binaries included in an apitrace, instead of parsing the apitrace for stats generation. The `dumps` directory will be used to store all shader binary dumps.
 - `-a /path/to/apitrace`, to specify the path to the apitrace binary. Default behavior is to try and use the $PATH apitrace, if present.
 - `-w`, to attempt to use Wine when launching apitrace commands. This is only needed when using the Windows version of apitrace on Linux, and will cause issues in other situations.
+- `-f`, to force the API level saved in the traceappnames database, if one is present, during apitrace parsing.
 
 ### What about some other stats which I noticed are missing?
 
