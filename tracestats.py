@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 '''
 @author: Winter Snowfall
-@version: 1.82
-@date: 06/01/2026
+@version: 1.83
+@date: 07/02/2026
 '''
 
 import os
@@ -84,6 +84,7 @@ TRACE_API_OVERRIDES = {'mk4'        : 'D3D5',   # Queries for IDirect3D2 directl
                        'bitaw'      : 'D3D7',   # Uses an IDirectDraw2 interface to play intros, but renders using D3D7 #
                        'gameEE'     : 'D3D7',   # Uses an IDirectDraw2 interface to play intros, but renders using D3D7 #
                        'MessiahD3D' : 'D3D7',   # Uses an IDirectDraw2 interface to play intros, but renders using D3D7 #
+                       'Porsche'    : 'D3D7',   # Uses an IDirectDraw4 interface to play intros, but renders using D3D7 #
                        'TCM2003'    : 'D3D7',   # Uses an IDirectDraw2 interface to play intros, but renders using D3D7 #
                        'Unreal'     : 'D3D7',   # Creates an IDirectDraw2 interface first, but renders using D3D7       #
                        'Wiz8'       : 'D3D7',   # Uses an IDirectDraw2 interface to play intros, but renders using D3D7 #
@@ -178,7 +179,7 @@ PIXEL_FORMAT_FLAGS_IDENTIFIER = 'dwFlags = '
 PIXEL_FORMAT_FLAGS_IDENTIFIER_LENGTH = len(PIXEL_FORMAT_FLAGS_IDENTIFIER)
 PIXEL_FORMAT_FLAGS_DELIMITER = '|'
 PIXEL_FORMAT_FLAGS_SKIP_VALUE = '0x0'
-PIXEL_FORMAT_KNOWN_BOGUS_VALUES = ('0x79c00000', '0x79510000')
+PIXEL_FORMAT_KNOWN_BOGUS_VALUES = ('0x79c00000', '0x79510000', '0x7b000000', '0x3510000')
 PIXEL_FORMAT_FOURCC_FLAG = 'DDPF_FOURCC'
 PIXEL_FORMAT_IDENTIFIER_FOURCC = 'dwFourCC = '
 PIXEL_FORMAT_IDENTIFIER_FOURCC_LENGTH = len(PIXEL_FORMAT_IDENTIFIER_FOURCC)
