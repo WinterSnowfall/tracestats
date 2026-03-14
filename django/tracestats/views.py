@@ -16,32 +16,32 @@ logger = logging.getLogger('tracestats')
 #constants
 JSON_BASE_KEY = 'tracestats'
 
-API_VALUES_ENCODE = {'D3D5'  : 1,
-                     'D3D6'  : 2,
-                     'D3D7'  : 3,
-                     'D3D8'  : 4,
-                     'D3D9'  : 5,
-                     'D3D9Ex': 6,
-                     'D3D10' : 7,
-                     'D3D11' : 8}
+API_VALUES_ENCODE = {'D3D3'  : 1,
+                     'D3D5'  : 2,
+                     'D3D6'  : 3,
+                     'D3D7'  : 4,
+                     'D3D8'  : 5,
+                     'D3D9'  : 6,
+                     'D3D9Ex': 7,
+                     'D3D10' : 8,
+                     'D3D11' : 9}
 
-API_VALUES_DECODE = {1: 'D3D5',
-                     2: 'D3D6',
-                     3: 'D3D7',
-                     4: 'D3D8',
-                     5: 'D3D9',
-                     6: 'D3D9Ex',
-                     7: 'D3D10',
-                     8: 'D3D11'}
+API_VALUES_DECODE = {1: 'D3D3',
+                     2: 'D3D5',
+                     3: 'D3D6',
+                     4: 'D3D7',
+                     5: 'D3D8',
+                     6: 'D3D9',
+                     7: 'D3D9Ex',
+                     8: 'D3D10',
+                     9: 'D3D11'}
 
 API_ENTRY_CALL_IDENTIFIER = '::'
 
-# use IDirect3D calls to segregate between D3D6 and D3D7 when parsing
-# tracestats JSONs, as it's entirely more accurate than using DDraw versions,
-# and parsing order does not matter, since entries are sorted alpahbetically
-API_ENTRY_CALLS = {'IDirect3D7': 'D3D7', # ensure D3D7 gets checked before D3D6
-                   'IDirect3D3': 'D3D6', # ensure D3D6 gets checked before D3D5
-                   'IDirect3D2': 'D3D5',
+API_ENTRY_CALLS = {'IDirect3DDevice7': 'D3D7',
+                   'IDirect3DDevice3': 'D3D6',
+                   'IDirect3DDevice2': 'D3D5',
+                   'IDirect3DDevice': 'D3D3', # ensure D3D3 gets checked last
                    'Direct3DCreate8': 'D3D8',
                    'Direct3DCreate9Ex': 'D3D9Ex', # ensure D3D9Ex gets checked before D3D9
                    'Direct3DCreate9': 'D3D9',
@@ -86,7 +86,8 @@ STATS_TYPE = {'api_calls': 1,
               'draw_flags': 26,
               'process_vertices_flags': 27,
               'surface_caps': 28,
-              'vertex_buffer_caps': 29}
+              'vertex_buffer_caps': 29,
+              'texture_map_modes': 30,}
 
 SEARCH_RESULTS_LIMIT = 999
 
@@ -382,14 +383,15 @@ def generate_stats(request):
       request.session.modified = True
 
     if request.session['api_stats_visible']:
-      api_stats['d3d5']   = models.Trace.objects.filter(api=1).count()
-      api_stats['d3d6']   = models.Trace.objects.filter(api=2).count()
-      api_stats['d3d7']   = models.Trace.objects.filter(api=3).count()
-      api_stats['d3d8']   = models.Trace.objects.filter(api=4).count()
-      api_stats['d3d9']   = models.Trace.objects.filter(api=5).count()
-      api_stats['d3d9ex'] = models.Trace.objects.filter(api=6).count()
-      api_stats['d3d10']  = models.Trace.objects.filter(api=7).count()
-      api_stats['d3d11']  = models.Trace.objects.filter(api=8).count()
+      api_stats['d3d3']   = models.Trace.objects.filter(api=1).count()
+      api_stats['d3d5']   = models.Trace.objects.filter(api=2).count()
+      api_stats['d3d6']   = models.Trace.objects.filter(api=3).count()
+      api_stats['d3d7']   = models.Trace.objects.filter(api=4).count()
+      api_stats['d3d8']   = models.Trace.objects.filter(api=5).count()
+      api_stats['d3d9']   = models.Trace.objects.filter(api=6).count()
+      api_stats['d3d9ex'] = models.Trace.objects.filter(api=7).count()
+      api_stats['d3d10']  = models.Trace.objects.filter(api=8).count()
+      api_stats['d3d11']  = models.Trace.objects.filter(api=9).count()
 
       context = {}
       context.update(csrf(request))

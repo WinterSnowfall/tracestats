@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 '''
 @author: Winter Snowfall
-@version: 1.83
-@date: 07/02/2026
+@version: 1.90
+@date: 10/03/2026
 '''
 
 import os
@@ -14,6 +14,8 @@ import queue
 import threading
 import signal
 import shutil
+# uncomment for debugging purposes only
+#import traceback
 
 try:
     from traceappnames import TraceAppNames
@@ -45,11 +47,10 @@ API_ENTRY_VALUE_DELIMITER = ','
 SHADER_DUMP_SKIP_IDENTIFIER_D3D8_9 = 'pFunction = NULL'
 SHADER_DUMP_SKIP_IDENTIFIER_D3D10_11 = 'pShaderBytecode = NULL'
 
-# use IDirectDraw versions to identify D3D7 and D3D6, as call order matters
-# during apitrace parsing, but fall back to IDirect3D for tracestats JSON parsing
-API_ENTRY_CALLS = {'IDirectDraw2': 'D3D5',
-                   'IDirectDraw4': 'D3D6',
-                   'IDirectDraw7': 'D3D7',
+API_ENTRY_CALLS = {'IDirect3DDevice7': 'D3D7',
+                   'IDirect3DDevice3': 'D3D6',
+                   'IDirect3DDevice2': 'D3D5',
+                   'IDirect3DDevice': 'D3D3', # ensure D3D3 gets checked last
                    'Direct3DCreate8': 'D3D8',
                    'Direct3DCreate9Ex': 'D3D9Ex', # ensure D3D9Ex gets checked before D3D9
                    'Direct3DCreate9': 'D3D9',
@@ -74,23 +75,7 @@ API_BASE_CALLS = {**API_ENTRY_CALLS, 'DirectDrawCreateEx': 'DDraw7',
                                      'CreateDXGIFactory1': 'DXGI',
                                      'CreateDXGIFactory2': 'DXGI'}
 
-                       ######################################## Parsing Only ############################################
-TRACE_API_OVERRIDES = {'mk4'        : 'D3D5',   # Queries for IDirect3D2 directly from IDirectDraw                      #
-                       'RtK'        : 'D3D5',   # Creates an IDirectDraw7 interface first, but renders using D3D5...    #
-                       'Dethkarz'   : 'D3D6',   # Creates an IDirectDraw2 interface first, but renders using D3D6       #
-                       'Df2'        : 'D3D6',   # Creates an IDirectDraw2 interface first, but renders using D3D6       #
-                       'GK3'        : 'D3D6',   # Creates an IDirectDraw2 interface first, but renders using D3D6       #
-                       'Starfleet'  : 'D3D6',   # Creates an IDirectDraw2 interface first, but renders using D3D6       #
-                       'bitaw'      : 'D3D7',   # Uses an IDirectDraw2 interface to play intros, but renders using D3D7 #
-                       'gameEE'     : 'D3D7',   # Uses an IDirectDraw2 interface to play intros, but renders using D3D7 #
-                       'MessiahD3D' : 'D3D7',   # Uses an IDirectDraw2 interface to play intros, but renders using D3D7 #
-                       'Porsche'    : 'D3D7',   # Uses an IDirectDraw4 interface to play intros, but renders using D3D7 #
-                       'TCM2003'    : 'D3D7',   # Uses an IDirectDraw2 interface to play intros, but renders using D3D7 #
-                       'Unreal'     : 'D3D7',   # Creates an IDirectDraw2 interface first, but renders using D3D7       #
-                       'Wiz8'       : 'D3D7',   # Uses an IDirectDraw2 interface to play intros, but renders using D3D7 #
-                       'WoT'        : 'D3D7',   # Creates an IDirectDraw2 interface first, but renders using D3D7       #
-                       ##################################################################################################
-                       'wargame_'   : 'D3D9Ex', # Ignore queries done on a plain D3D9 interface, as it's not used for rendering
+TRACE_API_OVERRIDES = {'wargame_'   : 'D3D9Ex', # Ignore queries done on a plain D3D9 interface, as it's not used for rendering
                        'xrEngine___': 'D3D10',  # Creates a D3D11 device first, but renders using D3D10
                        'RebelGalaxy': 'D3D11'}  # Creates a D3D10 device first, but renders using D3D11
 
@@ -156,7 +141,7 @@ D3DVOP_CLIP      = 0x00000004
 D3DVOP_EXTENTS   = 0x00000008
 D3DVOP_LIGHT     = 0x00000400
 
-########################## DDRAW4, D3D6, DDRAW7, D3D7 ##########################
+####################### DDRAW, D3D3, D3D5, D3D6, D3D7 ##########################
 # cooperative level flags
 COOPERATIVE_LEVEL_FLAGS_CALL = '::SetCooperativeLevel'
 COOPERATIVE_LEVEL_FLAGS_IDENTIFIER = 'dwFlags = '
@@ -215,22 +200,26 @@ PROCESS_VERTICES_FLAGS_IDENTIFIER_LENGTH = len(PROCESS_VERTICES_FLAGS_IDENTIFIER
 PROCESS_VERTICES_FLAGS_SPLIT_DELIMITER = '|'
 PROCESS_VERTICES_FLAGS_SKIP_IDENTIFIER = 'dwVertexOp = 0' # can be 0 or 0x0
 # render states
-RENDER_STATES_CALL_D3D5_6_7 = '::SetRenderState'
-RENDER_STATES_IDENTIFIER_D3D5_6_7 = 'D3DRENDERSTATE_'
-RENDER_STATES_IDENTIFIER_D3D5_6_7_END = ','
+RENDER_STATES_CALL_DDRAW = '::SetRenderState'
+RENDER_STATES_IDENTIFIER_DDRAW = 'D3DRENDERSTATE_'
 # lock flags
-LOCK_FLAGS_CALL_D3D5_6_7 = '::Lock'
-LOCK_FLAGS_IDENTIFIER_D3D5_6_7 = 'dwFlags = '
-LOCK_FLAGS_IDENTIFIER_D3D5_6_7_LENGTH = len(LOCK_FLAGS_IDENTIFIER_D3D5_6_7)
-LOCK_FLAGS_VALUE_IDENTIFIER_D3D5_6_7 = 'DDLOCK_'
-LOCK_FLAGS_SKIP_IDENTIFIER_D3D5_6_7 = 'dwFlags = 0x0'
-LOCK_FLAGS_SPLIT_DELIMITER_D3D5_6_7 = '|'
+LOCK_FLAGS_CALL_DDRAW = '::Lock'
+LOCK_FLAGS_IDENTIFIER_DDRAW = 'dwFlags = '
+LOCK_FLAGS_IDENTIFIER_DDRAW_LENGTH = len(LOCK_FLAGS_IDENTIFIER_DDRAW)
+LOCK_FLAGS_VALUE_IDENTIFIER_DDRAW = 'DDLOCK_'
+LOCK_FLAGS_SKIP_IDENTIFIER_DDRAW = 'dwFlags = 0x0'
+LOCK_FLAGS_SPLIT_DELIMITER_DDRAW = '|'
 # device type
-DEVICE_CREATION_CALL_D3D5_6_7 = '::CreateDevice'
-DEVICE_TYPE_IDENTIFIER_D3D5_6_7 = 'rclsid = '
-DEVICE_TYPE_IDENTIFIER_D3D5_6_7_LENGTH = len(DEVICE_TYPE_IDENTIFIER_D3D5_6_7)
-DEVICE_TYPE_SKIP_IDENTIFIER_D3D5_6_7 = 'uuid(aef72d43-b09a-4b7b-b798-c68a772d722a)' # WineD3D device GUID
-########################## DDRAW4, D3D6, DDRAW7, D3D7 ##########################
+DEVICE_CREATION_CALL_DDRAW = '::CreateDevice'
+DEVICE_TYPE_IDENTIFIER_DDRAW = 'rclsid = '
+DEVICE_TYPE_IDENTIFIER_DDRAW_LENGTH = len(DEVICE_TYPE_IDENTIFIER_DDRAW)
+DEVICE_TYPE_SKIP_IDENTIFIER_DDRAW = 'uuid(aef72d43-b09a-4b7b-b798-c68a772d722a)' # WineD3D device GUID
+# texture map blend modes
+TEXTURE_MAP_BLEND_MODE_VALUE = 'D3DRENDERSTATE_TEXTUREMAPBLEND'
+TEXTURE_MAP_BLEND_MODE_IDENTIFIER = 'dwRenderState = '
+TEXTURE_MAP_BLEND_MODE_IDENTIFIER_LENGTH = len(TEXTURE_MAP_BLEND_MODE_IDENTIFIER)
+TEXTURE_MAP_BLEND_MODE_END = ')'
+####################### DDRAW, D3D3, D3D5, D3D6, D3D7 ##########################
 
 ############################## D3D8, D3D9Ex, D3D9 ##############################
 # check device format vendor hacks
@@ -544,6 +533,7 @@ class TraceStats:
         self.process_vertices_flag_dictionary = {}
         self.surface_cap_dictionary = {}
         self.vertex_buffer_cap_dictionary = {}
+        self.texture_map_mode_dictionary = {}
 
         self.process_queue = queue.Queue(maxsize=TRACE_PARSE_QUEUE_SIZE)
         self.api_skip = threading.Event()
@@ -623,49 +613,80 @@ class TraceStats:
                         logger.critical(f'Unable to decompress trace file: {trace_path}')
                         raise SystemExit(6)
 
-                self.process_loop.set()
-
-                # start trace processing thread
-                process_thread = threading.Thread(target=self.trace_parse_worker, args=())
-                process_thread.daemon = True
-                process_thread.start()
-
-                self.parse_loop.set()
-
                 # mind the -v (verbose) flag here, otherwise apitrace dump will skip various calls :/
                 if self.use_wine_for_apitrace:
                     subprocess_params = ('wine', self.apitrace_path, 'dump', '-v', '--color=never', trace_path_final)
                 else:
                     subprocess_params = (self.apitrace_path, 'dump', '-v', '--color=never', trace_path_final)
 
-                trace_chunk_line_count = 0
-                trace_chunk_lines = []
+                process_thread = threading.Thread(target=self.trace_parse_worker, args=())
 
                 try:
-                    trace_dump_subprocess = subprocess.Popen(subprocess_params, bufsize=0,
-                                                             stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
-                                                             text=True)
+                    if self.traceappnames_api is not None and self.force_api_level:
+                        self.api = TRACE_API_OVERRIDES.get(self.binary_name_raw, None)
+                        if self.api is not None:
+                            logger.info(f'Forcing traceappnames API level: {self.api}')
 
-                    while self.parse_loop.is_set():
-                        trace_chunk_line = trace_dump_subprocess.stdout.readline()
+                    # API detection prepass
+                    if self.api is None:
+                        api_prepass_subprocess = subprocess.Popen(subprocess_params, bufsize=0,
+                                                                  stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                                                                  text=True)
 
-                        if trace_chunk_line == '' and trace_dump_subprocess.poll() is not None:
-                            # flush any pending chunk lines
-                            if len(trace_chunk_lines):
-                                self.process_queue.put(trace_chunk_lines)
-                            self.parse_loop.clear()
-                            logger.info('End of trace dump output detected')
-                        else:
-                            trace_chunk_line_count += 1
-                            trace_chunk_lines.append(trace_chunk_line)
+                        while self.api == None:
+                            trace_chunk_line = api_prepass_subprocess.stdout.readline()
 
-                            if trace_chunk_line_count == TRACE_PARSE_CHUNK_CALLS:
-                                self.process_queue.put(trace_chunk_lines)
-                                trace_chunk_line_count = 0
-                                trace_chunk_lines = []
+                            if trace_chunk_line == '' and api_prepass_subprocess.poll() is not None:
+                                logger.critical('Unable to detected any supported API level')
+                                raise SystemExit(7)
+                            else:
+                                self.trace_api_prepass(trace_chunk_line)
+
+                        api_prepass_subprocess.terminate()
+
+                    # API based parsing skip logic
+                    if self.traceappnames_api is None and self.apis_to_skip is not None and self.api in self.apis_to_skip:
+                        self.api_skip.set()
+
+                    # actual trace parsing, with a determined API
+                    else:
+                        self.process_loop.set()
+
+                        # start trace processing thread
+                        process_thread.daemon = True
+                        process_thread.start()
+
+                        self.parse_loop.set()
+
+                        trace_chunk_line_count = 0
+                        trace_chunk_lines = []
+
+                        trace_dump_subprocess = subprocess.Popen(subprocess_params, bufsize=0,
+                                                                 stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                                                                 text=True)
+
+                        while self.parse_loop.is_set():
+                            trace_chunk_line = trace_dump_subprocess.stdout.readline()
+
+                            if trace_chunk_line == '' and trace_dump_subprocess.poll() is not None:
+                                # flush any pending chunk lines
+                                if len(trace_chunk_lines):
+                                    self.process_queue.put(trace_chunk_lines)
+                                self.parse_loop.clear()
+                                logger.info('End of trace dump output detected')
+                            else:
+                                trace_chunk_line_count += 1
+                                trace_chunk_lines.append(trace_chunk_line)
+
+                                if trace_chunk_line_count == TRACE_PARSE_CHUNK_CALLS:
+                                    self.process_queue.put(trace_chunk_lines)
+                                    trace_chunk_line_count = 0
+                                    trace_chunk_lines = []
 
                 except:
                     logger.critical('Critical exception during the apitrace dump process')
+                    # uncomment for debugging purposes only
+                    #logger.error(traceback.format_exc())
                     self.parse_loop.clear()
 
                 # signal the termination of the processing thread
@@ -740,6 +761,8 @@ class TraceStats:
                             return_dictionary['surface_caps'] = self.surface_cap_dictionary
                         if len(self.vertex_buffer_cap_dictionary) > 0:
                             return_dictionary['vertex_buffer_caps'] = self.vertex_buffer_cap_dictionary
+                        if len(self.texture_map_mode_dictionary) > 0:
+                            return_dictionary['texture_map_modes'] = self.texture_map_mode_dictionary
 
                         self.json_output[JSON_BASE_KEY].append(return_dictionary)
 
@@ -812,6 +835,7 @@ class TraceStats:
                 self.process_vertices_flag_dictionary = {}
                 self.surface_cap_dictionary = {}
                 self.vertex_buffer_cap_dictionary = {}
+                self.texture_map_mode_dictionary = {}
 
             else:
                 logger.warning(f'File not found, skipping: {trace_path}')
@@ -829,27 +853,60 @@ class TraceStats:
             with open(self.json_export_path, 'w') as file:
                 file.write(json_export)
 
-            logger.info(f'JSON export complete')
+            logger.info('JSON export complete')
+
+    def trace_api_prepass(self, trace_line_raw):
+        trace_line = trace_line_raw.rstrip()
+
+        # there are, surprisingly, quite a lot of
+        # blank/padding lines in an apitrace dump
+        if trace_line == '':
+            return
+        # early skip embedded full line comments
+        if trace_line.startswith('//'):
+            return
+
+        shader_line = (trace_line.startswith(SHADER_LINE_WHITESPACE) or
+                        # need to check the actual line start too for any
+                        # shader identifiers as some shaders have no indent
+                        trace_line.startswith(VERTEX_SHADER_IDENTIFIER) or
+                        trace_line.startswith(PIXEL_SHADER_IDENTIFIER) or
+                        trace_line.startswith(COMPUTE_SHADER_IDENTIFIER) or
+                        trace_line.startswith(DOMAIN_SHADER_IDENTIFIER) or
+                        trace_line.startswith(GEOMETRY_SHADER_IDENTIFIER) or
+                        trace_line.startswith(HULL_SHADER_IDENTIFIER))
+
+        if not shader_line:
+            # no need to do more than 2 splits, as we only need
+            # the trace number and later on the api call name
+            split_line = trace_line.split(maxsplit=2)
+
+            if API_ENTRY_CALL_IDENTIFIER in trace_line:
+                for key, value in API_ENTRY_CALLS.items():
+                    if key in split_line[1]:
+                        self.api = value
+
+                        if self.traceappnames_api is not None and self.traceappnames_api != self.api:
+                            api_override = TRACE_API_OVERRIDES.get(self.binary_name_raw, None)
+                            if api_override is None:
+                                logger.warning(f'Traceappnames API value is mismatched: {self.api}')
+                            elif self.traceappnames_api == api_override:
+                                logger.info(f'Known API value override detected: {api_override}')
+                            else:
+                                logger.error('Unexpected API override value')
+                        else:
+                            logger.info(f'Detected API: {self.api}')
+
+                        break
 
     def trace_parse_worker(self):
-
         while self.process_loop.is_set() or not self.process_queue.empty():
-            # stop parsing if API skip is engaged
-            if self.api_skip.is_set():
-                self.parse_loop.clear()
-                self.process_loop.clear()
-                break
-
             logger.debug(f'Items in the processing queue: {self.process_queue.qsize()}')
 
             try:
                 trace_chunk_lines = self.process_queue.get(block=True, timeout=5)
                 trace_call_counter = 0
                 shader_call_context = False
-
-                if self.api == None and self.traceappnames_api is not None and self.force_api_level:
-                    self.api = TRACE_API_OVERRIDES.get(self.binary_name_raw, None)
-                    logger.info(f'Forcing traceappnames API level: {self.api}')
 
                 for trace_line_raw in trace_chunk_lines:
                     trace_line = trace_line_raw.rstrip()
@@ -862,7 +919,6 @@ class TraceStats:
                         continue
                     # early skip embedded full line comments
                     if trace_line.startswith('//'):
-                        logger.debug(f'Skipped parsing of line: {trace_line}')
                         continue
 
                     shader_line = (trace_line.startswith(SHADER_LINE_WHITESPACE) or
@@ -892,30 +948,6 @@ class TraceStats:
 
                     if (shader_line or API_ENTRY_CALL_IDENTIFIER in trace_line or
                         any(api_base_call in trace_line for api_base_call in API_BASE_CALLS.keys())):
-                        # typically, the API entrypoint can be found
-                        # on the fist line of an apitrace
-                        if self.api is None and not shader_line:
-                            for key, value in API_ENTRY_CALLS.items():
-                                if key in split_line[1]:
-                                    self.api = value
-
-                                    if self.traceappnames_api is not None and self.traceappnames_api != self.api:
-                                        api_override = TRACE_API_OVERRIDES.get(self.binary_name_raw, None)
-                                        if api_override is None:
-                                            logger.warning(f'Traceappnames API value is mismatched: {self.api}')
-                                        elif self.traceappnames_api == api_override:
-                                            logger.info(f'Known API value override detected: {api_override}')
-                                        else:
-                                            logger.error('Unexpected API override value')
-                                    else:
-                                        logger.info(f'Detected API: {self.api}')
-
-                                    # otherwise D3D9 will get added to D3D9Ex, heh
-                                    break
-                            if self.traceappnames_api is None and self.apis_to_skip is not None and self.api in self.apis_to_skip:
-                                self.api_skip.set()
-                                break
-
                         # parse API calls
                         if not shader_line:
                             call = split_line[1].split('(', 1)[0]
@@ -927,30 +959,8 @@ class TraceStats:
                             # line starting with shader specific whitespace (not an actual call)
                             call = ''
 
-                        if self.api =='D3D7' or self.api == 'D3D6' or self.api == 'D3D5':
-                            if DEVICE_CREATION_CALL_D3D5_6_7 in call:
-                                logger.debug(f'Found device type flags on line: {trace_line}')
-
-                                device_type_start = trace_line.find(DEVICE_TYPE_IDENTIFIER_D3D5_6_7) + DEVICE_TYPE_IDENTIFIER_D3D5_6_7_LENGTH
-                                device_type = trace_line[device_type_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
-                                                                                           device_type_start)].strip()
-
-                                if not device_type.startswith(DEVICE_TYPE_SKIP_IDENTIFIER_D3D5_6_7):
-                                    existing_value = self.device_type_dictionary.get(device_type, 0)
-                                    self.device_type_dictionary[device_type] = existing_value + 1
-
-                            elif RENDER_STATES_CALL_D3D5_6_7 in call:
-                                logger.debug(f'Found render states on line: {trace_line}')
-
-                                render_state_start = trace_line.find(RENDER_STATES_IDENTIFIER_D3D5_6_7)
-                                if render_state_start != -1:
-                                    render_state = trace_line[render_state_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
-                                                                                                 render_state_start)].strip()
-
-                                    existing_value = self.render_state_dictionary.get(render_state, 0)
-                                    self.render_state_dictionary[render_state] = existing_value + 1
-
-                            elif COOPERATIVE_LEVEL_FLAGS_CALL in call:
+                        if self.api =='D3D7' or self.api == 'D3D6' or self.api == 'D3D5' or self.api == 'D3D3':
+                            if COOPERATIVE_LEVEL_FLAGS_CALL in call:
                                 logger.debug(f'Found cooperative level flags on line: {trace_line}')
 
                                 cooperative_level_flags_start = trace_line.find(COOPERATIVE_LEVEL_FLAGS_IDENTIFIER) + COOPERATIVE_LEVEL_FLAGS_IDENTIFIER_LENGTH
@@ -1048,43 +1058,16 @@ class TraceStats:
                                                 elif pixel_format_fourcc != PIXEL_FORMAT_FOURCC_SKIP_VALUE:
                                                     logger.warning(f'Detected an unhandled FOURCC: {pixel_format_fourcc}')
 
-                                            else:
+                                            # 0x can be found later in a decoded string, so make sure it's not present
+                                            elif pixel_format_fourcc.find('0x') == -1:
                                                 logger.debug(f'Found FOURCC on line: {trace_line}')
 
                                                 pixel_format_fourcc_stripped = pixel_format_fourcc.strip()
                                                 existing_value = self.format_dictionary.get(pixel_format_fourcc_stripped, 0)
                                                 self.format_dictionary[pixel_format_fourcc_stripped] = existing_value + 1
 
-
-                            elif VERTEX_BUFFER_CAPS_CALL in call:
-                                logger.debug(f'Found vertex buffer caps on line: {trace_line}')
-
-                                if VERTEX_BUFFER_CAPS_SKIP_IDENTIFIER not in trace_line:
-                                    vertex_buffer_caps_start = trace_line.find(VERTEX_BUFFER_CAPS_IDENTIFIER) + VERTEX_BUFFER_CAPS_IDENTIFIER_LENGTH
-                                    vertex_buffer_caps = trace_line[vertex_buffer_caps_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
-                                                                                                             vertex_buffer_caps_start)].strip()
-
-                                    vertex_buffer_caps_actual = []
-                                    try:
-                                        # apitrace may not do the conversion, so we'll have to do it ourselves
-                                        vertex_buffer_caps = int(vertex_buffer_caps)
-
-                                        if vertex_buffer_caps & D3DVBCAPS_SYSTEMMEMORY:
-                                            vertex_buffer_caps_actual.append('D3DVBCAPS_SYSTEMMEMORY')
-                                        if vertex_buffer_caps & D3DVBCAPS_WRITEONLY:
-                                            vertex_buffer_caps_actual.append('D3DVBCAPS_WRITEONLY')
-                                        if vertex_buffer_caps & D3DVBCAPS_OPTIMIZED:
-                                            vertex_buffer_caps_actual.append('D3DVBCAPS_OPTIMIZED')
-                                        if vertex_buffer_caps & D3DVBCAPS_DONOTCLIP:
-                                            vertex_buffer_caps_actual.append('D3DVBCAPS_DONOTCLIP')
-
-                                    except ValueError:
-                                        vertex_buffer_caps_actual = vertex_buffer_caps.split(VERTEX_BUFFER_CAPS_SPLIT_DELIMITER)
-
-                                    for vertex_buffer_cap in vertex_buffer_caps_actual:
-                                        vertex_buffer_cap_stripped = vertex_buffer_cap.strip()
-                                        existing_value = self.vertex_buffer_cap_dictionary.get(vertex_buffer_cap_stripped, 0)
-                                        self.vertex_buffer_cap_dictionary[vertex_buffer_cap_stripped] = existing_value + 1
+                                            else:
+                                                logger.warning(f'Detected an unparsable FOURCC: {pixel_format_fourcc}')
 
                             elif FLIP_FLAGS_CALL in call and FLIP_TO_GDI_CALL not in call:
                                 logger.debug(f'Found flip flags on line: {trace_line}')
@@ -1100,87 +1083,177 @@ class TraceStats:
                                         existing_value = self.flip_flag_dictionary.get(flip_flag_stripped, 0)
                                         self.flip_flag_dictionary[flip_flag_stripped] = existing_value + 1
 
-                            elif DRAW_FLAGS_CALL in call:
-                                logger.debug(f'Found draw flags on line: {trace_line}')
-
-                                if DRAW_FLAGS_SKIP_IDENTIFIER not in trace_line:
-                                    draw_flags_start = trace_line.find(DRAW_FLAGS_IDENTIFIER) + DRAW_FLAGS_IDENTIFIER_LENGTH
-                                    draw_flags = trace_line[draw_flags_start:trace_line.find(DRAW_FLAGS_IDENTIFIER_END,
-                                                                                             draw_flags_start)].strip()
-
-                                    draw_flags_actual = []
-                                    try:
-                                        # apitrace may not do the conversion, so we'll have to do it ourselves
-                                        draw_flags = int(draw_flags)
-
-                                        if draw_flags & D3DDP_WAIT:
-                                            draw_flags_actual.append('D3DDP_WAIT')
-                                        if draw_flags & D3DDP_OUTOFORDER:
-                                            draw_flags_actual.append('D3DDP_OUTOFORDER')
-                                        if draw_flags & D3DDP_DONOTCLIP:
-                                            draw_flags_actual.append('D3DDP_DONOTCLIP')
-                                        if draw_flags & D3DDP_DONOTUPDATEEXTENTS:
-                                            draw_flags_actual.append('D3DDP_DONOTUPDATEEXTENTS')
-                                        if draw_flags & D3DDP_DONOTLIGHT:
-                                            draw_flags_actual.append('D3DDP_DONOTLIGHT')
-
-                                    except ValueError:
-                                        draw_flags_actual = draw_flags.split(DRAW_FLAGS_SPLIT_DELIMITER)
-
-                                    for draw_flag in draw_flags_actual:
-                                        draw_flag_stripped = draw_flag.strip()
-                                        existing_value = self.draw_flag_dictionary.get(draw_flag_stripped, 0)
-                                        self.draw_flag_dictionary[draw_flag_stripped] = existing_value + 1
-
-                            elif PROCESS_VERTICES_FLAGS_CALL in call:
-                                logger.debug(f'Found process vertices flags on line: {trace_line}')
-
-                                if PROCESS_VERTICES_FLAGS_SKIP_IDENTIFIER not in trace_line:
-                                    process_vertices_flags_start = trace_line.find(PROCESS_VERTICES_FLAGS_IDENTIFIER) + PROCESS_VERTICES_FLAGS_IDENTIFIER_LENGTH
-                                    process_vertices_flags = trace_line[process_vertices_flags_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
-                                                                                                                     process_vertices_flags_start)].strip()
-
-                                    process_vertices_flags_actual = []
-                                    try:
-                                        # apitrace may not do the conversion, so we'll have to do it ourselves
-                                        process_vertices_flags = int(process_vertices_flags)
-
-                                        if process_vertices_flags & D3DVOP_TRANSFORM:
-                                            process_vertices_flags_actual.append('D3DVOP_TRANSFORM')
-                                        if process_vertices_flags & D3DVOP_CLIP:
-                                            process_vertices_flags_actual.append('D3DVOP_CLIP')
-                                        if process_vertices_flags & D3DVOP_EXTENTS:
-                                            process_vertices_flags_actual.append('D3DVOP_EXTENTS')
-                                        if process_vertices_flags & D3DVOP_LIGHT:
-                                            process_vertices_flags_actual.append('D3DVOP_LIGHT')
-
-                                    except ValueError:
-                                        process_vertices_flags_actual = process_vertices_flags.split(PROCESS_VERTICES_FLAGS_SPLIT_DELIMITER)
-
-                                    for process_vertices_flag in process_vertices_flags_actual:
-                                        process_vertices_flag_stripped = process_vertices_flag.strip()
-                                        existing_value = self.process_vertices_flag_dictionary.get(process_vertices_flag_stripped, 0)
-                                        self.process_vertices_flag_dictionary[process_vertices_flag_stripped] = existing_value + 1
-
-                            elif LOCK_FLAGS_CALL_D3D5_6_7 in call:
+                            elif LOCK_FLAGS_CALL_DDRAW in call:
                                 logger.debug(f'Found lock flags on line: {trace_line}')
 
                                 # IDirectDrawSurface7::Lock actually has two sets of dwFlags, with the latter
                                 # being the one related to the actual locks, and what we are interested in
-                                if LOCK_FLAGS_SKIP_IDENTIFIER_D3D5_6_7 not in trace_line:
-                                    lock_flags_start = trace_line.rfind(LOCK_FLAGS_IDENTIFIER_D3D5_6_7) + LOCK_FLAGS_IDENTIFIER_D3D5_6_7_LENGTH
+                                if LOCK_FLAGS_SKIP_IDENTIFIER_DDRAW not in trace_line:
+                                    lock_flags_start = trace_line.rfind(LOCK_FLAGS_IDENTIFIER_DDRAW) + LOCK_FLAGS_IDENTIFIER_DDRAW_LENGTH
                                     lock_flags = trace_line[lock_flags_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
                                                                                              lock_flags_start)].strip()
 
-                                    lock_flags = lock_flags.split(LOCK_FLAGS_SPLIT_DELIMITER_D3D5_6_7)
+                                    lock_flags = lock_flags.split(LOCK_FLAGS_SPLIT_DELIMITER_DDRAW)
 
                                     for lock_flag in lock_flags:
                                         lock_flag_stripped = lock_flag.strip()
 
                                         # Praetorians sets several bogus lock values (not part of the enum)
-                                        if lock_flag_stripped.startswith(LOCK_FLAGS_VALUE_IDENTIFIER_D3D5_6_7):
+                                        if lock_flag_stripped.startswith(LOCK_FLAGS_VALUE_IDENTIFIER_DDRAW):
                                             existing_value = self.lock_flag_dictionary.get(lock_flag_stripped, 0)
                                             self.lock_flag_dictionary[lock_flag_stripped] = existing_value + 1
+
+                            if self.api =='D3D7' or self.api == 'D3D6' or self.api == 'D3D5':
+                                if DEVICE_CREATION_CALL_DDRAW in call:
+                                    logger.debug(f'Found device type flags on line: {trace_line}')
+
+                                    device_type_start = trace_line.find(DEVICE_TYPE_IDENTIFIER_DDRAW) + DEVICE_TYPE_IDENTIFIER_DDRAW_LENGTH
+                                    device_type = trace_line[device_type_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
+                                                                                               device_type_start)].strip()
+
+                                    if not device_type.startswith(DEVICE_TYPE_SKIP_IDENTIFIER_DDRAW):
+                                        existing_value = self.device_type_dictionary.get(device_type, 0)
+                                        self.device_type_dictionary[device_type] = existing_value + 1
+
+                                elif RENDER_STATES_CALL_DDRAW in call:
+                                    logger.debug(f'Found render states on line: {trace_line}')
+
+                                    render_state_start = trace_line.find(RENDER_STATES_IDENTIFIER_DDRAW)
+                                    if render_state_start != -1:
+                                        render_state = trace_line[render_state_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
+                                                                                                     render_state_start)].strip()
+
+                                        existing_value = self.render_state_dictionary.get(render_state, 0)
+                                        self.render_state_dictionary[render_state] = existing_value + 1
+
+                                        if render_state == TEXTURE_MAP_BLEND_MODE_VALUE:
+                                            texture_map_mode_start = trace_line.find(TEXTURE_MAP_BLEND_MODE_IDENTIFIER) + TEXTURE_MAP_BLEND_MODE_IDENTIFIER_LENGTH
+                                            texture_map_mode = trace_line[texture_map_mode_start:trace_line.find(TEXTURE_MAP_BLEND_MODE_END,
+                                                                                                                 texture_map_mode_start)].strip()
+
+                                            try:
+                                                # apitrace may not do the conversion, so we'll have to do it ourselves
+                                                texture_map_mode = int(texture_map_mode)
+
+                                                if texture_map_mode == 1:
+                                                    texture_map_mode = 'D3DTBLEND_DECAL'
+                                                elif texture_map_mode == 2:
+                                                    texture_map_mode = 'D3DTBLEND_MODULATE'
+                                                elif texture_map_mode == 3:
+                                                    texture_map_mode = 'D3DTBLEND_DECALALPHA'
+                                                elif texture_map_mode == 4:
+                                                    texture_map_mode = 'D3DTBLEND_MODULATEALPHA'
+                                                elif texture_map_mode == 5:
+                                                    texture_map_mode = 'D3DTBLEND_DECALMASK'
+                                                elif texture_map_mode == 6:
+                                                    texture_map_mode = 'D3DTBLEND_MODULATEMASK'
+                                                elif texture_map_mode == 7:
+                                                    texture_map_mode = 'D3DTBLEND_COPY'
+                                                elif texture_map_mode == 8:
+                                                    texture_map_mode = 'D3DTBLEND_ADD'
+                                                else:
+                                                    texture_map_mode = None
+
+                                            except ValueError:
+                                                pass
+
+                                            # work around an older apitrace bug which decoded values to D3DBLEND_
+                                            if texture_map_mode is not None and not texture_map_mode.startswith('D3DBLEND_'):
+                                                existing_value = self.texture_map_mode_dictionary.get(texture_map_mode, 0)
+                                                self.texture_map_mode_dictionary[texture_map_mode] = existing_value + 1
+
+                                elif DRAW_FLAGS_CALL in call:
+                                    logger.debug(f'Found draw flags on line: {trace_line}')
+
+                                    if DRAW_FLAGS_SKIP_IDENTIFIER not in trace_line:
+                                        draw_flags_start = trace_line.find(DRAW_FLAGS_IDENTIFIER) + DRAW_FLAGS_IDENTIFIER_LENGTH
+                                        draw_flags = trace_line[draw_flags_start:trace_line.find(DRAW_FLAGS_IDENTIFIER_END,
+                                                                                                    draw_flags_start)].strip()
+
+                                        draw_flags_actual = []
+                                        try:
+                                            # apitrace may not do the conversion, so we'll have to do it ourselves
+                                            draw_flags = int(draw_flags)
+
+                                            if draw_flags & D3DDP_WAIT:
+                                                draw_flags_actual.append('D3DDP_WAIT')
+                                            if draw_flags & D3DDP_OUTOFORDER:
+                                                draw_flags_actual.append('D3DDP_OUTOFORDER')
+                                            if draw_flags & D3DDP_DONOTCLIP:
+                                                draw_flags_actual.append('D3DDP_DONOTCLIP')
+                                            if draw_flags & D3DDP_DONOTUPDATEEXTENTS:
+                                                draw_flags_actual.append('D3DDP_DONOTUPDATEEXTENTS')
+                                            if draw_flags & D3DDP_DONOTLIGHT:
+                                                draw_flags_actual.append('D3DDP_DONOTLIGHT')
+
+                                        except ValueError:
+                                            draw_flags_actual = draw_flags.split(DRAW_FLAGS_SPLIT_DELIMITER)
+
+                                        for draw_flag in draw_flags_actual:
+                                            draw_flag_stripped = draw_flag.strip()
+                                            existing_value = self.draw_flag_dictionary.get(draw_flag_stripped, 0)
+                                            self.draw_flag_dictionary[draw_flag_stripped] = existing_value + 1
+
+                                if self.api =='D3D7' or self.api == 'D3D6':
+                                    if PROCESS_VERTICES_FLAGS_CALL in call:
+                                        logger.debug(f'Found process vertices flags on line: {trace_line}')
+
+                                        if PROCESS_VERTICES_FLAGS_SKIP_IDENTIFIER not in trace_line:
+                                            process_vertices_flags_start = trace_line.find(PROCESS_VERTICES_FLAGS_IDENTIFIER) + PROCESS_VERTICES_FLAGS_IDENTIFIER_LENGTH
+                                            process_vertices_flags = trace_line[process_vertices_flags_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
+                                                                                                                            process_vertices_flags_start)].strip()
+
+                                            process_vertices_flags_actual = []
+                                            try:
+                                                # apitrace may not do the conversion, so we'll have to do it ourselves
+                                                process_vertices_flags = int(process_vertices_flags)
+
+                                                if process_vertices_flags & D3DVOP_TRANSFORM:
+                                                    process_vertices_flags_actual.append('D3DVOP_TRANSFORM')
+                                                if process_vertices_flags & D3DVOP_CLIP:
+                                                    process_vertices_flags_actual.append('D3DVOP_CLIP')
+                                                if process_vertices_flags & D3DVOP_EXTENTS:
+                                                    process_vertices_flags_actual.append('D3DVOP_EXTENTS')
+                                                if process_vertices_flags & D3DVOP_LIGHT:
+                                                    process_vertices_flags_actual.append('D3DVOP_LIGHT')
+
+                                            except ValueError:
+                                                process_vertices_flags_actual = process_vertices_flags.split(PROCESS_VERTICES_FLAGS_SPLIT_DELIMITER)
+
+                                            for process_vertices_flag in process_vertices_flags_actual:
+                                                process_vertices_flag_stripped = process_vertices_flag.strip()
+                                                existing_value = self.process_vertices_flag_dictionary.get(process_vertices_flag_stripped, 0)
+                                                self.process_vertices_flag_dictionary[process_vertices_flag_stripped] = existing_value + 1
+
+                                    elif VERTEX_BUFFER_CAPS_CALL in call:
+                                        logger.debug(f'Found vertex buffer caps on line: {trace_line}')
+
+                                        if VERTEX_BUFFER_CAPS_SKIP_IDENTIFIER not in trace_line:
+                                            vertex_buffer_caps_start = trace_line.find(VERTEX_BUFFER_CAPS_IDENTIFIER) + VERTEX_BUFFER_CAPS_IDENTIFIER_LENGTH
+                                            vertex_buffer_caps = trace_line[vertex_buffer_caps_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
+                                                                                                                    vertex_buffer_caps_start)].strip()
+
+                                            vertex_buffer_caps_actual = []
+                                            try:
+                                                # apitrace may not do the conversion, so we'll have to do it ourselves
+                                                vertex_buffer_caps = int(vertex_buffer_caps)
+
+                                                if vertex_buffer_caps & D3DVBCAPS_SYSTEMMEMORY:
+                                                    vertex_buffer_caps_actual.append('D3DVBCAPS_SYSTEMMEMORY')
+                                                if vertex_buffer_caps & D3DVBCAPS_WRITEONLY:
+                                                    vertex_buffer_caps_actual.append('D3DVBCAPS_WRITEONLY')
+                                                if vertex_buffer_caps & D3DVBCAPS_OPTIMIZED:
+                                                    vertex_buffer_caps_actual.append('D3DVBCAPS_OPTIMIZED')
+                                                if vertex_buffer_caps & D3DVBCAPS_DONOTCLIP:
+                                                    vertex_buffer_caps_actual.append('D3DVBCAPS_DONOTCLIP')
+
+                                            except ValueError:
+                                                vertex_buffer_caps_actual = vertex_buffer_caps.split(VERTEX_BUFFER_CAPS_SPLIT_DELIMITER)
+
+                                            for vertex_buffer_cap in vertex_buffer_caps_actual:
+                                                vertex_buffer_cap_stripped = vertex_buffer_cap.strip()
+                                                existing_value = self.vertex_buffer_cap_dictionary.get(vertex_buffer_cap_stripped, 0)
+                                                self.vertex_buffer_cap_dictionary[vertex_buffer_cap_stripped] = existing_value + 1
 
                         elif self.api == 'D3D8' or self.api == 'D3D9Ex' or self.api == 'D3D9':
                             if CHECK_DEVICE_FORMAT_CALL in call:
@@ -1734,7 +1807,7 @@ class TraceStats:
         with open(self.json_export_path, 'w') as file:
             file.write(joined_json_export)
 
-        logger.info(f'Joined JSON export complete')
+        logger.info('Joined JSON export complete')
 
 if __name__ == "__main__":
     # catch SIGTERM and exit gracefully

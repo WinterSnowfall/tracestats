@@ -764,6 +764,7 @@ class TraceAppNames:
         'Project_C-Win64-Shipping':                        ('Apsulov: End of Gods', None, 'D3D11'),
         'ProjectAriath-Win64-Shipping':                    ('Monomyth', None, 'D3D11'),
         'ProjectWingman-Win64-Shipping':                   ('Project Wingman', None, 'D3D11'),
+        'prophecy':                                        ('Wing Commander: Prophecy', None, 'D3D5'),
         'PsiOps':                                          ('Psi-Ops: The Mindgate Conspiracy', None, 'D3D9'),
         'Psychonauts':                                     (None, None, 'D3D9'),
         'Pure Pinball 2.0 REDUX':                          ('Pure Pinball 2.0 Redux', None, 'D3D8'),
