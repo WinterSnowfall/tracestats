@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 '''
 @author: Winter Snowfall
-@version: 1.90
-@date: 10/03/2026
+@version: 1.91
+@date: 20/03/2026
 '''
 
 import os
@@ -119,6 +119,7 @@ DDRAW_FOURCC_FORMATS = {'827611204' : 'DXT1',
                         '877942852' : 'DXT4',
                         '894720068' : 'DXT5',
                         '808801865' : 'IV50', # Used by Conquest: Frontier Wars
+                        '842094169' : 'YV12', # Used by Ultima IX: Ascension and Will Rock
                         '844715353' : 'YUY2',
                         '1129469520': 'PVRC',} # Used by Deathtrap Dungeon (no idea what it is)
 
@@ -693,8 +694,11 @@ class TraceStats:
                 self.process_loop.clear()
                 # ensure the process_queue is drained
                 self.process_queue.join()
-                # ensure the processsing thread has halted
-                process_thread.join()
+                try:
+                    # ensure the processsing thread has halted
+                    process_thread.join()
+                except RuntimeError:
+                    pass
 
                 if not self.api_skip.is_set():
                     if not self.shader_dump:
@@ -840,7 +844,10 @@ class TraceStats:
             else:
                 logger.warning(f'File not found, skipping: {trace_path}')
 
-        if not self.shader_dump and len(self.json_output[JSON_BASE_KEY]) > 0:
+        # a dictionary length of 2 would mean only the name and binary_name
+        # are determined, so no apitrace data was actually parsed and saved
+        if (not self.shader_dump and len(self.json_output[JSON_BASE_KEY]) > 0
+                                 and len(self.json_output[JSON_BASE_KEY][0]) > 2):
             json_export = json.dumps(self.json_output, sort_keys=True, indent=4,
                                      separators=(',', ': '), ensure_ascii=False)
             logger.debug(f'JSON export output is: {json_export}')
@@ -881,23 +888,22 @@ class TraceStats:
             # the trace number and later on the api call name
             split_line = trace_line.split(maxsplit=2)
 
-            if API_ENTRY_CALL_IDENTIFIER in trace_line:
-                for key, value in API_ENTRY_CALLS.items():
-                    if key in split_line[1]:
-                        self.api = value
+            for key, value in API_ENTRY_CALLS.items():
+                if key in split_line[1]:
+                    self.api = value
 
-                        if self.traceappnames_api is not None and self.traceappnames_api != self.api:
-                            api_override = TRACE_API_OVERRIDES.get(self.binary_name_raw, None)
-                            if api_override is None:
-                                logger.warning(f'Traceappnames API value is mismatched: {self.api}')
-                            elif self.traceappnames_api == api_override:
-                                logger.info(f'Known API value override detected: {api_override}')
-                            else:
-                                logger.error('Unexpected API override value')
+                    if self.traceappnames_api is not None and self.traceappnames_api != self.api:
+                        api_override = TRACE_API_OVERRIDES.get(self.binary_name_raw, None)
+                        if api_override is None:
+                            logger.warning(f'Traceappnames API value is mismatched: {self.api}')
+                        elif self.traceappnames_api == api_override:
+                            logger.info(f'Known API value override detected: {api_override}')
                         else:
-                            logger.info(f'Detected API: {self.api}')
+                            logger.error('Unexpected API override value')
+                    else:
+                        logger.info(f'Detected API: {self.api}')
 
-                        break
+                    break
 
     def trace_parse_worker(self):
         while self.process_loop.is_set() or not self.process_queue.empty():
