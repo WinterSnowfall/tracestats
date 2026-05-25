@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 '''
 @author: Winter Snowfall
-@version: 1.91
-@date: 20/03/2026
+@version: 1.92
+@date: 25/05/2026
 '''
 
 import os
@@ -203,6 +203,7 @@ PROCESS_VERTICES_FLAGS_SKIP_IDENTIFIER = 'dwVertexOp = 0' # can be 0 or 0x0
 # render states
 RENDER_STATES_CALL_DDRAW = '::SetRenderState'
 RENDER_STATES_IDENTIFIER_DDRAW = 'D3DRENDERSTATE_'
+RENDER_STATES_IDENTIFIER_DDRAW_LENGTH = len(RENDER_STATES_IDENTIFIER_DDRAW)
 # lock flags
 LOCK_FLAGS_CALL_DDRAW = '::Lock'
 LOCK_FLAGS_IDENTIFIER_DDRAW = 'dwFlags = '
@@ -220,6 +221,8 @@ TEXTURE_MAP_BLEND_MODE_VALUE = 'D3DRENDERSTATE_TEXTUREMAPBLEND'
 TEXTURE_MAP_BLEND_MODE_IDENTIFIER = 'dwRenderState = '
 TEXTURE_MAP_BLEND_MODE_IDENTIFIER_LENGTH = len(TEXTURE_MAP_BLEND_MODE_IDENTIFIER)
 TEXTURE_MAP_BLEND_MODE_END = ')'
+# D3D3 execute buffer dump
+DDRAW_EXECUTE_BUFFER_DUMP = 'executebufferdump'
 ####################### DDRAW, D3D3, D3D5, D3D6, D3D7 ##########################
 
 ############################## D3D8, D3D9Ex, D3D9 ##############################
@@ -937,6 +940,8 @@ class TraceStats:
                                    trace_line.startswith(GEOMETRY_SHADER_IDENTIFIER) or
                                    trace_line.startswith(HULL_SHADER_IDENTIFIER))
 
+                    execute_buffer_dump_line = False
+
                     if not shader_line:
                         # no need to do more than 2 splits, as we only need
                         # the trace number and later on the api call name
@@ -949,13 +954,15 @@ class TraceStats:
                         except ValueError:
                             logger.debug(f'Skipped parsing of line: {trace_line}')
                             continue
+
+                        execute_buffer_dump_line = split_line[1].startswith(DDRAW_EXECUTE_BUFFER_DUMP)
                     else:
                         split_line = None
 
-                    if (shader_line or API_ENTRY_CALL_IDENTIFIER in trace_line or
+                    if (shader_line or execute_buffer_dump_line or API_ENTRY_CALL_IDENTIFIER in trace_line or
                         any(api_base_call in trace_line for api_base_call in API_BASE_CALLS.keys())):
                         # parse API calls
-                        if not shader_line:
+                        if not shader_line and not execute_buffer_dump_line:
                             call = split_line[1].split('(', 1)[0]
                             logger.debug(f'Found call: {call}')
 
@@ -1109,7 +1116,25 @@ class TraceStats:
                                             existing_value = self.lock_flag_dictionary.get(lock_flag_stripped, 0)
                                             self.lock_flag_dictionary[lock_flag_stripped] = existing_value + 1
 
-                            if self.api =='D3D7' or self.api == 'D3D6' or self.api == 'D3D5':
+                            # Render states can also be included as part of execute buffers
+                            if self.api != 'D3D7':
+                                if execute_buffer_dump_line:
+                                    logger.debug(f'Found execute buffer content on line: {trace_line}')
+
+                                    # Multiple render states can be included in the same execute buffer dump
+                                    render_state_start = trace_line.find(RENDER_STATES_IDENTIFIER_DDRAW)
+                                    while render_state_start != -1:
+                                        render_state = trace_line[render_state_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
+                                                                                                     render_state_start)].strip()
+
+                                        existing_value = self.render_state_dictionary.get(render_state, 0)
+                                        self.render_state_dictionary[render_state] = existing_value + 1
+
+                                        render_state_start = trace_line.find(RENDER_STATES_IDENTIFIER_DDRAW,
+                                                                             render_state_start + RENDER_STATES_IDENTIFIER_DDRAW_LENGTH)
+
+
+                            if self.api == 'D3D7' or self.api == 'D3D6' or self.api == 'D3D5':
                                 if DEVICE_CREATION_CALL_DDRAW in call:
                                     logger.debug(f'Found device type flags on line: {trace_line}')
 

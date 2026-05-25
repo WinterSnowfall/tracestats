@@ -35,7 +35,7 @@ then
                     if [ $DUMPS -gt 0 ]
                     then
                         cd dumps
-                        tar -I "zstd -z -T0 --long -19" -cvf "$PACKED_FILENAME""_dumps.tar.zst" *.bin > /dev/null
+                        tar -I "zstd -z -T0 --long -19" -cvf "$PACKED_FILENAME" *.bin > /dev/null
                         rm -f *.bin
                         cd ..
                     fi
@@ -53,7 +53,7 @@ do
     then
         if $DUMP_SHADERS
         then
-            PACKED_FILENAME="$(basename "$file" .trace)"
+            PACKED_FILENAME="$(basename "$file" .trace)_dumps.tar.zst"
 
             if [ ! -f "dumps/$PACKED_FILENAME" ]
             then
@@ -63,7 +63,7 @@ do
                 if [ $DUMPS -gt 0 ]
                 then
                     cd dumps
-                    tar -I "zstd -z -T0 --long -19" -cvf "$PACKED_FILENAME""_dumps.tar.zst" *.bin > /dev/null
+                    tar -I "zstd -z -T0 --long -19" -cvf "$PACKED_FILENAME" *.bin > /dev/null
                     rm -f *.bin
                     cd ..
                 fi
