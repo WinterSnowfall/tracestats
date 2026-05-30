@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 '''
 @author: Winter Snowfall
-@version: 1.92
-@date: 25/05/2026
+@version: 1.93
+@date: 30/05/2026
 '''
 
 import os
@@ -77,6 +77,7 @@ class TraceAppNames:
         'Armada2':                                         ('Star Trek: Armada II', None, 'D3D8'),
         'Armikrog':                                        (None, None, 'D3D9'),
         'ArmyOps':                                         ('America\'s Army', None, 'D3D8'),
+        'Artemis':                                         ('Amnesia: Memories', None, 'D3D9'),
         'Artemis-Win64-Shipping':                          ('The Expanse: A Telltale Series', None, 'D3D11'),
         'arx':                                             ('Arx Fatalis', None, 'D3D7'),
         'ASAMU-Win32-Shipping':                            ('A Story about My Uncle', None, 'D3D9'),
@@ -486,6 +487,8 @@ class TraceAppNames:
         'gamePW':                                          ('Perilous Warp', None, 'D3D9Ex'),
         'GameRenegade':                                    ('Command & Conquer: Renegade', None, 'D3D8'),
         'gameS2':                                          ('Shrek 2: The Game', None, 'D3D8'),
+        'gameSH':                                          ('Space Hulk (2013)', None, 'D3D9'),
+        'gameSHA':                                         ('Space Hulk: Ascension', None, 'D3D9'),
         'gameSHJTR':                                       ('Sherlock Holmes versus Jack the Ripper', None, 'D3D9'),
         'gameSHSotSE':                                     ('Sherlock Holmes: Secret of the Silver Earring', None, 'D3D8'),
         'gameSHTA':                                        ('Sherlock Holmes: The Awakened - Remastered', None, 'D3D9'),

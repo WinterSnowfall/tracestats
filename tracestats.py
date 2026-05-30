@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 '''
 @author: Winter Snowfall
-@version: 1.92
-@date: 25/05/2026
+@version: 1.93
+@date: 30/05/2026
 '''
 
 import os
@@ -46,6 +46,7 @@ API_ENTRY_CALL_IDENTIFIER = '::'
 API_ENTRY_VALUE_DELIMITER = ','
 SHADER_DUMP_SKIP_IDENTIFIER_D3D8_9 = 'pFunction = NULL'
 SHADER_DUMP_SKIP_IDENTIFIER_D3D10_11 = 'pShaderBytecode = NULL'
+SHADER_DUMP_SKIP_API_LEVELS = ('D3D3', 'D3D5', 'D3D6', 'D3D7')
 
 API_ENTRY_CALLS = {'IDirect3DDevice7': 'D3D7',
                    'IDirect3DDevice3': 'D3D6',
@@ -215,7 +216,8 @@ LOCK_FLAGS_SPLIT_DELIMITER_DDRAW = '|'
 DEVICE_CREATION_CALL_DDRAW = '::CreateDevice'
 DEVICE_TYPE_IDENTIFIER_DDRAW = 'rclsid = '
 DEVICE_TYPE_IDENTIFIER_DDRAW_LENGTH = len(DEVICE_TYPE_IDENTIFIER_DDRAW)
-DEVICE_TYPE_SKIP_IDENTIFIER_DDRAW = 'uuid(aef72d43-b09a-4b7b-b798-c68a772d722a)' # WineD3D device GUID
+DEVICE_TYPE_SKIP_IDENTIFIERS_DDRAW  = ('uuid(aef72d43-b09a-4b7b-b798-c68a772d722a)',  # WineD3D device GUID
+                                       'IID_IDirect3DWineDevice') # WineD3D device GUID (decoded)
 # texture map blend modes
 TEXTURE_MAP_BLEND_MODE_VALUE = 'D3DRENDERSTATE_TEXTUREMAPBLEND'
 TEXTURE_MAP_BLEND_MODE_IDENTIFIER = 'dwRenderState = '
@@ -284,6 +286,7 @@ PIXEL_SHADER_CALL = '::CreatePixelShader'
 COMPUTE_SHADER_CALL = '::CreateComputeShader'
 DOMAIN_SHADER_CALL = '::CreateDomainShader'
 GEOMETRY_SHADER_CALL = '::CreateGeometryShader'
+GEOMETRY_SHADER_WSO_CALL = '::CreateGeometryShaderWithStreamOutput'
 HULL_SHADER_CALL = '::CreateHullShader'
 VERTEX_SHADER_IDENTIFIER = 'vs_'
 VERTEX_SHADER_IDENTIFIER_LENGTH = len(VERTEX_SHADER_IDENTIFIER)
@@ -298,7 +301,6 @@ GEOMETRY_SHADER_IDENTIFIER = 'gs_'
 GEOMETRY_SHADER_IDENTIFIER_LENGTH = len(GEOMETRY_SHADER_IDENTIFIER)
 HULL_SHADER_IDENTIFIER = 'hs_'
 HULL_SHADER_IDENTIFIER_LENGTH = len(HULL_SHADER_IDENTIFIER)
-SHADER_LINE_WHITESPACE = ' '
 SHADER_VERSION_OFFSET = 3 # x_y (x = major version, y = minor version)
 SHADER_NO_DISASSEMBLY_D3D8_9 = 'pFunction = blob'
 SHADER_NO_DISASSEMBLY_D3D10_11 = 'pShaderBytecode = blob'
@@ -541,6 +543,7 @@ class TraceStats:
 
         self.process_queue = queue.Queue(maxsize=TRACE_PARSE_QUEUE_SIZE)
         self.api_skip = threading.Event()
+        self.dump_skip = threading.Event()
         self.parse_loop = threading.Event()
         self.process_loop = threading.Event()
         self.json_output = {JSON_BASE_KEY: []}
@@ -619,9 +622,11 @@ class TraceStats:
 
                 # mind the -v (verbose) flag here, otherwise apitrace dump will skip various calls :/
                 if self.use_wine_for_apitrace:
-                    subprocess_params = ('wine', self.apitrace_path, 'dump', '-v', '--color=never', trace_path_final)
+                    subprocess_params = ('wine', self.apitrace_path, 'dump', '-v',
+                                         '--multiline=false','--color=never', trace_path_final)
                 else:
-                    subprocess_params = (self.apitrace_path, 'dump', '-v', '--color=never', trace_path_final)
+                    subprocess_params = (self.apitrace_path, 'dump', '-v',
+                                         '--multiline=false', '--color=never', trace_path_final)
 
                 process_thread = threading.Thread(target=self.trace_parse_worker, args=())
 
@@ -633,6 +638,8 @@ class TraceStats:
 
                     # API detection prepass
                     if self.api is None:
+                        logger.debug('Starting API detection prepass...')
+
                         api_prepass_subprocess = subprocess.Popen(subprocess_params, bufsize=0,
                                                                   stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
                                                                   text=True)
@@ -651,6 +658,10 @@ class TraceStats:
                     # API based parsing skip logic
                     if self.traceappnames_api is None and self.apis_to_skip is not None and self.api in self.apis_to_skip:
                         self.api_skip.set()
+
+                    # Skip shader dumps on fixed function only APIs
+                    elif self.shader_dump and self.api in SHADER_DUMP_SKIP_API_LEVELS:
+                        self.dump_skip.set()
 
                     # actual trace parsing, with a determined API
                     else:
@@ -703,7 +714,7 @@ class TraceStats:
                 except RuntimeError:
                     pass
 
-                if not self.api_skip.is_set():
+                if not self.api_skip.is_set() and not self.dump_skip.is_set():
                     if not self.shader_dump:
                         return_dictionary = {}
                         return_dictionary['binary_name'] = self.binary_name
@@ -796,8 +807,10 @@ class TraceStats:
                                             cwd=dump_path_final_absolute, check=True)
 
                     logger.info('Trace processing complete')
-                else:
+                elif self.api_skip.is_set():
                     logger.info('Skipped trace due to API filter')
+                else:
+                    logger.info('No shaders to dump for API level')
 
                 if self.compressed_trace:
                     try:
@@ -866,33 +879,27 @@ class TraceStats:
             logger.info('JSON export complete')
 
     def trace_api_prepass(self, trace_line_raw):
-        trace_line = trace_line_raw.rstrip()
+        #logger.debug(f'Processing line: {trace_line_raw}')
 
-        # there are, surprisingly, quite a lot of
-        # blank/padding lines in an apitrace dump
-        if trace_line == '':
-            return
         # early skip embedded full line comments
-        if trace_line.startswith('//'):
+        if trace_line_raw.startswith('//'):
             return
 
-        shader_line = (trace_line.startswith(SHADER_LINE_WHITESPACE) or
-                        # need to check the actual line start too for any
-                        # shader identifiers as some shaders have no indent
-                        trace_line.startswith(VERTEX_SHADER_IDENTIFIER) or
-                        trace_line.startswith(PIXEL_SHADER_IDENTIFIER) or
-                        trace_line.startswith(COMPUTE_SHADER_IDENTIFIER) or
-                        trace_line.startswith(DOMAIN_SHADER_IDENTIFIER) or
-                        trace_line.startswith(GEOMETRY_SHADER_IDENTIFIER) or
-                        trace_line.startswith(HULL_SHADER_IDENTIFIER))
+        trace_line = trace_line_raw.rstrip()
+        # no need to do more than 2 splits, as we only need
+        # the trace line number and later on the api call name
+        split_line = trace_line.split(maxsplit=2)
 
-        if not shader_line:
-            # no need to do more than 2 splits, as we only need
-            # the trace number and later on the api call name
-            split_line = trace_line.split(maxsplit=2)
+        # apitraces which end abruptly can output unnumbered or
+        # blank lines, which will raise ValueError or IndexError
+        try:
+            trace_line_counter = int(split_line[0])
+            logger.debug(f'Found line count: {trace_line_counter}')
+
+            trace_line_filtered = split_line[1].split('(', 1)[0]
 
             for key, value in API_ENTRY_CALLS.items():
-                if key in split_line[1]:
+                if key in trace_line_filtered:
                     self.api = value
 
                     if self.traceappnames_api is not None and self.traceappnames_api != self.api:
@@ -907,6 +914,9 @@ class TraceStats:
                         logger.info(f'Detected API: {self.api}')
 
                     break
+        except:
+            logger.debug(f'Skipped line: {trace_line}')
+            return
 
     def trace_parse_worker(self):
         while self.process_loop.is_set() or not self.process_queue.empty():
@@ -914,65 +924,65 @@ class TraceStats:
 
             try:
                 trace_chunk_lines = self.process_queue.get(block=True, timeout=5)
-                trace_call_counter = 0
-                shader_call_context = False
+                trace_line_counter = 0
 
                 for trace_line_raw in trace_chunk_lines:
-                    trace_line = trace_line_raw.rstrip()
+                    #logger.debug(f'Processing line: {trace_line_raw}')
 
-                    #logger.debug(f'Processing line: {trace_line}')
-
-                    # there are, surprisingly, quite a lot of
-                    # blank/padding lines in an apitrace dump
-                    if trace_line == '':
-                        continue
                     # early skip embedded full line comments
-                    if trace_line.startswith('//'):
+                    if trace_line_raw.startswith('//'):
                         continue
 
-                    shader_line = (trace_line.startswith(SHADER_LINE_WHITESPACE) or
-                                   # need to check the actual line start too for any
-                                   # shader identifiers as some shaders have no indent
-                                   trace_line.startswith(VERTEX_SHADER_IDENTIFIER) or
-                                   trace_line.startswith(PIXEL_SHADER_IDENTIFIER) or
-                                   trace_line.startswith(COMPUTE_SHADER_IDENTIFIER) or
-                                   trace_line.startswith(DOMAIN_SHADER_IDENTIFIER) or
-                                   trace_line.startswith(GEOMETRY_SHADER_IDENTIFIER) or
-                                   trace_line.startswith(HULL_SHADER_IDENTIFIER))
+                    trace_line = trace_line_raw.rstrip()
+                    # no need to do more than 2 splits, as we only need
+                    # the trace line number and later on the api call name
+                    split_line = trace_line.split(maxsplit=2)
 
                     execute_buffer_dump_line = False
 
-                    if not shader_line:
-                        # no need to do more than 2 splits, as we only need
-                        # the trace number and later on the api call name
-                        split_line = trace_line.split(maxsplit=2)
-
-                        # unnumbered lines will raise a ValueError
-                        try:
-                            trace_call_counter = int(split_line[0])
-                            logger.debug(f'Found call count: {trace_call_counter}')
-                        except ValueError:
-                            logger.debug(f'Skipped parsing of line: {trace_line}')
-                            continue
+                    # apitraces which end abruptly can output unnumbered or
+                    # blank lines, which will raise ValueError or IndexError
+                    try:
+                        trace_line_counter = int(split_line[0])
+                        logger.debug(f'Found line count: {trace_line_counter}')
 
                         execute_buffer_dump_line = split_line[1].startswith(DDRAW_EXECUTE_BUFFER_DUMP)
-                    else:
-                        split_line = None
+                    except:
+                        logger.debug(f'Skipped parsing of line: {trace_line}')
+                        continue
 
-                    if (shader_line or execute_buffer_dump_line or API_ENTRY_CALL_IDENTIFIER in trace_line or
+                    if (API_ENTRY_CALL_IDENTIFIER in trace_line or execute_buffer_dump_line or
                         any(api_base_call in trace_line for api_base_call in API_BASE_CALLS.keys())):
                         # parse API calls
-                        if not shader_line and not execute_buffer_dump_line:
+                        if not execute_buffer_dump_line:
                             call = split_line[1].split('(', 1)[0]
                             logger.debug(f'Found call: {call}')
 
                             existing_value = self.api_call_dictionary.get(call, 0)
                             self.api_call_dictionary[call] = existing_value + 1
                         else:
-                            # line starting with shader specific whitespace (not an actual call)
+                            # execute buffer dump, not an actual call
                             call = ''
 
-                        if self.api =='D3D7' or self.api == 'D3D6' or self.api == 'D3D5' or self.api == 'D3D3':
+                        # fast path for shader dumps
+                        if self.shader_dump:
+                            if self.api == 'D3D8' or self.api == 'D3D9Ex' or self.api == 'D3D9':
+                                if VERTEX_SHADER_CALL in call or PIXEL_SHADER_CALL in call:
+                                    logger.debug(f'Found shader on line: {trace_line}')
+
+                                    if SHADER_DUMP_SKIP_IDENTIFIER_D3D8_9 not in trace_line:
+                                        self.shader_dump_call_array.append(str(trace_line_counter))
+
+                            elif self.api == 'D3D10' or self.api == 'D3D11':
+                                if (VERTEX_SHADER_CALL in call or PIXEL_SHADER_CALL in call or
+                                    COMPUTE_SHADER_CALL in call or DOMAIN_SHADER_CALL in call or
+                                    GEOMETRY_SHADER_CALL in call or HULL_SHADER_CALL in call):
+                                    logger.debug(f'Found shader on line: {trace_line}')
+
+                                    if SHADER_DUMP_SKIP_IDENTIFIER_D3D10_11 not in trace_line:
+                                        self.shader_dump_call_array.append(str(trace_line_counter))
+
+                        elif self.api == 'D3D7' or self.api == 'D3D6' or self.api == 'D3D5' or self.api == 'D3D3':
                             if COOPERATIVE_LEVEL_FLAGS_CALL in call:
                                 logger.debug(f'Found cooperative level flags on line: {trace_line}')
 
@@ -1142,7 +1152,7 @@ class TraceStats:
                                     device_type = trace_line[device_type_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
                                                                                                device_type_start)].strip()
 
-                                    if not device_type.startswith(DEVICE_TYPE_SKIP_IDENTIFIER_DDRAW):
+                                    if device_type not in DEVICE_TYPE_SKIP_IDENTIFIERS_DDRAW:
                                         existing_value = self.device_type_dictionary.get(device_type, 0)
                                         self.device_type_dictionary[device_type] = existing_value + 1
 
@@ -1440,31 +1450,19 @@ class TraceStats:
                                             existing_value = self.lock_flag_dictionary.get(lock_flag_stripped, 0)
                                             self.lock_flag_dictionary[lock_flag_stripped] = existing_value + 1
 
-                            # shader version identifiers can either be part of CreateVertexShader/CreatePixelShader
-                            # calls, or included as part of an additional line below those calls in apitrace dumps
-                            elif VERTEX_SHADER_CALL in call or PIXEL_SHADER_CALL in call or shader_line:
+                            elif VERTEX_SHADER_CALL in call or PIXEL_SHADER_CALL in call:
                                 logger.debug(f'Found shader on line: {trace_line}')
 
-                                # not having a shader line means it's a shader creation call
-                                if not shader_line:
-                                    if self.shader_dump and trace_call_counter > 0 and SHADER_DUMP_SKIP_IDENTIFIER_D3D8_9 not in trace_line:
-                                        self.shader_dump_call_array.append(str(trace_call_counter))
+                                shader_call_disassembled = False
 
-                                    # shader dissasebly can fail, in which case apitrace will dump bytecode blobs
-                                    if not SHADER_NO_DISASSEMBLY_D3D8_9 in trace_line:
-                                        if not shader_call_context:
-                                            shader_call_context = True
-                                        else:
-                                            logger.warning('Shader call context already detected')
-                                    else:
-                                        logger.warning('Unable to parse shader version due to bytecode dump')
+                                # shader dissasebly can fail, in which case apitrace will dump bytecode blobs
+                                if not SHADER_NO_DISASSEMBLY_D3D8_9 in trace_line:
+                                    shader_call_disassembled = True
+                                else:
+                                    logger.warning('Unable to parse shader version due to bytecode dump')
 
                                 # don't do any parsing unless a shader creation call has been detected
-                                if shader_call_context:
-                                    # strip any comments from a shader line
-                                    if shader_line:
-                                        trace_line = trace_line.split('//')[0].rstrip()
-
+                                if shader_call_disassembled:
                                     # D3D8 handles FVF thourgh CreateVertexShader, and there is no way to
                                     # track these otherwise, so treat them as 'vs_fvf' shader versions instead
                                     if self.api == 'D3D8' and VERTEX_SHADER_CALL in call and 'pFunction = NULL' in trace_line:
@@ -1474,31 +1472,44 @@ class TraceStats:
                                         existing_value = self.shader_version_dictionary.get(shader_version, 0)
                                         self.shader_version_dictionary[shader_version] = existing_value + 1
 
-                                        shader_call_context = False
-
                                     else:
                                         shader_version = None
 
-                                        shader_version_start_vertex = trace_line.find(VERTEX_SHADER_IDENTIFIER)
-                                        shader_version_start_pixel = trace_line.find(PIXEL_SHADER_IDENTIFIER)
+                                        shader_version_marker_char = ' '
+                                        shader_version_start_offset = 0
 
-                                        if shader_version_start_vertex != -1:
-                                            shader_version = trace_line[shader_version_start_vertex:shader_version_start_vertex +
-                                                                                                    VERTEX_SHADER_IDENTIFIER_LENGTH +
-                                                                                                    SHADER_VERSION_OFFSET]
-                                        elif shader_version_start_pixel != -1:
-                                            shader_version = trace_line[shader_version_start_pixel:shader_version_start_pixel +
-                                                                                                PIXEL_SHADER_IDENTIFIER_LENGTH +
-                                                                                                SHADER_VERSION_OFFSET]
+                                        if VERTEX_SHADER_CALL in call:
+                                            shader_version_start_vertex = 0
 
-                                        # count '_' occurances to filter out some potentially dubious string matches
-                                        if shader_version is not None and shader_version.count('_') == 2:
+                                            # we need to skip matched combinations which don't fit within the 'vs_x_y' format
+                                            while shader_version_marker_char != '_' and shader_version_start_vertex != -1:
+                                                shader_version_start_vertex = trace_line.find(VERTEX_SHADER_IDENTIFIER, shader_version_start_offset)
+                                                shader_version_start_offset = shader_version_start_vertex + VERTEX_SHADER_IDENTIFIER_LENGTH
+                                                shader_version_marker_char = trace_line[shader_version_start_offset + 1:shader_version_start_offset + 2]
+
+                                            if shader_version_start_vertex != -1:
+                                                shader_version = trace_line[shader_version_start_vertex:shader_version_start_vertex +
+                                                                                                        VERTEX_SHADER_IDENTIFIER_LENGTH +
+                                                                                                        SHADER_VERSION_OFFSET]
+                                        elif PIXEL_SHADER_CALL in call:
+                                            shader_version_start_pixel = 0
+
+                                            # we need to skip matched combinations which don't fit within the 'ps_x_y' format
+                                            while shader_version_marker_char != '_' and shader_version_start_pixel != -1:
+                                                shader_version_start_pixel = trace_line.find(PIXEL_SHADER_IDENTIFIER, shader_version_start_offset)
+                                                shader_version_start_offset = shader_version_start_pixel + PIXEL_SHADER_IDENTIFIER_LENGTH
+                                                shader_version_marker_char = trace_line[shader_version_start_offset + 1:shader_version_start_offset + 2]
+
+                                            if shader_version_start_pixel != -1:
+                                                shader_version = trace_line[shader_version_start_pixel:shader_version_start_pixel +
+                                                                                                       PIXEL_SHADER_IDENTIFIER_LENGTH +
+                                                                                                       SHADER_VERSION_OFFSET]
+
+                                        if shader_version is not None:
                                             logger.debug(f'Shader version: {shader_version}')
 
                                             existing_value = self.shader_version_dictionary.get(shader_version, 0)
                                             self.shader_version_dictionary[shader_version] = existing_value + 1
-
-                                            shader_call_context = False
                                 else:
                                     logger.debug(f'Skipped parsing of shader line: {trace_line}')
 
@@ -1678,75 +1689,150 @@ class TraceStats:
                                         existing_value = self.blend_state_dictionary.get(blend_state_stripped, 0)
                                         self.blend_state_dictionary[blend_state_stripped] = existing_value + 1
 
-                            # shader version identifiers can either be part of CreateVertexShader/CreatePixelShader
-                            # calls, or included as part of an additional line below those calls in apitrace dumps
                             elif (VERTEX_SHADER_CALL in call or PIXEL_SHADER_CALL in call or
                                   COMPUTE_SHADER_CALL in call or DOMAIN_SHADER_CALL in call or
-                                  GEOMETRY_SHADER_CALL in call or HULL_SHADER_CALL in call or shader_line):
+                                  GEOMETRY_SHADER_CALL in call or HULL_SHADER_CALL in call):
                                 logger.debug(f'Found shader on line: {trace_line}')
 
-                                # not having a shader line means it's a shader creation call
-                                if not shader_line:
-                                    if self.shader_dump and trace_call_counter > 0 and SHADER_DUMP_SKIP_IDENTIFIER_D3D10_11 not in trace_line:
-                                        self.shader_dump_call_array.append(str(trace_call_counter))
+                                shader_call_disassembled = False
 
-                                    # shader dissasebly can fail, in which case apitrace will dump bytecode blobs
-                                    if not SHADER_NO_DISASSEMBLY_D3D10_11 in trace_line:
-                                        if not shader_call_context:
-                                            shader_call_context = True
-                                        else:
-                                            logger.warning('Shader call context already detected')
-                                    else:
-                                        logger.warning('Unable to parse shader version due to bytecode dump')
+                                # shader dissasebly can fail, in which case apitrace will dump bytecode blobs
+                                if not SHADER_NO_DISASSEMBLY_D3D10_11 in trace_line:
+                                    shader_call_disassembled = True
+                                else:
+                                    logger.warning('Unable to parse shader version due to bytecode dump')
 
                                 # don't do any parsing unless a shader creation call has been detected
-                                if shader_call_context:
-                                    # strip any comments from a shader line
-                                    if shader_line:
-                                        trace_line = trace_line.split('//')[0].rstrip()
-
+                                if shader_call_disassembled:
                                     shader_version = None
 
-                                    shader_version_start_vertex = trace_line.find(VERTEX_SHADER_IDENTIFIER)
-                                    shader_version_start_pixel = trace_line.find(PIXEL_SHADER_IDENTIFIER)
-                                    shader_version_start_compute = trace_line.find(COMPUTE_SHADER_IDENTIFIER)
-                                    shader_version_start_domain = trace_line.find(DOMAIN_SHADER_IDENTIFIER)
-                                    shader_version_start_geometry = trace_line.find(GEOMETRY_SHADER_IDENTIFIER)
-                                    shader_version_start_hull = trace_line.find(HULL_SHADER_IDENTIFIER)
+                                    shader_version_marker_char = ' '
+                                    shader_version_start_offset = 0
 
-                                    if shader_version_start_vertex != -1:
-                                        shader_version = trace_line[shader_version_start_vertex:shader_version_start_vertex +
-                                                                                                VERTEX_SHADER_IDENTIFIER_LENGTH +
-                                                                                                SHADER_VERSION_OFFSET]
-                                    elif shader_version_start_pixel != -1:
-                                        shader_version = trace_line[shader_version_start_pixel:shader_version_start_pixel +
-                                                                                            PIXEL_SHADER_IDENTIFIER_LENGTH +
-                                                                                            SHADER_VERSION_OFFSET]
-                                    elif shader_version_start_compute != -1:
-                                        shader_version = trace_line[shader_version_start_compute:shader_version_start_compute +
-                                                                                                COMPUTE_SHADER_IDENTIFIER_LENGTH +
-                                                                                                SHADER_VERSION_OFFSET]
-                                    elif shader_version_start_domain != -1:
-                                        shader_version = trace_line[shader_version_start_domain:shader_version_start_domain +
-                                                                                                DOMAIN_SHADER_IDENTIFIER_LENGTH +
-                                                                                                SHADER_VERSION_OFFSET]
-                                    elif shader_version_start_geometry != -1:
-                                        shader_version = trace_line[shader_version_start_geometry:shader_version_start_geometry +
-                                                                                                GEOMETRY_SHADER_IDENTIFIER_LENGTH +
-                                                                                                SHADER_VERSION_OFFSET]
-                                    elif shader_version_start_hull != -1:
-                                        shader_version = trace_line[shader_version_start_hull:shader_version_start_hull +
-                                                                                            HULL_SHADER_IDENTIFIER_LENGTH +
-                                                                                            SHADER_VERSION_OFFSET]
+                                    if VERTEX_SHADER_CALL in call:
+                                        shader_version_start_vertex = 0
 
-                                    # count '_' occurances to filter out some potentially dubious string matches
-                                    if shader_version is not None and shader_version.count('_') == 2:
+                                        # we need to skip matched combinations which don't fit within the 'vs_x_y' format
+                                        while shader_version_marker_char != '_' and shader_version_start_vertex != -1:
+                                            shader_version_start_vertex = trace_line.find(VERTEX_SHADER_IDENTIFIER, shader_version_start_offset)
+                                            shader_version_start_offset = shader_version_start_vertex + VERTEX_SHADER_IDENTIFIER_LENGTH
+                                            shader_version_marker_char = trace_line[shader_version_start_offset + 1:shader_version_start_offset + 2]
+
+                                        if shader_version_start_vertex != -1:
+                                            shader_version = trace_line[shader_version_start_vertex:shader_version_start_vertex +
+                                                                                                    VERTEX_SHADER_IDENTIFIER_LENGTH +
+                                                                                                    SHADER_VERSION_OFFSET]
+
+                                    elif PIXEL_SHADER_CALL in call:
+                                        shader_version_start_pixel = 0
+
+                                        # we need to skip matched combinations which don't fit within the 'ps_x_y' format
+                                        while shader_version_marker_char != '_' and shader_version_start_pixel != -1:
+                                            shader_version_start_pixel = trace_line.find(PIXEL_SHADER_IDENTIFIER, shader_version_start_offset)
+                                            shader_version_start_offset = shader_version_start_pixel + PIXEL_SHADER_IDENTIFIER_LENGTH
+                                            shader_version_marker_char = trace_line[shader_version_start_offset + 1:shader_version_start_offset + 2]
+
+                                        if shader_version_start_pixel != -1:
+                                            shader_version = trace_line[shader_version_start_pixel:shader_version_start_pixel +
+                                                                                                   PIXEL_SHADER_IDENTIFIER_LENGTH +
+                                                                                                   SHADER_VERSION_OFFSET]
+
+                                    elif COMPUTE_SHADER_CALL in call:
+                                        shader_version_start_compute = 0
+
+                                        # we need to skip matched combinations which don't fit within the 'cs_x_y' format
+                                        while shader_version_marker_char != '_' and shader_version_start_compute != -1:
+                                            shader_version_start_compute = trace_line.find(COMPUTE_SHADER_IDENTIFIER, shader_version_start_offset)
+                                            shader_version_start_offset = shader_version_start_compute + COMPUTE_SHADER_IDENTIFIER_LENGTH
+                                            shader_version_marker_char = trace_line[shader_version_start_offset + 1:shader_version_start_offset + 2]
+
+                                        if shader_version_start_compute != -1:
+                                            shader_version = trace_line[shader_version_start_compute:shader_version_start_compute +
+                                                                                                     COMPUTE_SHADER_IDENTIFIER_LENGTH +
+                                                                                                     SHADER_VERSION_OFFSET]
+
+                                    elif DOMAIN_SHADER_CALL in call:
+                                        shader_version_start_domain = 0
+
+                                        # we need to skip matched combinations which don't fit within the 'ds_x_y' format
+                                        while shader_version_marker_char != '_' and shader_version_start_domain != -1:
+                                            shader_version_start_domain = trace_line.find(DOMAIN_SHADER_IDENTIFIER, shader_version_start_offset)
+                                            shader_version_start_offset = shader_version_start_domain + DOMAIN_SHADER_IDENTIFIER_LENGTH
+                                            shader_version_marker_char = trace_line[shader_version_start_offset + 1:shader_version_start_offset + 2]
+
+                                        if shader_version_start_domain != -1:
+                                            shader_version = trace_line[shader_version_start_domain:shader_version_start_domain +
+                                                                                                    DOMAIN_SHADER_IDENTIFIER_LENGTH +
+                                                                                                    SHADER_VERSION_OFFSET]
+
+                                    elif GEOMETRY_SHADER_CALL in call:
+                                        shader_version_start_geometry = 0
+
+                                        # we need to skip matched combinations which don't fit within the 'gs_x_y' format
+                                        while shader_version_marker_char != '_' and shader_version_start_geometry != -1:
+                                            shader_version_start_geometry = trace_line.find(GEOMETRY_SHADER_IDENTIFIER, shader_version_start_offset)
+                                            shader_version_start_offset = shader_version_start_geometry + GEOMETRY_SHADER_IDENTIFIER_LENGTH
+                                            shader_version_marker_char = trace_line[shader_version_start_offset + 1:shader_version_start_offset + 2]
+
+                                        if shader_version_start_geometry != -1:
+                                            shader_version = trace_line[shader_version_start_geometry:shader_version_start_geometry +
+                                                                                                      GEOMETRY_SHADER_IDENTIFIER_LENGTH +
+                                                                                                      SHADER_VERSION_OFFSET]
+
+                                        # the 'with stream output' call also accepts vertex or domain shaders
+                                        elif GEOMETRY_SHADER_WSO_CALL in call:
+                                            shader_version_marker_char = ' '
+                                            shader_version_start_offset = 0
+
+                                            shader_version_start_vertex = 0
+
+                                            # we need to skip matched combinations which don't fit within the 'vs_x_y' format
+                                            while shader_version_marker_char != '_' and shader_version_start_vertex != -1:
+                                                shader_version_start_vertex = trace_line.find(VERTEX_SHADER_IDENTIFIER, shader_version_start_offset)
+                                                shader_version_start_offset = shader_version_start_vertex + VERTEX_SHADER_IDENTIFIER_LENGTH
+                                                shader_version_marker_char = trace_line[shader_version_start_offset + 1:shader_version_start_offset + 2]
+
+                                            if shader_version_start_vertex != -1:
+                                                shader_version = trace_line[shader_version_start_vertex:shader_version_start_vertex +
+                                                                                                        VERTEX_SHADER_IDENTIFIER_LENGTH +
+                                                                                                        SHADER_VERSION_OFFSET]
+
+                                            else:
+                                                shader_version_marker_char = ' '
+                                                shader_version_start_offset = 0
+
+                                                shader_version_start_domain = 0
+
+                                                # we need to skip matched combinations which don't fit within the 'ds_x_y' format
+                                                while shader_version_marker_char != '_' and shader_version_start_domain != -1:
+                                                    shader_version_start_domain = trace_line.find(DOMAIN_SHADER_IDENTIFIER, shader_version_start_offset)
+                                                    shader_version_start_offset = shader_version_start_domain + DOMAIN_SHADER_IDENTIFIER_LENGTH
+                                                    shader_version_marker_char = trace_line[shader_version_start_offset + 1:shader_version_start_offset + 2]
+
+                                                if shader_version_start_domain != -1:
+                                                    shader_version = trace_line[shader_version_start_domain:shader_version_start_domain +
+                                                                                                            DOMAIN_SHADER_IDENTIFIER_LENGTH +
+                                                                                                            SHADER_VERSION_OFFSET]
+
+                                    elif HULL_SHADER_CALL in call:
+                                        shader_version_start_hull = 0
+
+                                        # we need to skip matched combinations which don't fit within the 'hs_x_y' format
+                                        while shader_version_marker_char != '_' and shader_version_start_hull != -1:
+                                            shader_version_start_hull = trace_line.find(HULL_SHADER_IDENTIFIER, shader_version_start_offset)
+                                            shader_version_start_offset = shader_version_start_hull + HULL_SHADER_IDENTIFIER_LENGTH
+                                            shader_version_marker_char = trace_line[shader_version_start_offset + 1:shader_version_start_offset + 2]
+
+                                        if shader_version_start_hull != -1:
+                                            shader_version = trace_line[shader_version_start_hull:shader_version_start_hull +
+                                                                                                  HULL_SHADER_IDENTIFIER_LENGTH +
+                                                                                                  SHADER_VERSION_OFFSET]
+
+                                    if shader_version is not None:
                                         logger.debug(f'Shader version: {shader_version}')
 
                                         existing_value = self.shader_version_dictionary.get(shader_version, 0)
                                         self.shader_version_dictionary[shader_version] = existing_value + 1
-
-                                        shader_call_context = False
                                 else:
                                     logger.debug(f'Skipped parsing of shader line: {trace_line}')
 
@@ -1797,8 +1883,8 @@ class TraceStats:
                         # these will usually be (numbered) memcpy lines
                         logger.debug(f'Skipped parsing of numbered line: {trace_line}')
 
-                    if trace_call_counter > 0 and trace_call_counter % TRACE_LOGGING_CHUNK_CALLS == 0:
-                        logger.info(f'Proccessed {trace_call_counter} apitrace calls...')
+                    if trace_line_counter > 0 and trace_line_counter % TRACE_LOGGING_CHUNK_CALLS == 0:
+                        logger.info(f'Proccessed {trace_line_counter} apitrace lines...')
 
                 self.process_queue.task_done()
 
