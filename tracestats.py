@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 '''
 @author: Winter Snowfall
-@version: 1.93
-@date: 30/05/2026
+@version: 1.94
+@date: 01/06/2026
 '''
 
 import os
@@ -80,7 +80,7 @@ TRACE_API_OVERRIDES = {'wargame_'   : 'D3D9Ex', # Ignore queries done on a plain
                        'xrEngine___': 'D3D10',  # Creates a D3D11 device first, but renders using D3D10
                        'RebelGalaxy': 'D3D11'}  # Creates a D3D10 device first, but renders using D3D11
 
-TRACE_NAME_EXCEPTION_LIST = ('gameProject', 'warhogs_')
+TRACE_NAME_EXCEPTION_LIST = ('gameProject', 'warhogs_', 'Z_XVT__')
 
 # To convert, use: int.from_bytes(b'ATOC', 'little') or:
 # (1129272385).to_bytes(4, 'little').decode('ascii')
@@ -199,8 +199,12 @@ DRAW_FLAGS_SKIP_IDENTIFIER = 'dwFlags = 0' # can be 0 or 0x0
 PROCESS_VERTICES_FLAGS_CALL = '::ProcessVertices'
 PROCESS_VERTICES_FLAGS_IDENTIFIER = 'dwVertexOp ='
 PROCESS_VERTICES_FLAGS_IDENTIFIER_LENGTH = len(PROCESS_VERTICES_FLAGS_IDENTIFIER)
+PROCESS_VERTICES_FLAGS_IDENTIFIER2 = 'dwFlags ='
+PROCESS_VERTICES_FLAGS_IDENTIFIER2_LENGTH = len(PROCESS_VERTICES_FLAGS_IDENTIFIER2)
+PROCESS_VERTICES_FLAGS_IDENTIFIER2_END = ')'
 PROCESS_VERTICES_FLAGS_SPLIT_DELIMITER = '|'
 PROCESS_VERTICES_FLAGS_SKIP_IDENTIFIER = 'dwVertexOp = 0' # can be 0 or 0x0
+PROCESS_VERTICES_FLAGS_SKIP_IDENTIFIER2 = 'dwFlags = 0' # can be 0 or 0x0
 # render states
 RENDER_STATES_CALL_DDRAW = '::SetRenderState'
 RENDER_STATES_IDENTIFIER_DDRAW = 'D3DRENDERSTATE_'
@@ -223,8 +227,14 @@ TEXTURE_MAP_BLEND_MODE_VALUE = 'D3DRENDERSTATE_TEXTUREMAPBLEND'
 TEXTURE_MAP_BLEND_MODE_IDENTIFIER = 'dwRenderState = '
 TEXTURE_MAP_BLEND_MODE_IDENTIFIER_LENGTH = len(TEXTURE_MAP_BLEND_MODE_IDENTIFIER)
 TEXTURE_MAP_BLEND_MODE_END = ')'
-# D3D3 execute buffer dump
-DDRAW_EXECUTE_BUFFER_DUMP = 'executebufferdump'
+# execute buffer opcodes
+EXECUTE_BUFFER_DUMP_IDENTIFIER = 'executebufferdump'
+EXECUTE_BUFFER_OPCODE_IDENTIFIER = 'D3DOP_'
+EXECUTE_BUFFER_OPCODE_IDENTIFIER_LENGTH = len(EXECUTE_BUFFER_OPCODE_IDENTIFIER)
+# execute buffer process vertices flags
+PROCESS_VERTICES_FLAGS_IDENTIFIER_EB = 'D3DPROCESSVERTICES_'
+PROCESS_VERTICES_FLAGS_IDENTIFIER_EB_LENGTH = len(PROCESS_VERTICES_FLAGS_IDENTIFIER2)
+PROCESS_VERTICES_FLAGS_EB_SPLIT_DELIMITER = '|'
 ####################### DDRAW, D3D3, D3D5, D3D6, D3D7 ##########################
 
 ############################## D3D8, D3D9Ex, D3D9 ##############################
@@ -255,6 +265,11 @@ PRESENT_PARAMETER_FLAGS_IDENTIFIER = ', Flags = '
 PRESENT_PARAMETER_FLAGS_IDENTIFIER_LENGTH = len(PRESENT_PARAMETER_FLAGS_IDENTIFIER)
 PRESENT_PARAMETER_FLAGS_SKIP_IDENTIFIER = ', Flags = 0x0'
 PRESENT_PARAMETER_FLAGS_SPLIT_DELIMITER = '|'
+# process vertices flags
+PROCESS_VERTICES_FLAGS_IDENTIFIER3 = 'Flags ='
+PROCESS_VERTICES_FLAGS_IDENTIFIER3_LENGTH = len(PROCESS_VERTICES_FLAGS_IDENTIFIER3)
+PROCESS_VERTICES_FLAGS_IDENTIFIER3_END = ')'
+PROCESS_VERTICES_FLAGS_SKIP_IDENTIFIER3 = 'Flags = 0' # can be 0 or 0x0
 # render states
 RENDER_STATES_CALL = '::SetRenderState'
 RENDER_STATES_IDENTIFIER = 'State = '
@@ -540,6 +555,7 @@ class TraceStats:
         self.surface_cap_dictionary = {}
         self.vertex_buffer_cap_dictionary = {}
         self.texture_map_mode_dictionary = {}
+        self.execute_buffer_opcode_dictionary = {}
 
         self.process_queue = queue.Queue(maxsize=TRACE_PARSE_QUEUE_SIZE)
         self.api_skip = threading.Event()
@@ -781,6 +797,8 @@ class TraceStats:
                             return_dictionary['vertex_buffer_caps'] = self.vertex_buffer_cap_dictionary
                         if len(self.texture_map_mode_dictionary) > 0:
                             return_dictionary['texture_map_modes'] = self.texture_map_mode_dictionary
+                        if len(self.execute_buffer_opcode_dictionary) > 0:
+                            return_dictionary['execute_buffer_opcodes'] = self.execute_buffer_opcode_dictionary
 
                         self.json_output[JSON_BASE_KEY].append(return_dictionary)
 
@@ -856,6 +874,7 @@ class TraceStats:
                 self.surface_cap_dictionary = {}
                 self.vertex_buffer_cap_dictionary = {}
                 self.texture_map_mode_dictionary = {}
+                self.execute_buffer_opcode_dictionary = {}
 
             else:
                 logger.warning(f'File not found, skipping: {trace_path}')
@@ -946,7 +965,7 @@ class TraceStats:
                         trace_line_counter = int(split_line[0])
                         logger.debug(f'Found line count: {trace_line_counter}')
 
-                        execute_buffer_dump_line = split_line[1].startswith(DDRAW_EXECUTE_BUFFER_DUMP)
+                        execute_buffer_dump_line = split_line[1].startswith(EXECUTE_BUFFER_DUMP_IDENTIFIER)
                     except:
                         logger.debug(f'Skipped parsing of line: {trace_line}')
                         continue
@@ -1126,10 +1145,36 @@ class TraceStats:
                                             existing_value = self.lock_flag_dictionary.get(lock_flag_stripped, 0)
                                             self.lock_flag_dictionary[lock_flag_stripped] = existing_value + 1
 
-                            # Render states can also be included as part of execute buffers
                             if self.api != 'D3D7':
                                 if execute_buffer_dump_line:
                                     logger.debug(f'Found execute buffer content on line: {trace_line}')
+
+                                    # Multiple execute buffer operation codes can be included in the same execute buffer dump
+                                    execute_buffer_opcode_start = trace_line.find(EXECUTE_BUFFER_OPCODE_IDENTIFIER)
+                                    while execute_buffer_opcode_start != -1:
+                                        execute_buffer_opcode = trace_line[execute_buffer_opcode_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
+                                                                                                                       execute_buffer_opcode_start)].strip()
+
+                                        existing_value = self.execute_buffer_opcode_dictionary.get(execute_buffer_opcode, 0)
+                                        self.execute_buffer_opcode_dictionary[execute_buffer_opcode] = existing_value + 1
+
+                                        execute_buffer_opcode_start = trace_line.find(EXECUTE_BUFFER_OPCODE_IDENTIFIER,
+                                                                                      execute_buffer_opcode_start + EXECUTE_BUFFER_OPCODE_IDENTIFIER_LENGTH)
+
+                                    # Multiple process vertices flags can be included in the same execute buffer dump
+                                    process_vertices_flags_start = trace_line.find(PROCESS_VERTICES_FLAGS_IDENTIFIER_EB)
+                                    while process_vertices_flags_start != -1:
+                                        process_vertices_flags_end = trace_line.find(API_ENTRY_VALUE_DELIMITER, process_vertices_flags_start)
+                                        process_vertices_flags = trace_line[process_vertices_flags_start:process_vertices_flags_end].strip()
+
+                                        process_vertices_flags_actual = process_vertices_flags.split(PROCESS_VERTICES_FLAGS_EB_SPLIT_DELIMITER)
+
+                                        for process_vertices_flag in process_vertices_flags_actual:
+                                            process_vertices_flag_stripped = process_vertices_flag.strip()
+                                            existing_value = self.process_vertices_flag_dictionary.get(process_vertices_flag_stripped, 0)
+                                            self.process_vertices_flag_dictionary[process_vertices_flag_stripped] = existing_value + 1
+
+                                        process_vertices_flags_start = trace_line.find(PROCESS_VERTICES_FLAGS_IDENTIFIER_EB, process_vertices_flags_end)
 
                                     # Multiple render states can be included in the same execute buffer dump
                                     render_state_start = trace_line.find(RENDER_STATES_IDENTIFIER_DDRAW)
@@ -1239,6 +1284,7 @@ class TraceStats:
                                     if PROCESS_VERTICES_FLAGS_CALL in call:
                                         logger.debug(f'Found process vertices flags on line: {trace_line}')
 
+                                        # we call these flags as well, but they are actually the opcodes
                                         if PROCESS_VERTICES_FLAGS_SKIP_IDENTIFIER not in trace_line:
                                             process_vertices_flags_start = trace_line.find(PROCESS_VERTICES_FLAGS_IDENTIFIER) + PROCESS_VERTICES_FLAGS_IDENTIFIER_LENGTH
                                             process_vertices_flags = trace_line[process_vertices_flags_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
@@ -1265,6 +1311,15 @@ class TraceStats:
                                                 process_vertices_flag_stripped = process_vertices_flag.strip()
                                                 existing_value = self.process_vertices_flag_dictionary.get(process_vertices_flag_stripped, 0)
                                                 self.process_vertices_flag_dictionary[process_vertices_flag_stripped] = existing_value + 1
+
+                                        # these are the actual process vertices flags
+                                        if PROCESS_VERTICES_FLAGS_SKIP_IDENTIFIER2 not in trace_line:
+                                            process_vertices_flags_start = trace_line.find(PROCESS_VERTICES_FLAGS_IDENTIFIER2) + PROCESS_VERTICES_FLAGS_IDENTIFIER2_LENGTH
+                                            process_vertices_flag = trace_line[process_vertices_flags_start:trace_line.find(PROCESS_VERTICES_FLAGS_IDENTIFIER2_END,
+                                                                                                                            process_vertices_flags_start)].strip()
+
+                                            existing_value = self.process_vertices_flag_dictionary.get(process_vertices_flag, 0)
+                                            self.process_vertices_flag_dictionary[process_vertices_flag] = existing_value + 1
 
                                     elif VERTEX_BUFFER_CAPS_CALL in call:
                                         logger.debug(f'Found vertex buffer caps on line: {trace_line}')
@@ -1553,6 +1608,17 @@ class TraceStats:
 
                                     existing_value = self.pool_dictionary.get(pool_value, 0)
                                     self.pool_dictionary[pool_value] = existing_value + 1
+
+                            elif PROCESS_VERTICES_FLAGS_CALL in call:
+                                logger.debug(f'Found process vertices flags on line: {trace_line}')
+
+                                if PROCESS_VERTICES_FLAGS_SKIP_IDENTIFIER3 not in trace_line:
+                                    process_vertices_flags_start = trace_line.find(PROCESS_VERTICES_FLAGS_IDENTIFIER3) + PROCESS_VERTICES_FLAGS_IDENTIFIER3_LENGTH
+                                    process_vertices_flag = trace_line[process_vertices_flags_start:trace_line.find(PROCESS_VERTICES_FLAGS_IDENTIFIER3_END,
+                                                                                                                    process_vertices_flags_start)].strip()
+
+                                    existing_value = self.process_vertices_flag_dictionary.get(process_vertices_flag, 0)
+                                    self.process_vertices_flag_dictionary[process_vertices_flag] = existing_value + 1
 
                         elif self.api == 'D3D10' or self.api == 'D3D11':
                             if DEVICE_FLAGS_AND_FEATURE_LEVELS_CALL in call:

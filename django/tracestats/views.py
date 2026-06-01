@@ -87,7 +87,8 @@ STATS_TYPE = {'api_calls': 1,
               'process_vertices_flags': 27,
               'surface_caps': 28,
               'vertex_buffer_caps': 29,
-              'texture_map_modes': 30,}
+              'texture_map_modes': 30,
+              'execute_buffer_opcodes': 31}
 
 SEARCH_RESULTS_LIMIT = 999
 

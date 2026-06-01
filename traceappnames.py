@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 '''
 @author: Winter Snowfall
-@version: 1.93
-@date: 30/05/2026
+@version: 1.94
+@date: 01/06/2026
 '''
 
 import os
@@ -160,6 +160,7 @@ class TraceAppNames:
         'BoundByFlame':                                    ('Bound by Flame', None, 'D3D9'),
         'braid64_d3d11_final':                             ('Braid Anniversary Edition', None, 'D3D11'),
         'Brawls':                                          ('Lego Brawls', None, 'D3D11'),
+        'BridgeConstructor':                               ('Bridge Constructor', None, 'D3D11'),
         'Brothers':                                        ('Brothers: A Tale of Two Sons', None, 'D3D9'),
         'BrutalLegend':                                    ('Brutal Legend', None, 'D3D9'),
         'bs4pc':                                           ('Broken Sword 4: The Angel of Death', None, 'D3D9'),
@@ -551,6 +552,7 @@ class TraceAppNames:
         'Hades':                                           (None, None, 'D3D11'),
         'halo':                                            ('Halo: Combat Evolved', None, 'D3D9'),
         'HatinTimeGame':                                   ('A Hat in Time', None, 'D3D9'),
+        'Hatred-Win64-Shipping':                           ('Hatred', None, 'D3D11'),
         'HavenPark':                                       ('Haven Park', None, 'D3D11'),
         'hd2':                                             ('Hidden & Dangerous 2', None, 'D3D8'),
         'hde':                                             ('Hidden & Dangerous Deluxe', None, 'D3D8'),
@@ -1064,6 +1066,7 @@ class TraceAppNames:
         'stdrt_':                                          ('Castlevania: The Lecarde Chronicles 2', 'https://castlevaniafan.fandom.com/wiki/Castlevania:_The_Lecarde_Chronicles', 'D3D9'),
         'SteelRats-Win64-Shipping':                        ('Steel Rats', None, 'D3D11'),
         'stellaris':                                       ('Stellaris', None, 'D3D11'),
+        'STF_win32':                                       ('Super Time Force Ultra', None, 'D3D9'),
         'StreetFighterV':                                  ('Street Fighter V', None, 'D3D11'),
         'StrongholdWarlords':                              ('Stronghold: Warlords', None, 'D3D9'),
         'StubbsTheZombie':                                 ('Stubbs the Zombie in Rebel Without a Pulse', None, 'D3D11'),
@@ -1211,6 +1214,8 @@ class TraceAppNames:
         'vietnam':                                         ('Men of War: Vietnam', None, 'D3D9'),
         'Vietnam':                                         ('Line of Sight: Vietnam', None, 'D3D9'),
         'Viriax':                                          (None, None, 'D3D8'),
+        'Volgarr':                                         ('Volgarr the Viking', None, 'D3D7'),
+        'Volgarr_':                                        ('Volgarr the Viking', None, 'D3D9'),
         'Vrally2':                                         ('V-Rally 2 Expert Edition', None, 'D3D7'),
         'W40k':                                            ('Warhammer 40,000: Dawn of War', None, 'D3D9'),
         'W40k_gog':                                        ('Warhammer 40,000: Dawn of War - Definitive Edition', None, 'D3D9'),
@@ -1233,6 +1238,7 @@ class TraceAppNames:
         'wic':                                             ('World in Conflict', None, 'D3D9'),
         'WillRock':                                        ('Will Rock', None, 'D3D7'),
         'Windward':                                        (None, None, 'D3D9'),
+        'witch':                                           ('Myths of Orion: Light from the North', None, 'D3D9'),
         'witcher2':                                        ('The Witcher 2: Assassins of Kings', None, 'D3D9'),
         'witcher3':                                        ('The Witcher 3: Wild Hunt', None, 'D3D11'),
         'witcher':                                         ('The Witcher', None, 'D3D9'),
