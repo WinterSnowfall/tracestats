@@ -68,6 +68,10 @@
                             {{ stat.render_state_percentage }}
                         {% elif stat.stat_type == 8 %}
                             {{ stat.query_type_percentage }}
+                        {% elif stat.stat_type == 17 %}
+                            {{ stat.light_type_percentage }}
+                        {% elif stat.stat_type == 26 %}
+                            {{ stat.eb_opcode_percentage }}
                         {% else %}
                             N/A
                         {% endif %}

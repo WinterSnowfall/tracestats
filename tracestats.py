@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 '''
 @author: Winter Snowfall
-@version: 1.94
-@date: 01/06/2026
+@version: 1.95
+@date: 08/06/2026
 '''
 
 import os
@@ -76,7 +76,8 @@ API_BASE_CALLS = {**API_ENTRY_CALLS, 'DirectDrawCreateEx': 'DDraw7',
                                      'CreateDXGIFactory1': 'DXGI',
                                      'CreateDXGIFactory2': 'DXGI'}
 
-TRACE_API_OVERRIDES = {'wargame_'   : 'D3D9Ex', # Ignore queries done on a plain D3D9 interface, as it's not used for rendering
+TRACE_API_OVERRIDES = {'ff7'        : 'D3D5',   # Creates a D3D3 device first, but queries for a D3D5 device and renders with it
+                       'wargame_'   : 'D3D9Ex', # Ignore queries done on a plain D3D9 interface, as it's not used for rendering
                        'xrEngine___': 'D3D10',  # Creates a D3D11 device first, but renders using D3D10
                        'RebelGalaxy': 'D3D11'}  # Creates a D3D10 device first, but renders using D3D11
 
@@ -144,6 +145,34 @@ D3DVOP_EXTENTS   = 0x00000008
 D3DVOP_LIGHT     = 0x00000400
 
 ####################### DDRAW, D3D3, D3D5, D3D6, D3D7 ##########################
+# device type
+DEVICE_CREATION_CALL_DDRAW = '::CreateDevice'
+DEVICE_TYPE_IDENTIFIER_DDRAW = 'rclsid = '
+DEVICE_TYPE_IDENTIFIER_DDRAW_LENGTH = len(DEVICE_TYPE_IDENTIFIER_DDRAW)
+DEVICE_TYPE_SKIP_IDENTIFIERS_DDRAW  = ('uuid(aef72d43-b09a-4b7b-b798-c68a772d722a)',  # WineD3D device GUID
+                                       'IID_IDirect3DWineDevice') # WineD3D device GUID (decoded)
+# render states
+RENDER_STATES_CALL_DDRAW = '::SetRenderState'
+RENDER_STATES_IDENTIFIER_DDRAW = 'D3DRENDERSTATE_'
+RENDER_STATES_IDENTIFIER_DDRAW_LENGTH = len(RENDER_STATES_IDENTIFIER_DDRAW)
+# process vertices flags
+PROCESS_VERTICES_FLAGS_CALL = '::ProcessVertices'
+PROCESS_VERTICES_FLAGS_IDENTIFIER = 'dwVertexOp ='
+PROCESS_VERTICES_FLAGS_IDENTIFIER_LENGTH = len(PROCESS_VERTICES_FLAGS_IDENTIFIER)
+PROCESS_VERTICES_FLAGS_IDENTIFIER2 = 'dwFlags ='
+PROCESS_VERTICES_FLAGS_IDENTIFIER2_LENGTH = len(PROCESS_VERTICES_FLAGS_IDENTIFIER2)
+PROCESS_VERTICES_FLAGS_IDENTIFIER2_END = ')'
+PROCESS_VERTICES_FLAGS_SPLIT_DELIMITER = '|'
+PROCESS_VERTICES_FLAGS_SKIP_IDENTIFIER = 'dwVertexOp = 0' # can be 0 or 0x0
+PROCESS_VERTICES_FLAGS_SKIP_IDENTIFIER2 = 'dwFlags = 0' # can be 0 or 0x0
+# execute buffer opcodes
+EXECUTE_BUFFER_DUMP_IDENTIFIER = 'executebufferdump'
+EXECUTE_BUFFER_OPCODE_IDENTIFIER = 'D3DOP_'
+EXECUTE_BUFFER_OPCODE_IDENTIFIER_LENGTH = len(EXECUTE_BUFFER_OPCODE_IDENTIFIER)
+# execute buffer process vertices flags
+PROCESS_VERTICES_FLAGS_IDENTIFIER_EB = 'D3DPROCESSVERTICES_'
+PROCESS_VERTICES_FLAGS_IDENTIFIER_EB_LENGTH = len(PROCESS_VERTICES_FLAGS_IDENTIFIER2)
+PROCESS_VERTICES_FLAGS_EB_SPLIT_DELIMITER = '|'
 # cooperative level flags
 COOPERATIVE_LEVEL_FLAGS_CALL = '::SetCooperativeLevel'
 COOPERATIVE_LEVEL_FLAGS_IDENTIFIER = 'dwFlags = '
@@ -195,20 +224,6 @@ DRAW_FLAGS_IDENTIFIER_LENGTH = len(DRAW_FLAGS_IDENTIFIER)
 DRAW_FLAGS_IDENTIFIER_END = ')'
 DRAW_FLAGS_SPLIT_DELIMITER = '|'
 DRAW_FLAGS_SKIP_IDENTIFIER = 'dwFlags = 0' # can be 0 or 0x0
-# process vertices flags
-PROCESS_VERTICES_FLAGS_CALL = '::ProcessVertices'
-PROCESS_VERTICES_FLAGS_IDENTIFIER = 'dwVertexOp ='
-PROCESS_VERTICES_FLAGS_IDENTIFIER_LENGTH = len(PROCESS_VERTICES_FLAGS_IDENTIFIER)
-PROCESS_VERTICES_FLAGS_IDENTIFIER2 = 'dwFlags ='
-PROCESS_VERTICES_FLAGS_IDENTIFIER2_LENGTH = len(PROCESS_VERTICES_FLAGS_IDENTIFIER2)
-PROCESS_VERTICES_FLAGS_IDENTIFIER2_END = ')'
-PROCESS_VERTICES_FLAGS_SPLIT_DELIMITER = '|'
-PROCESS_VERTICES_FLAGS_SKIP_IDENTIFIER = 'dwVertexOp = 0' # can be 0 or 0x0
-PROCESS_VERTICES_FLAGS_SKIP_IDENTIFIER2 = 'dwFlags = 0' # can be 0 or 0x0
-# render states
-RENDER_STATES_CALL_DDRAW = '::SetRenderState'
-RENDER_STATES_IDENTIFIER_DDRAW = 'D3DRENDERSTATE_'
-RENDER_STATES_IDENTIFIER_DDRAW_LENGTH = len(RENDER_STATES_IDENTIFIER_DDRAW)
 # lock flags
 LOCK_FLAGS_CALL_DDRAW = '::Lock'
 LOCK_FLAGS_IDENTIFIER_DDRAW = 'dwFlags = '
@@ -216,25 +231,11 @@ LOCK_FLAGS_IDENTIFIER_DDRAW_LENGTH = len(LOCK_FLAGS_IDENTIFIER_DDRAW)
 LOCK_FLAGS_VALUE_IDENTIFIER_DDRAW = 'DDLOCK_'
 LOCK_FLAGS_SKIP_IDENTIFIER_DDRAW = 'dwFlags = 0x0'
 LOCK_FLAGS_SPLIT_DELIMITER_DDRAW = '|'
-# device type
-DEVICE_CREATION_CALL_DDRAW = '::CreateDevice'
-DEVICE_TYPE_IDENTIFIER_DDRAW = 'rclsid = '
-DEVICE_TYPE_IDENTIFIER_DDRAW_LENGTH = len(DEVICE_TYPE_IDENTIFIER_DDRAW)
-DEVICE_TYPE_SKIP_IDENTIFIERS_DDRAW  = ('uuid(aef72d43-b09a-4b7b-b798-c68a772d722a)',  # WineD3D device GUID
-                                       'IID_IDirect3DWineDevice') # WineD3D device GUID (decoded)
 # texture map blend modes
 TEXTURE_MAP_BLEND_MODE_VALUE = 'D3DRENDERSTATE_TEXTUREMAPBLEND'
 TEXTURE_MAP_BLEND_MODE_IDENTIFIER = 'dwRenderState = '
 TEXTURE_MAP_BLEND_MODE_IDENTIFIER_LENGTH = len(TEXTURE_MAP_BLEND_MODE_IDENTIFIER)
 TEXTURE_MAP_BLEND_MODE_END = ')'
-# execute buffer opcodes
-EXECUTE_BUFFER_DUMP_IDENTIFIER = 'executebufferdump'
-EXECUTE_BUFFER_OPCODE_IDENTIFIER = 'D3DOP_'
-EXECUTE_BUFFER_OPCODE_IDENTIFIER_LENGTH = len(EXECUTE_BUFFER_OPCODE_IDENTIFIER)
-# execute buffer process vertices flags
-PROCESS_VERTICES_FLAGS_IDENTIFIER_EB = 'D3DPROCESSVERTICES_'
-PROCESS_VERTICES_FLAGS_IDENTIFIER_EB_LENGTH = len(PROCESS_VERTICES_FLAGS_IDENTIFIER2)
-PROCESS_VERTICES_FLAGS_EB_SPLIT_DELIMITER = '|'
 ####################### DDRAW, D3D3, D3D5, D3D6, D3D7 ##########################
 
 ############################## D3D8, D3D9Ex, D3D9 ##############################
@@ -334,6 +335,13 @@ FORMAT_IDENTIFIER_LENGTH = len(FORMAT_IDENTIFIER)
 # pools
 POOL_IDENTIFIER = 'Pool = '
 POOL_IDENTIFIER_LENGTH = len(POOL_IDENTIFIER)
+# light types
+LIGHT_TYPE_CALL = '::SetLight'
+LIGHT_TYPE_CALL_SKIP = '::SetLightState' # Exists in D3D6 and earlier
+LIGHT_TYPE_IDENTIFIER = 'Type = '
+LIGHT_TYPE_IDENTIFIER_LENGTH = len(LIGHT_TYPE_IDENTIFIER)
+LIGHT_TYPE_IDENTIFIER2 = 'dltType = '
+LIGHT_TYPE_IDENTIFIER2_LENGTH = len(LIGHT_TYPE_IDENTIFIER2)
 # vendor hacks
 VENDOR_HACK_POINTSIZE = 'State = D3DRS_POINTSIZE,'
 VENDOR_HACK_ADAPTIVETESS_X = 'State = D3DRS_ADAPTIVETESS_X,'
@@ -539,6 +547,8 @@ class TraceStats:
         self.format_dictionary = {}
         self.vendor_hack_dictionary = {}
         self.pool_dictionary = {}
+        self.process_vertices_flag_dictionary = {}
+        self.light_type_dictionary = {}
         self.device_flag_dictionary = {}
         self.swapchain_parameter_dictionary = {}
         self.swapchain_buffer_usage_dictionary = {}
@@ -548,14 +558,13 @@ class TraceStats:
         self.blend_state_dictionary = {}
         self.usage_dictionary = {}
         self.bind_flag_dictionary = {}
+        self.execute_buffer_opcode_dictionary = {}
         self.cooperative_level_flag_dictionary = {}
         self.flip_flag_dictionary = {}
         self.draw_flag_dictionary = {}
-        self.process_vertices_flag_dictionary = {}
         self.surface_cap_dictionary = {}
         self.vertex_buffer_cap_dictionary = {}
         self.texture_map_mode_dictionary = {}
-        self.execute_buffer_opcode_dictionary = {}
 
         self.process_queue = queue.Queue(maxsize=TRACE_PARSE_QUEUE_SIZE)
         self.api_skip = threading.Event()
@@ -765,6 +774,10 @@ class TraceStats:
                             return_dictionary['vendor_hacks'] = self.vendor_hack_dictionary
                         if len(self.pool_dictionary) > 0:
                             return_dictionary['pools'] = self.pool_dictionary
+                        if len(self.process_vertices_flag_dictionary) > 0:
+                            return_dictionary['process_vertices_flags'] = self.process_vertices_flag_dictionary
+                        if len(self.light_type_dictionary) > 0:
+                            return_dictionary['light_types'] = self.light_type_dictionary
                         if len(self.device_flag_dictionary) > 0:
                             return_dictionary['device_flags'] = self.device_flag_dictionary
                         if len(self.swapchain_parameter_dictionary) > 0:
@@ -783,22 +796,20 @@ class TraceStats:
                             return_dictionary['usage'] = self.usage_dictionary
                         if len(self.bind_flag_dictionary) > 0:
                             return_dictionary['bind_flags'] = self.bind_flag_dictionary
+                        if len(self.execute_buffer_opcode_dictionary) > 0:
+                            return_dictionary['execute_buffer_opcodes'] = self.execute_buffer_opcode_dictionary
                         if len(self.cooperative_level_flag_dictionary) > 0:
                             return_dictionary['cooperative_level_flags'] = self.cooperative_level_flag_dictionary
                         if len(self.flip_flag_dictionary) > 0:
                             return_dictionary['flip_flags'] = self.flip_flag_dictionary
                         if len(self.draw_flag_dictionary) > 0:
                             return_dictionary['draw_flags'] = self.draw_flag_dictionary
-                        if len(self.process_vertices_flag_dictionary) > 0:
-                            return_dictionary['process_vertices_flags'] = self.process_vertices_flag_dictionary
                         if len(self.surface_cap_dictionary) > 0:
                             return_dictionary['surface_caps'] = self.surface_cap_dictionary
                         if len(self.vertex_buffer_cap_dictionary) > 0:
                             return_dictionary['vertex_buffer_caps'] = self.vertex_buffer_cap_dictionary
                         if len(self.texture_map_mode_dictionary) > 0:
                             return_dictionary['texture_map_modes'] = self.texture_map_mode_dictionary
-                        if len(self.execute_buffer_opcode_dictionary) > 0:
-                            return_dictionary['execute_buffer_opcodes'] = self.execute_buffer_opcode_dictionary
 
                         self.json_output[JSON_BASE_KEY].append(return_dictionary)
 
@@ -858,6 +869,8 @@ class TraceStats:
                 self.format_dictionary = {}
                 self.vendor_hack_dictionary = {}
                 self.pool_dictionary = {}
+                self.process_vertices_flag_dictionary = {}
+                self.light_type_dictionary = {}
                 self.device_flag_dictionary = {}
                 self.swapchain_parameter_dictionary = {}
                 self.swapchain_buffer_usage_dictionary = {}
@@ -867,14 +880,14 @@ class TraceStats:
                 self.blend_state_dictionary = {}
                 self.usage_dictionary = {}
                 self.bind_flag_dictionary = {}
+                self.execute_buffer_opcode_dictionary = {}
                 self.cooperative_level_flag_dictionary = {}
                 self.flip_flag_dictionary = {}
                 self.draw_flag_dictionary = {}
-                self.process_vertices_flag_dictionary = {}
                 self.surface_cap_dictionary = {}
                 self.vertex_buffer_cap_dictionary = {}
                 self.texture_map_mode_dictionary = {}
-                self.execute_buffer_opcode_dictionary = {}
+
 
             else:
                 logger.warning(f'File not found, skipping: {trace_path}')
@@ -927,6 +940,7 @@ class TraceStats:
                             logger.warning(f'Traceappnames API value is mismatched: {self.api}')
                         elif self.traceappnames_api == api_override:
                             logger.info(f'Known API value override detected: {api_override}')
+                            self.api = api_override
                         else:
                             logger.error('Unexpected API override value')
                     else:
@@ -1146,7 +1160,17 @@ class TraceStats:
                                             self.lock_flag_dictionary[lock_flag_stripped] = existing_value + 1
 
                             if self.api != 'D3D7':
-                                if execute_buffer_dump_line:
+                                if LIGHT_TYPE_CALL in call and LIGHT_TYPE_CALL_SKIP not in call:
+                                    logger.debug(f'Found light type on line: {trace_line}')
+
+                                    light_type_start = trace_line.find(LIGHT_TYPE_IDENTIFIER2) + LIGHT_TYPE_IDENTIFIER2_LENGTH
+                                    light_type = trace_line[light_type_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
+                                                                                             light_type_start)].strip()
+
+                                    existing_value = self.light_type_dictionary.get(light_type, 0)
+                                    self.light_type_dictionary[light_type] = existing_value + 1
+
+                                elif execute_buffer_dump_line:
                                     logger.debug(f'Found execute buffer content on line: {trace_line}')
 
                                     # Multiple execute buffer operation codes can be included in the same execute buffer dump
@@ -1280,7 +1304,7 @@ class TraceStats:
                                             existing_value = self.draw_flag_dictionary.get(draw_flag_stripped, 0)
                                             self.draw_flag_dictionary[draw_flag_stripped] = existing_value + 1
 
-                                if self.api =='D3D7' or self.api == 'D3D6':
+                                if self.api == 'D3D7' or self.api == 'D3D6':
                                     if PROCESS_VERTICES_FLAGS_CALL in call:
                                         logger.debug(f'Found process vertices flags on line: {trace_line}')
 
@@ -1350,6 +1374,18 @@ class TraceStats:
                                                 vertex_buffer_cap_stripped = vertex_buffer_cap.strip()
                                                 existing_value = self.vertex_buffer_cap_dictionary.get(vertex_buffer_cap_stripped, 0)
                                                 self.vertex_buffer_cap_dictionary[vertex_buffer_cap_stripped] = existing_value + 1
+
+                                    if self.api == 'D3D7':
+                                        # Identical to its later D3D8/9 counterpart, but different from earlier D3D APIs
+                                        if LIGHT_TYPE_CALL in call:
+                                            logger.debug(f'Found light type on line: {trace_line}')
+
+                                            light_type_start = trace_line.find(LIGHT_TYPE_IDENTIFIER) + LIGHT_TYPE_IDENTIFIER_LENGTH
+                                            light_type = trace_line[light_type_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
+                                                                                                    light_type_start)].strip()
+
+                                            existing_value = self.light_type_dictionary.get(light_type, 0)
+                                            self.light_type_dictionary[light_type] = existing_value + 1
 
                         elif self.api == 'D3D8' or self.api == 'D3D9Ex' or self.api == 'D3D9':
                             if CHECK_DEVICE_FORMAT_CALL in call:
@@ -1608,6 +1644,16 @@ class TraceStats:
 
                                     existing_value = self.pool_dictionary.get(pool_value, 0)
                                     self.pool_dictionary[pool_value] = existing_value + 1
+
+                            elif LIGHT_TYPE_CALL in call:
+                                logger.debug(f'Found light type on line: {trace_line}')
+
+                                light_type_start = trace_line.find(LIGHT_TYPE_IDENTIFIER) + LIGHT_TYPE_IDENTIFIER_LENGTH
+                                light_type = trace_line[light_type_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
+                                                                                         light_type_start)].strip()
+
+                                existing_value = self.light_type_dictionary.get(light_type, 0)
+                                self.light_type_dictionary[light_type] = existing_value + 1
 
                             elif PROCESS_VERTICES_FLAGS_CALL in call:
                                 logger.debug(f'Found process vertices flags on line: {trace_line}')

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 '''
 @author: Winter Snowfall
-@version: 1.94
-@date: 01/06/2026
+@version: 1.95
+@date: 08/06/2026
 '''
 
 import os
@@ -423,6 +423,8 @@ class TraceAppNames:
         'FEAR':                                            ('F.E.A.R.', None, 'D3D9'),
         'FEAR2':                                           ('F.E.A.R. 2: Project Origin', None, 'D3D9'),
         'Feist':                                           (None, None, 'D3D11'),
+        'ff7':                                             ('Final Fantasy VII', None, 'D3D5'),
+        'FF8':                                             ('Final Fantasy VIII', None, 'D3D6'),
         'FF9':                                             ('Final Fantasy IX', None, 'D3D9'),
         'fforce':                                          ('Freedom Force', None, 'D3D8'),
         'FFVII':                                           ('Final Fantasy VII (2026)', None, 'D3D11'),
@@ -443,6 +445,7 @@ class TraceAppNames:
         'Freedom':                                         ('Freedom Fighters', None, 'D3D8'),
         'freelancer':                                      ('Freelancer', None, 'D3D8'),
         'frogger':                                         ('Frogger (1997)', None, 'D3D5'),
+        'Frogger2':                                        ('Frogger 2: Swampy\'s Revenge', None, 'D3D7'),
         'Frostpunk':                                       (None, None, 'D3D11'),
         'Frozenheim-Win64-Shipping':                       ('Frozenheim', None, 'D3D11'),
         'FruitNinja':                                      ('Fruit Ninja', None, 'D3D9'),
@@ -567,6 +570,7 @@ class TraceAppNames:
         'HitmanBloodMoney':                                ('Hitman: Blood Money', None, 'D3D9'),
         'HitmanContracts':                                 ('Hitman: Contracts', None, 'D3D8'),
         'hive':                                            ('The Hive', None, 'D3D11'),
+        'hl':                                              ('Half-Life', None, 'D3D6'),
         'hl2':                                             ('Half-Life 2', None, 'D3D9Ex'),
         'HLA':                                             ('7.62 Hard Life', None, 'D3D9'),
         'HMA':                                             ('Hitman: Absolution', None, 'D3D11'),
@@ -648,6 +652,7 @@ class TraceAppNames:
         'Launcher':                                        ('Full Spectrum Warrior', None, 'D3D9'),
         'LegendaryHeroes':                                 ('Fallen Enchantress: Legendary Heroes', None, 'D3D9'),
         'legendofkay':                                     ('Legend of Kay Anniversary', None, 'D3D11'),
+        'Legion':                                          (None, None, 'D3D7'),
         'LEGO DC Super-villains_DX11':                     ('Lego DC Super-Villains', None, 'D3D11'),
         'LEGO Racers 2':                                   ('LEGO Racers 2', None, 'D3D8'),
         'LEGOEMMET':                                       ('The Lego Movie Videogame', None, 'D3D9'),
@@ -903,6 +908,7 @@ class TraceAppNames:
         'redtide':                                         ('Men of War: Red Tide', None, 'D3D9'),
         'RelicCOH-d3d9':                                   ('Company of Heroes', None, 'D3D9'),
         'RememberMe':                                      ('Remember Me', None, 'D3D9'),
+        'Remothered2-Win64-Shipping':                      ('Remothered: Broken Porcelain', None, 'D3D11'),
         'replay':                                          ('Velvet Assassin', None, 'D3D9'),
         'ResidentEvil':                                    ('Resident Evil', None, 'D3D3'),
         'ResidentEvil3':                                   ('Resident Evil 3: Nemesis', None, 'D3D6'),
@@ -1002,6 +1008,7 @@ class TraceAppNames:
         'SimCity 4':                                       (None, None, 'D3D7'),
         'Simon3D':                                         ('Simon the Sorcerer 3D', None, 'D3D6'),
         'Simpsons':                                        ('The Simpsons: Hit & Run', None, 'D3D8'),
+        'Sims':                                            ('The Sims', None, 'D3D6'),
         'SineMoraEX':                                      ('Sine Mora EX', None, 'D3D9'),
         'SinEpisodes':                                     ('SiN Episodes: Emergence', None, 'D3D9'),
         'singles':                                         ('Singles: Flirt Up Your Life!', None, 'D3D8'),
@@ -1037,6 +1044,7 @@ class TraceAppNames:
         'SpaceMarine':                                     ('Warhammer 40,000: Space Marine', None, 'D3D9'),
         'SpazGame':                                        ('Space Pirates and Zombies', None, 'D3D7'),
         'SpecOpsTheLine':                                  ('Spec Ops: The Line', None, 'D3D9'),
+        'speed':                                           ('Need for Speed: Most Wanted', None, 'D3D9'),
         'SPEED2':                                          ('Need for Speed: Underground 2', None, 'D3D9'),
         'SpellForce':                                      ('SpellForce - Platinum Edition', None, 'D3D9'),
         'SpellForce2':                                     ('SpellForce 2: Shadow Wars', None, 'D3D9'),
@@ -1045,6 +1053,7 @@ class TraceAppNames:
         'SpideyPC':                                        ('Spider-Man (2001)', None, 'D3D7'),
         'SplinterCell':                                    ('Tom Clancy\'s Splinter Cell', None, 'D3D8'),
         'SplinterCell2':                                   ('Tom Clancy\'s Splinter Cell: Pandora Tomorrow', None, 'D3D8'),
+        'splintercell3':                                   ('Tom Clancy\'s Splinter Cell: Chaos Theory', None, 'D3D9'),
         'SplinterCell4':                                   ('Tom Clancy\'s Splinter Cell: Double Agent', None, 'D3D9'),
         'SporeApp':                                        ('Spore', None, 'D3D9'),
         'Squad22':                                         ('Meridian: Squad 22', None, 'D3D11'),

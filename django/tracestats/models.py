@@ -25,9 +25,12 @@ class Trace(models.Model):
                                             on_delete=models.PROTECT)
     updated_last        = models.DateTimeField(default=now)
     api                 = models.IntegerField()
+    # per-trace static fields used in precentage calculations
     api_calls_total     = models.IntegerField(null=True)
     render_states_total = models.IntegerField(null=True)
     query_types_total   = models.IntegerField(null=True)
+    light_types_total   = models.IntegerField(null=True)
+    eb_opcodes_total    = models.IntegerField(null=True)
 
     class Meta:
         # a certain appplication name can not occur more than once for a certain API
@@ -72,6 +75,24 @@ class Stats(models.Model):
         if self.stat_type == 8 and self.trace.query_types_total is not None:
             # Don't display anything under 0.01 and round up to 2 demimal points of precision
             result = round_up_two_decimals(max((self.stat_count * 100) / self.trace.query_types_total, 0.01))
+            precision = 0 if result.is_integer() else (2 if (result * 100) % 10 != 0 else 1)
+            return f'{result:.{precision}f}'
+        return None
+
+    @property
+    def light_type_percentage(self):
+        if self.stat_type == 17 and self.trace.light_types_total is not None:
+            # Don't display anything under 0.01 and round up to 2 demimal points of precision
+            result = round_up_two_decimals(max((self.stat_count * 100) / self.trace.light_types_total, 0.01))
+            precision = 0 if result.is_integer() else (2 if (result * 100) % 10 != 0 else 1)
+            return f'{result:.{precision}f}'
+        return None
+
+    @property
+    def eb_opcode_percentage(self):
+        if self.stat_type == 26 and self.trace.eb_opcodes_total is not None:
+            # Don't display anything under 0.01 and round up to 2 demimal points of precision
+            result = round_up_two_decimals(max((self.stat_count * 100) / self.trace.eb_opcodes_total, 0.01))
             precision = 0 if result.is_integer() else (2 if (result * 100) % 10 != 0 else 1)
             return f'{result:.{precision}f}'
         return None

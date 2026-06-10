@@ -54,7 +54,8 @@ API_ENTRY_CALLS = {'IDirect3DDevice7': 'D3D7',
                    'D3D11CreateDevice': 'D3D11',
                    'D3D11CoreCreateDevice': 'D3D11'}
 
-TRACE_API_OVERRIDES = {'wargame_'   : 'D3D9Ex', # Ignore queries done on a plain D3D9 interface, as it's not used for rendering
+TRACE_API_OVERRIDES = {'ff7'        : 'D3D5',   # Creates a D3D3 device first, but queries for a D3D5 device and renders with it
+                       'wargame_'   : 'D3D9Ex', # Ignore queries done on a plain D3D9 interface, as it's not used for rendering
                        'xrEngine___': 'D3D10',  # Creates a D3D11 device first, but renders using D3D10
                        'RebelGalaxy': 'D3D11'}  # Creates a D3D10 device first, but renders using D3D11
 
@@ -73,22 +74,23 @@ STATS_TYPE = {'api_calls': 1,
               'formats': 13,
               'vendor_hacks': 14,
               'pools': 15,
-              'device_flags': 16,
-              'swapchain_parameters': 17,
-              'swapchain_buffer_usage': 18,
-              'swapchain_flags': 19,
-              'feature_levels': 20,
-              'rastizer_states': 21,
-              'blend_states': 22,
-              'bind_flags': 23,
-              'cooperative_level_flags': 24,
-              'flip_flags': 25,
-              'draw_flags': 26,
-              'process_vertices_flags': 27,
-              'surface_caps': 28,
-              'vertex_buffer_caps': 29,
-              'texture_map_modes': 30,
-              'execute_buffer_opcodes': 31}
+              'process_vertices_flags': 16,
+              'light_types': 17,
+              'device_flags': 18,
+              'swapchain_parameters': 19,
+              'swapchain_buffer_usage': 20,
+              'swapchain_flags': 21,
+              'feature_levels': 22,
+              'rastizer_states': 23,
+              'blend_states': 24,
+              'bind_flags': 25,
+              'execute_buffer_opcodes': 26,
+              'cooperative_level_flags': 27,
+              'flip_flags': 28,
+              'draw_flags': 29,
+              'surface_caps': 30,
+              'vertex_buffer_caps': 31,
+              'texture_map_modes': 32,}
 
 SEARCH_RESULTS_LIMIT = 999
 
@@ -185,6 +187,26 @@ def tracestats(request):
                   entry_query_types_total = None
                 logger.debug(f'Total query types count is: {entry_query_types_total}')
 
+                entry_light_types = entry.get('light_types', {})
+                # determine the total light type count in the trace
+                entry_light_types_total = 0
+                for value in entry_light_types.values():
+                  entry_light_types_total = entry_light_types_total + value
+                # don't populate the db field to save some space if 0
+                if entry_light_types_total == 0:
+                  entry_light_types_total = None
+                logger.debug(f'Total light types count is: {entry_light_types_total}')
+
+                entry_eb_opcodes = entry.get('execute_buffer_opcodes', {})
+                # determine the total execute buffer opcode count in the trace
+                entry_eb_opcodes_total = 0
+                for value in entry_eb_opcodes.values():
+                  entry_eb_opcodes_total = entry_eb_opcodes_total + value
+                # don't populate the db field to save some space if 0
+                if entry_eb_opcodes_total == 0:
+                  entry_eb_opcodes_total = None
+                logger.debug(f'Total execute buffer opcode count is: {entry_eb_opcodes_total}')
+
                 try:
                   existing_trace = models.Trace.objects.get(name=entry_application_name, api=entry_api)
                 except models.Trace.DoesNotExist:
@@ -198,7 +220,9 @@ def tracestats(request):
                                        api=entry_api,
                                        api_calls_total=entry_api_calls_total,
                                        render_states_total=entry_render_states_total,
-                                       query_types_total=entry_query_types_total)
+                                       query_types_total=entry_query_types_total,
+                                       light_types_total=entry_light_types_total,
+                                       eb_opcodes_total=entry_eb_opcodes_total)
                   trace.save()
                 else:
                   trace = existing_trace
