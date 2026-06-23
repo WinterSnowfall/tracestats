@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 '''
 @author: Winter Snowfall
-@version: 1.95
-@date: 08/06/2026
+@version: 1.96
+@date: 23/07/2026
 '''
 
 import os
@@ -554,6 +554,8 @@ class TraceAppNames:
         'H5_Game':                                         ('Heroes of Might and Magic V', None, 'D3D9'),
         'Hades':                                           (None, None, 'D3D11'),
         'halo':                                            ('Halo: Combat Evolved', None, 'D3D9'),
+        'HardwarW':                                        ('Hardwar', None, 'D3D5'),
+        'HardwarW_':                                       ('Hardwar', None, 'D3D6'),
         'HatinTimeGame':                                   ('A Hat in Time', None, 'D3D9'),
         'Hatred-Win64-Shipping':                           ('Hatred', None, 'D3D11'),
         'HavenPark':                                       ('Haven Park', None, 'D3D11'),
@@ -661,6 +663,8 @@ class TraceAppNames:
         'left4dead2':                                      ('Left 4 Dead 2', None, 'D3D9'),
         'legends':                                         ('Rise of Nations: Rise of Legends', None, 'D3D9'),
         'LetsRide':                                        ('Let\'s Ride! Silver Buckle Stables', None, 'D3D8'),
+        'Life is Strange - Before the Storm':              ('Life is Strange: Before the Storm', None, 'D3D11'),
+        'LifeIsStrange':                                   ('Life Is Strange', None, 'D3D9'),
         'lithtech':                                        ('Aliens Versus Predator 2', None, 'D3D7'),
         'lithtech_':                                       ('Legends of Might and Magic', None, 'D3D7'),
         'Lithtech':                                        ('No One Lives Forever 2: A Spy in H.A.R.M.\'s Way', None, 'D3D8'),
@@ -723,6 +727,7 @@ class TraceAppNames:
         'MetroExodus':                                     ('Metro Exodus', None, 'D3D11'),
         'MFatigue':                                        ('Metal Fatigue', None, 'D3D6'),
         'mgsi':                                            ('Metal Gear Solid: Integral', None, 'D3D7'),
+        'midtown':                                         ('Midtown Madness', None, 'D3D6'),
         'Midtown2':                                        ('Midtown Madness 2', None, 'D3D7'),
         'Might & Magic Heroes VI':                         ('Might & Magic Heroes VI', None, 'D3D9Ex'),
         'MirrorsEdge':                                     ('Mirror\'s Edge', None, 'D3D9'),
@@ -757,6 +762,7 @@ class TraceAppNames:
         'Near-Mage':                                       (None, None, 'D3D11'),
         'NecroVisioN':                                     (None, None, 'D3D9'),
         'NecroVisioN_':                                    (None, None, 'D3D10'),
+        'NeedForSpeedHeat':                                ('Need for Speed Heat', None, 'D3D11'),
         'NeonChrome':                                      ('Neon Chrome', None, 'D3D9'),
         'Nerf':                                            ('Nerf ArenaBlast', None, 'D3D7'),
         'Never_Alone':                                     ('Never Alone', None, 'D3D9'),
@@ -814,6 +820,7 @@ class TraceAppNames:
         'Overcooked2':                                     ('Overcooked! 2', None, 'D3D11'),
         'Overload':                                        (None, None, 'D3D11'),
         'Overlord':                                        ('Overlord (2007)', None, 'D3D9'),
+        'OVERSEER':                                        ('Tex Murphy: Overseer', None, 'D3D5'),
         'Oxenfree':                                        (None, None, 'D3D9'),
         'Palworld-Win64-Shipping':                         ('Palworld', None, 'D3D11'),
         'PANZERS':                                         ('Codename: Panzers - Phase One', None, 'D3D9'),
@@ -905,6 +912,7 @@ class TraceAppNames:
         'redout-Win64-Shipping':                           ('Redout', None, 'D3D11'),
         'RedFactionArmageddon':                            ('Red Faction: Armageddon', None, 'D3D9'),
         'RedFactionArmageddon_DX11':                       ('Red Faction: Armageddon', None, 'D3D11'),
+        'RedRiver':                                        ('Operation Flashpoint: Red River', None, 'D3D9'),
         'redtide':                                         ('Men of War: Red Tide', None, 'D3D9'),
         'RelicCOH-d3d9':                                   ('Company of Heroes', None, 'D3D9'),
         'RememberMe':                                      ('Remember Me', None, 'D3D9'),
@@ -979,6 +987,7 @@ class TraceAppNames:
         'Seven-Win64-Shipping':                            ('Seven: The Days Long Gone', None, 'D3D11'),
         'sdhdship':                                        ('Sleeping Dogs: Definitive Edition', None, 'D3D11'),
         'SF3ClientFinal':                                  ('SpellForce 3', None, 'D3D11'),
+        'sfad3d':                                          ('Star Trek: Starfleet Academy', None, 'D3D3'),
         'SFC3':                                            ('Star Trek: Starfleet Command III', None, 'D3D8'),
         'SGW3':                                            ('Sniper: Ghost Warrior 3', None, 'D3D11'),
         'Shadow Tactics':                                  ('Shadow Tactics: Blades of the Shogun', None, 'D3D11'),

@@ -72,7 +72,7 @@ class Stats(models.Model):
 
     @property
     def query_type_percentage(self):
-        if self.stat_type == 8 and self.trace.query_types_total is not None:
+        if self.stat_type == 10 and self.trace.query_types_total is not None:
             # Don't display anything under 0.01 and round up to 2 demimal points of precision
             result = round_up_two_decimals(max((self.stat_count * 100) / self.trace.query_types_total, 0.01))
             precision = 0 if result.is_integer() else (2 if (result * 100) % 10 != 0 else 1)
@@ -81,7 +81,7 @@ class Stats(models.Model):
 
     @property
     def light_type_percentage(self):
-        if self.stat_type == 17 and self.trace.light_types_total is not None:
+        if self.stat_type == 19 and self.trace.light_types_total is not None:
             # Don't display anything under 0.01 and round up to 2 demimal points of precision
             result = round_up_two_decimals(max((self.stat_count * 100) / self.trace.light_types_total, 0.01))
             precision = 0 if result.is_integer() else (2 if (result * 100) % 10 != 0 else 1)
@@ -90,7 +90,7 @@ class Stats(models.Model):
 
     @property
     def eb_opcode_percentage(self):
-        if self.stat_type == 26 and self.trace.eb_opcodes_total is not None:
+        if self.stat_type == 28 and self.trace.eb_opcodes_total is not None:
             # Don't display anything under 0.01 and round up to 2 demimal points of precision
             result = round_up_two_decimals(max((self.stat_count * 100) / self.trace.eb_opcodes_total, 0.01))
             precision = 0 if result.is_integer() else (2 if (result * 100) % 10 != 0 else 1)

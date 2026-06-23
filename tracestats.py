@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 '''
 @author: Winter Snowfall
-@version: 1.95
-@date: 08/06/2026
+@version: 1.96
+@date: 23/07/2026
 '''
 
 import os
@@ -155,6 +155,12 @@ DEVICE_TYPE_SKIP_IDENTIFIERS_DDRAW  = ('uuid(aef72d43-b09a-4b7b-b798-c68a772d722
 RENDER_STATES_CALL_DDRAW = '::SetRenderState'
 RENDER_STATES_IDENTIFIER_DDRAW = 'D3DRENDERSTATE_'
 RENDER_STATES_IDENTIFIER_DDRAW_LENGTH = len(RENDER_STATES_IDENTIFIER_DDRAW)
+# texture stage types
+TEXTURE_STAGE_TYPE_IDENTIFIER_DDRAW = 'd3dTexStageStateType ='
+TEXTURE_STAGE_TYPE_IDENTIFIER_DDRAW_LENGTH = len(TEXTURE_STAGE_TYPE_IDENTIFIER_DDRAW)
+# texture stage states
+TEXTURE_STAGE_STATE_IDENTIFIER_DDRAW = 'dwState ='
+TEXTURE_STAGE_STATE_IDENTIFIER_DDRAW_LENGTH = len(TEXTURE_STAGE_STATE_IDENTIFIER_DDRAW)
 # process vertices flags
 PROCESS_VERTICES_FLAGS_CALL = '::ProcessVertices'
 PROCESS_VERTICES_FLAGS_IDENTIFIER = 'dwVertexOp ='
@@ -275,6 +281,16 @@ PROCESS_VERTICES_FLAGS_SKIP_IDENTIFIER3 = 'Flags = 0' # can be 0 or 0x0
 RENDER_STATES_CALL = '::SetRenderState'
 RENDER_STATES_IDENTIFIER = 'State = '
 RENDER_STATES_IDENTIFIER_LENGTH = len(RENDER_STATES_IDENTIFIER)
+# texture stage types
+TEXTURE_STAGE_TYPE_CALL = '::SetTextureStageState'
+TEXTURE_STAGE_TYPE_IDENTIFIER = 'Type ='
+TEXTURE_STAGE_TYPE_IDENTIFIER_LENGTH = len(TEXTURE_STAGE_TYPE_IDENTIFIER)
+# texture stage states
+TEXTURE_STAGE_STATE_IDENTIFIER = 'Value ='
+TEXTURE_STAGE_STATE_IDENTIFIER_LENGTH = len(TEXTURE_STAGE_STATE_IDENTIFIER)
+TEXTURE_STAGE_STATE_VALUE_IDENTIFIER = 'D3D'
+TEXTURE_STATE_STATE_SPLIT_DELIMITER = '|'
+TEXTURE_STAGE_STATE_IDENTIFIER_END = ')'
 # Star Wars: Force Unleashed (2) will set RS = -1 to 1 for some reason...
 # Gun Metal will set RS 99, which is undefined...
 RENDER_STATES_SKIPPED = ('-1', '99')
@@ -540,6 +556,8 @@ class TraceStats:
         self.present_parameter_dictionary = {}
         self.present_parameter_flag_dictionary = {}
         self.render_state_dictionary = {}
+        self.texture_stage_type_dictionary = {}
+        self.texture_stage_state_dictionary = {}
         self.query_type_dictionary = {}
         self.lock_flag_dictionary = {}
         self.shader_version_dictionary = {}
@@ -760,6 +778,10 @@ class TraceStats:
                             return_dictionary['behavior_flags'] = self.behavior_flag_dictionary
                         if len(self.render_state_dictionary) > 0:
                             return_dictionary['render_states'] = self.render_state_dictionary
+                        if len(self.texture_stage_type_dictionary) > 0:
+                            return_dictionary['texture_stage_types'] = self.texture_stage_type_dictionary
+                        if len(self.texture_stage_state_dictionary) > 0:
+                            return_dictionary['texture_stage_states'] = self.texture_stage_state_dictionary
                         if len(self.query_type_dictionary) > 0:
                             return_dictionary['query_types'] = self.query_type_dictionary
                         if len(self.lock_flag_dictionary) > 0:
@@ -862,6 +884,8 @@ class TraceStats:
                 self.present_parameter_dictionary = {}
                 self.present_parameter_flag_dictionary = {}
                 self.render_state_dictionary = {}
+                self.texture_stage_type_dictionary = {}
+                self.texture_stage_state_dictionary = {}
                 self.query_type_dictionary = {}
                 self.lock_flag_dictionary = {}
                 self.shader_version_dictionary = {}
@@ -1375,6 +1399,29 @@ class TraceStats:
                                                 existing_value = self.vertex_buffer_cap_dictionary.get(vertex_buffer_cap_stripped, 0)
                                                 self.vertex_buffer_cap_dictionary[vertex_buffer_cap_stripped] = existing_value + 1
 
+                                    elif TEXTURE_STAGE_TYPE_CALL in call:
+                                        logger.debug(f'Found texture stage state on line: {trace_line}')
+
+                                        texture_stage_type_start = trace_line.find(TEXTURE_STAGE_TYPE_IDENTIFIER_DDRAW) + TEXTURE_STAGE_TYPE_IDENTIFIER_DDRAW_LENGTH
+                                        texture_stage_type = trace_line[texture_stage_type_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
+                                                                                                                texture_stage_type_start)].strip()
+
+                                        existing_value = self.texture_stage_type_dictionary.get(texture_stage_type, 0)
+                                        self.texture_stage_type_dictionary[texture_stage_type] = existing_value + 1
+
+                                        texture_stage_state_start = trace_line.find(TEXTURE_STAGE_STATE_IDENTIFIER_DDRAW) + TEXTURE_STAGE_STATE_IDENTIFIER_DDRAW_LENGTH
+                                        texture_stage_states = trace_line[texture_stage_state_start:trace_line.find(TEXTURE_STAGE_STATE_IDENTIFIER_END,
+                                                                                                                    texture_stage_state_start)].strip()
+                                        # Some texture stage state values can be a mix of flags, though it is rare
+                                        texture_stage_states = texture_stage_states.split(TEXTURE_STATE_STATE_SPLIT_DELIMITER)
+
+                                        for texture_stage_state in texture_stage_states:
+                                            texture_stage_state_stripped = texture_stage_state.strip()
+                                            # There are some stage states with simple numeric values, skip those
+                                            if texture_stage_state_stripped.startswith(TEXTURE_STAGE_STATE_VALUE_IDENTIFIER):
+                                                existing_value = self.texture_stage_state_dictionary.get(texture_stage_state_stripped, 0)
+                                                self.texture_stage_state_dictionary[texture_stage_state_stripped] = existing_value + 1
+
                                     if self.api == 'D3D7':
                                         # Identical to its later D3D8/9 counterpart, but different from earlier D3D APIs
                                         if LIGHT_TYPE_CALL in call:
@@ -1498,6 +1545,29 @@ class TraceStats:
 
                                         if potential_vendor_hack_value is not None:
                                             logger.warning(f'Detected a potential vendor hack value: {potential_vendor_hack_value}')
+
+                            elif TEXTURE_STAGE_TYPE_CALL in call:
+                                logger.debug(f'Found texture stage state on line: {trace_line}')
+
+                                texture_stage_type_start = trace_line.find(TEXTURE_STAGE_TYPE_IDENTIFIER) + TEXTURE_STAGE_TYPE_IDENTIFIER_LENGTH
+                                texture_stage_type = trace_line[texture_stage_type_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
+                                                                                                         texture_stage_type_start)].strip()
+
+                                existing_value = self.texture_stage_type_dictionary.get(texture_stage_type, 0)
+                                self.texture_stage_type_dictionary[texture_stage_type] = existing_value + 1
+
+                                texture_stage_state_start = trace_line.find(TEXTURE_STAGE_STATE_IDENTIFIER) + TEXTURE_STAGE_STATE_IDENTIFIER_LENGTH
+                                texture_stage_states = trace_line[texture_stage_state_start:trace_line.find(TEXTURE_STAGE_STATE_IDENTIFIER_END,
+                                                                                                            texture_stage_state_start)].strip()
+                                # Some texture stage state values can be a mix of flags, though it is rare
+                                texture_stage_states = texture_stage_states.split(TEXTURE_STATE_STATE_SPLIT_DELIMITER)
+
+                                for texture_stage_state in texture_stage_states:
+                                    texture_stage_state_stripped = texture_stage_state.strip()
+                                    # There are some stage states with simple numeric values, skip those
+                                    if texture_stage_state_stripped.startswith(TEXTURE_STAGE_STATE_VALUE_IDENTIFIER):
+                                        existing_value = self.texture_stage_state_dictionary.get(texture_stage_state_stripped, 0)
+                                        self.texture_stage_state_dictionary[texture_stage_state_stripped] = existing_value + 1
 
                             # D3D8 uses IDirect3DDevice8::GetInfo calls to initiate queries
                             elif self.api == 'D3D8' and QUERY_TYPE_CALL_D3D8 in call:
