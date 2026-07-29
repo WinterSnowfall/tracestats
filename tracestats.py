@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 '''
 @author: Winter Snowfall
-@version: 1.96
-@date: 23/07/2026
+@version: 2.00
+@date: 25/07/2026
 '''
 
 import os
@@ -281,6 +281,7 @@ PROCESS_VERTICES_FLAGS_SKIP_IDENTIFIER3 = 'Flags = 0' # can be 0 or 0x0
 RENDER_STATES_CALL = '::SetRenderState'
 RENDER_STATES_IDENTIFIER = 'State = '
 RENDER_STATES_IDENTIFIER_LENGTH = len(RENDER_STATES_IDENTIFIER)
+RENDER_STATES_PREFIX = 'D3DRS_'
 # texture stage types
 TEXTURE_STAGE_TYPE_CALL = '::SetTextureStageState'
 TEXTURE_STAGE_TYPE_IDENTIFIER = 'Type ='
@@ -291,9 +292,6 @@ TEXTURE_STAGE_STATE_IDENTIFIER_LENGTH = len(TEXTURE_STAGE_STATE_IDENTIFIER)
 TEXTURE_STAGE_STATE_VALUE_IDENTIFIER = 'D3D'
 TEXTURE_STATE_STATE_SPLIT_DELIMITER = '|'
 TEXTURE_STAGE_STATE_IDENTIFIER_END = ')'
-# Star Wars: Force Unleashed (2) will set RS = -1 to 1 for some reason...
-# Gun Metal will set RS 99, which is undefined...
-RENDER_STATES_SKIPPED = ('-1', '99')
 # query types
 QUERY_TYPE_CALL_D3D8 = '::GetInfo'
 QUERY_TYPE_IDENTIFIER_D3D8 = 'DevInfoID = '
@@ -1511,9 +1509,11 @@ class TraceStats:
                                 render_state = trace_line[render_state_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
                                                                                              render_state_start)].strip()
 
-                                if render_state not in RENDER_STATES_SKIPPED:
+                                if render_state.startswith(RENDER_STATES_PREFIX):
                                     existing_value = self.render_state_dictionary.get(render_state, 0)
                                     self.render_state_dictionary[render_state] = existing_value + 1
+                                else:
+                                    logger.warn(f'Detected an invalid render state: {render_state}')
 
                                 render_state_point_size = VENDOR_HACK_POINTSIZE in trace_line
                                 render_state_adaptivetess_x = VENDOR_HACK_ADAPTIVETESS_X in trace_line
