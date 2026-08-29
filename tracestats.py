@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 '''
 @author: Winter Snowfall
-@version: 2.00
-@date: 25/07/2026
+@version: 2.01
+@date: 29/08/2026
 '''
 
 import os
@@ -147,8 +147,14 @@ D3DVOP_LIGHT     = 0x00000400
 ####################### DDRAW, D3D3, D3D5, D3D6, D3D7 ##########################
 # device type
 DEVICE_CREATION_CALL_DDRAW = '::CreateDevice'
+DEVICE_CREATION_CALL_D3D3 = 'IDirectDrawSurface::QueryInterface'
 DEVICE_TYPE_IDENTIFIER_DDRAW = 'rclsid = '
 DEVICE_TYPE_IDENTIFIER_DDRAW_LENGTH = len(DEVICE_TYPE_IDENTIFIER_DDRAW)
+DEVICE_TYPE_IDENTIFIER_D3D3 = 'riid = '
+DEVICE_TYPE_IDENTIFIER_D3D3_LENGTH = len(DEVICE_TYPE_IDENTIFIER_D3D3)
+DEVICE_TYPE_VALUES_D3D3 = ('IID_IDirect3DHALDevice',
+                           'IID_IDirect3DRGBDevice',
+                           'IID_IDirect3DRampDevice')
 DEVICE_TYPE_SKIP_IDENTIFIERS_DDRAW  = ('uuid(aef72d43-b09a-4b7b-b798-c68a772d722a)',  # WineD3D device GUID
                                        'IID_IDirect3DWineDevice') # WineD3D device GUID (decoded)
 # render states
@@ -1234,7 +1240,6 @@ class TraceStats:
                                         render_state_start = trace_line.find(RENDER_STATES_IDENTIFIER_DDRAW,
                                                                              render_state_start + RENDER_STATES_IDENTIFIER_DDRAW_LENGTH)
 
-
                             if self.api == 'D3D7' or self.api == 'D3D6' or self.api == 'D3D5':
                                 if DEVICE_CREATION_CALL_DDRAW in call:
                                     logger.debug(f'Found device type flags on line: {trace_line}')
@@ -1431,6 +1436,19 @@ class TraceStats:
 
                                             existing_value = self.light_type_dictionary.get(light_type, 0)
                                             self.light_type_dictionary[light_type] = existing_value + 1
+
+                            # if self.api == 'D3D3' only branch, basically
+                            elif DEVICE_CREATION_CALL_D3D3 in call:
+                                logger.debug(f'Found D3D3 device type flags on line: {trace_line}')
+
+                                device_type_start = trace_line.find(DEVICE_TYPE_IDENTIFIER_D3D3) + DEVICE_TYPE_IDENTIFIER_D3D3_LENGTH
+                                device_type = trace_line[device_type_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
+                                                                                           device_type_start)].strip()
+
+                                # D3D3 uses a limited number of IIDs to create a device from a surface object
+                                if device_type in DEVICE_TYPE_VALUES_D3D3:
+                                    existing_value = self.device_type_dictionary.get(device_type, 0)
+                                    self.device_type_dictionary[device_type] = existing_value + 1
 
                         elif self.api == 'D3D8' or self.api == 'D3D9Ex' or self.api == 'D3D9':
                             if CHECK_DEVICE_FORMAT_CALL in call:

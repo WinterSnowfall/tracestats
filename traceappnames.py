@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 '''
 @author: Winter Snowfall
-@version: 1.96
-@date: 23/07/2026
+@version: 2.01
+@date: 29/08/2026
 '''
 
 import os
@@ -102,6 +102,7 @@ class TraceAppNames:
         'BatmanOrigins':                                   ('Batman: Arkham Origins', None, 'D3D11'),
         'BatmanOrigins_':                                  ('Batman: Arkham Origins', None, 'D3D9'),
         'Battle_Realms_F':                                 ('Battle Realms', None, 'D3D7'),
+        'battlechessgok':                                  ('Battle Chess: Game of Kings', None, 'D3D9'),
         'BattleFleetGothic-Win64-Shipping':                ('Battlefleet Gothic: Armada', None, 'D3D11'),
         'BattlefleetGothic2-Win64-Shipping':               ('Battlefleet Gothic: Armada 2', None, 'D3D11'),
         'BattlefrontII':                                   ('Star Wars: Battlefront II', None, 'D3D9'),
@@ -230,6 +231,7 @@ class TraceAppNames:
         'Cq':                                              ('Costume Quest', None, 'D3D9'),
         'CRC':                                             ('Cross Racing Championship 2005', None, 'D3D9'),
         'CRIMECITIES':                                     ('Crime Cities', None, 'D3D6'), # OpenGL interop
+        'CRIMSON':                                         ('Crimson Skies', None, 'D3D6'),
         'Crimsonland':                                     (None, None, 'D3D9'),
         'CrimzonClover_WI_v106GOG':                        ('Crimzon Clover: World Ignition', None, 'D3D9Ex'),
         'Crusader2':                                       ('Stronghold Crusader 2', None, 'D3D9'),
@@ -293,6 +295,7 @@ class TraceAppNames:
         'dino':                                            ('Dino Crisis', None, 'D3D6'),
         'Dino2':                                           ('Dino Crisis 2', None, 'D3D6'),
         'Discipl2':                                        ('Disciples II: Dark Prophecy', None, 'D3D7'),
+        'DiscordTimes':                                    ('Discord Times', 'https://newusernamex.itch.io/discord-times', 'D3D7'),
         'Dishonored':                                      (None, None, 'D3D9'),
         'Dishonored_DO':                                   ('Dishonored: Death of the Outsider', None, 'D3D11'),
         'Dishonored2':                                     ('Dishonored 2', None, 'D3D11'),
@@ -301,6 +304,7 @@ class TraceAppNames:
         'Divinity2':                                       ('Divinity II: Developer\'s Cut', None, 'D3D9'),
         'DKII':                                            ('Dungeon Keeper 2', None, 'D3D6'),
         'DLSteamEdition':                                  ('Dungeon Lords', None, 'D3D9'),
+        'DOMO':                                            ('Dream of Mirror Online', None, 'D3D9'),
         'dontstarve':                                      ('Don\'t Starve', None, 'D3D9Ex'),
         'DOW2':                                            ('Warhammer 40,000: Dawn of War II', None, 'D3D9'),
         'DP':                                              ('Deadly Premonition: The Director\'s Cut', None, 'D3D9'),
@@ -337,6 +341,7 @@ class TraceAppNames:
         'E6':                                              ('7.62 High Calibre', None, 'D3D9'),
         'Earth2160_SSE':                                   ('Earth 2160', None, 'D3D9'),
         'EarthwormJim3D':                                  ('Earthworm Jim 3D', None, 'D3D6'),
+        'eaw':                                             ('European Air War', None, 'D3D5'),
         'ed6_win':                                         ('The Legend of Heroes: Trails in the Sky', None, 'D3D8'),
         'ed6_win_DX9':                                     ('The Legend of Heroes: Trails in the Sky', None, 'D3D9'),
         'ed6_win2':                                        ('The Legend Of Heroes: Trails in the Sky SC', None, 'D3D8'),
@@ -527,6 +532,7 @@ class TraceAppNames:
         'Greak Memories of Azur':                          ('Greak: Memories of Azur', None, 'D3D11'),
         'GreatEscape':                                     ('The Great Escape (2003)', None, 'D3D8'),
         'GreedFall':                                       ('GreedFall', None, 'D3D11'),
+        'GRB':                                             ('Tom Clancy\'s Ghost Recon Breakpoint', None, 'D3D11'),
         'GRID':                                            ('Race Driver: Grid', None, 'D3D9'),
         'Grim Dawn':                                       (None, None, 'D3D9Ex'),
         'Grim Dawn_':                                      (None, None, 'D3D11'),
@@ -622,6 +628,7 @@ class TraceAppNames:
         'JadeEmpire':                                      ('Jade Empire', None, 'D3D9'),
         'JK':                                              ('Star Wars: Jedi Knight - Dark Forces II', None, 'D3D3'),
         'JKM':                                             ('Star Wars: Jedi Knight - Mysteries of the Sith', None, 'D3D3'),
+        'joan':                                            ('Wars and Warriors: Joan of Arc', None, 'D3D8'),
         'JoaR':                                            ('Journey of a Roach', None, 'D3D9'),
         'joshua':                                          ('SuperPower 2', None, 'D3D9'),
         'Jotunnslayer':                                    ('Jotunnslayer: Hordes of Hel', None, 'D3D11'),
@@ -714,6 +721,7 @@ class TraceAppNames:
         'mb_warband':                                      ('Mount & Blade: Warband', None, 'D3D9'),
         'mb_wfas':                                         ('Mount & Blade: With Fire & Sword', None, 'D3D9'),
         'MC':                                              ('Massive Chalice', None, 'D3D11'),
+        'Mc2Rel':                                          ('MechCommander 2', None, 'D3D7'),
         'MCC-Win64-Shipping':                              ('Halo: The Master Chief Collection', None, 'D3D11'),
         'MCity_d':                                         ('Motor City Online', None, 'D3D8'),
         'MDKD3D':                                          ('MDK', None, 'D3D3'),
@@ -759,6 +767,7 @@ class TraceAppNames:
         'mow_assault_squad':                               ('Men of War: Assault Squad', None, 'D3D9'),
         'MRallye':                                         ('Master Rallye', None, 'D3D8'),
         'MTGBattlegrounds':                                ('Magic: The Gathering - Battlegrounds', None, 'D3D8'),
+        'MW4Mercs':                                        ('MechWarrior 4: Mercenaries', None, 'D3D7'),
         'MXvsATV':                                         ('MX vs. ATV Unleashed', None, 'D3D9'),
         'Myst4':                                           ('Myst IV: Revelation', None, 'D3D9'),
         'n2_arc':                                          ('N.I.C.E. 2', None, 'D3D5'),
@@ -855,6 +864,7 @@ class TraceAppNames:
         'Player':                                          ('Ballance', None, 'D3D8'),
         'podd3d5x':                                        ('POD: Planet of Death', None, 'D3D5'),
         'PODD3DX':                                         ('POD: Planet of Death', None, 'D3D3'),
+        'pol':                                             ('Final Fantasy XI', None, 'D3D8'),
         'PoliticalAnimals':                                ('Political Animals', None, 'D3D11'),
         'polmis':                                          ('Cops 2170: The Power of Law', None, 'D3D7'),
         'Pompeii':                                         ('Pompeii: The Legacy', None, 'D3D11'),
@@ -896,6 +906,7 @@ class TraceAppNames:
         'Railroad':                                        ('Railroad Pioneer', None, 'D3D8'),
         'RainbowSix':                                      ('Tom Clancy\'s Rainbow Six', None, 'D3D5'),
         'Ral':                                             ('Mobil 1 Rally Championship', None, 'D3D5'),
+        'Rangers':                                         ('Space Rangers HD: A War Apart', None, 'D3D9'),
         'Rapture_Release':                                 ('Everybody\'s Gone to the Rapture', None, 'D3D11'),
         'RATOF':                                           ('Runaway: A Twist of Fate', None, 'D3D9'),
         'RavenShield':                                     ('Tom Clancy\'s Rainbow Six 3: Raven Shield', None, 'D3D8'),
@@ -1050,6 +1061,7 @@ class TraceAppNames:
         'sof3':                                            ('Soldier of Fortune: Payback', None, 'D3D9'),
         'SOG':                                             ('Elite Warriors: Vietnam', None, 'D3D9'),
         'Soldiers':                                        ('Soldiers: Heroes of World War II', None, 'D3D8'),
+        'Sonic World DX':                                  (None, 'https://sonicworldfangame.com/', 'D3D7'),
         'sonic2app':                                       ('Sonic Adventure 2', None, 'D3D9'), # With the SA2 Render Fix mod
         'Sonic3D':                                         (None, 'https://gamejolt.com/games/sonic3d/28626', 'D3D8'),
         'SorcererKing':                                    ('Sorcerer King', None, 'D3D9'),
@@ -1080,6 +1092,7 @@ class TraceAppNames:
         'sr_hv':                                           ('Saints Row IV', None, 'D3D11'),
         'sr2':                                             ('Legacy of Kain: Soul Reaver 2', None, 'D3D8'),
         'SR2_pc':                                          ('Saints Row 2', None, 'D3D9'),
+        'SRQuest':                                         ('Space Rangers: Quest', None, 'D3D11'),
         'SRS':                                             ('Street Racing Syndicate', None, 'D3D9'),
         'SS3Game':                                         ('Sudden Strike 3: Arms for Victory', None, 'D3D9'),
         'Stack':                                           ('Stacking', None, 'D3D9'),
@@ -1270,6 +1283,7 @@ class TraceAppNames:
         'WH40KRT':                                         ('Warhammer 40,000: Rogue Trader', None, 'D3D11'),
         'wic':                                             ('World in Conflict', None, 'D3D9'),
         'WillRock':                                        ('Will Rock', None, 'D3D7'),
+        'WINDIE':                                          ('Die by the Sword', None, 'D3D5'),
         'Windward':                                        (None, None, 'D3D9'),
         'witch':                                           ('Myths of Orion: Light from the North', None, 'D3D9'),
         'witcher2':                                        ('The Witcher 2: Assassins of Kings', None, 'D3D9'),
