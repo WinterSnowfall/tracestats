@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 '''
 @author: Winter Snowfall
-@version: 2.01
-@date: 29/08/2026
+@version: 2.02
+@date: 14/09/2026
 '''
 
 import os
@@ -333,6 +333,7 @@ class TraceAppNames:
         'Dungeons2_':                                      ('Dungeons 2', None, 'D3D9'),
         'DungeonSiege':                                    ('Dungeon Siege', None, 'D3D7'),
         'DungeonSiege2':                                   ('Dungeon Siege II', None, 'D3D9'),
+        'dv':                                              ('Dark Vengeance', None, 'D3D3'),
         'Dwarves':                                         ('The Dwarves', None, 'D3D11'),
         'DX2Main':                                         ('Deus Ex: Invisible War', None, 'D3D8'),
         'DXHRDC':                                          ('Deus Ex: Human Revolution - Director\'s Cut', None, 'D3D11'),
@@ -687,6 +688,7 @@ class TraceAppNames:
         'LockOn':                                          ('Lock On: Modern Air Combat', None, 'D3D8'),
         'LOL3':                                            ('Lands of Lore III', None, 'D3D5'),
         'lol.launcher':                                    ('League of Legends', None, 'D3D9'),
+        'LOLG95':                                          ('Lands of Lore: Guardians of Destiny', None, 'D3D3'),
         'LordsOfTheFallen':                                ('Lords of the Fallen', None, 'D3D11'),
         'Loria':                                           (None, None, 'D3D11'),
         'LOTDGame':                                        ('Deadlight: Director\'s Cut', None, 'D3D9'),
@@ -730,6 +732,7 @@ class TraceAppNames:
         'medieval2':                                       ('Medieval II: Total War', None, 'D3D9'),
         'Medieval_TW':                                     ('Medieval: Total War', None, 'D3D9'),
         'Megarace3':                                       ('MegaRace 3', None, 'D3D8'),
+        'mageslay':                                        ('MageSlayer', None, 'D3D3'),
         'MessiahD3D':                                      ('Messiah', None, 'D3D7'),
         'METAL GEAR RISING REVENGEANCE':                   ('Metal Gear Rising: Revengeance', None, 'D3D9'),
         'MetalGear':                                       ('Metal Gear (MSX2)', None, 'D3D8'),

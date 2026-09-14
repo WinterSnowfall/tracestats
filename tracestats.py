@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 '''
 @author: Winter Snowfall
-@version: 2.01
-@date: 29/08/2026
+@version: 2.02
+@date: 14/09/2026
 '''
 
 import os
@@ -42,6 +42,8 @@ SHADER_DUMPS_FOLDER_NAME = 'dumps'
 SHADER_DUMPS_CALL_CHUNK_SIZE = 10000
 
 # parsing constants
+APITRACE_FAKE_CALL_IDENTIFIER = ' // fake'
+
 API_ENTRY_CALL_IDENTIFIER = '::'
 API_ENTRY_VALUE_DELIMITER = ','
 SHADER_DUMP_SKIP_IDENTIFIER_D3D8_9 = 'pFunction = NULL'
@@ -178,7 +180,7 @@ PROCESS_VERTICES_FLAGS_SPLIT_DELIMITER = '|'
 PROCESS_VERTICES_FLAGS_SKIP_IDENTIFIER = 'dwVertexOp = 0' # can be 0 or 0x0
 PROCESS_VERTICES_FLAGS_SKIP_IDENTIFIER2 = 'dwFlags = 0' # can be 0 or 0x0
 # execute buffer opcodes
-EXECUTE_BUFFER_DUMP_IDENTIFIER = 'executebufferdump'
+EXECUTE_BUFFER_DUMP_IDENTIFIER = 'ExecuteBufferDump'
 EXECUTE_BUFFER_OPCODE_IDENTIFIER = 'D3DOP_'
 EXECUTE_BUFFER_OPCODE_IDENTIFIER_LENGTH = len(EXECUTE_BUFFER_OPCODE_IDENTIFIER)
 # execute buffer process vertices flags
@@ -999,6 +1001,7 @@ class TraceStats:
                     # the trace line number and later on the api call name
                     split_line = trace_line.split(maxsplit=2)
 
+                    fake_call = trace_line.endswith(APITRACE_FAKE_CALL_IDENTIFIER)
                     execute_buffer_dump_line = False
 
                     # apitraces which end abruptly can output unnumbered or
@@ -1007,9 +1010,15 @@ class TraceStats:
                         trace_line_counter = int(split_line[0])
                         logger.debug(f'Found line count: {trace_line_counter}')
 
-                        execute_buffer_dump_line = split_line[1].startswith(EXECUTE_BUFFER_DUMP_IDENTIFIER)
+                        # older versions of apitrace used a lowercase variant, so be case insensitive about it
+                        execute_buffer_dump_line = split_line[1].upper().startswith(EXECUTE_BUFFER_DUMP_IDENTIFIER.upper())
                     except:
                         logger.debug(f'Skipped parsing of line: {trace_line}')
+                        continue
+
+                    # early skip any fake calls we're not particularly interested in parsing
+                    if fake_call and not execute_buffer_dump_line:
+                        logger.debug(f'Skipped parsing of fake call: {trace_line}')
                         continue
 
                     if (API_ENTRY_CALL_IDENTIFIER in trace_line or execute_buffer_dump_line or
@@ -1022,7 +1031,7 @@ class TraceStats:
                             existing_value = self.api_call_dictionary.get(call, 0)
                             self.api_call_dictionary[call] = existing_value + 1
                         else:
-                            # execute buffer dump, not an actual call
+                            # execute buffer dumps or other fake calls we want to parse
                             call = ''
 
                         # fast path for shader dumps
