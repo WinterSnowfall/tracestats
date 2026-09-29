@@ -55,6 +55,7 @@ API_ENTRY_CALLS = {'IDirect3DDevice7': 'D3D7',
                    'D3D11CoreCreateDevice': 'D3D11'}
 
 TRACE_API_OVERRIDES = {'ff7'        : 'D3D5',   # Creates a D3D3 device first, but queries for a D3D5 device and renders with it
+                       'TSM'        : 'D3D9',   # Ignore queries done on a D3D9Ex interface, as it's not used for rendering
                        'wargame_'   : 'D3D9Ex', # Ignore queries done on a plain D3D9 interface, as it's not used for rendering
                        'xrEngine___': 'D3D10',  # Creates a D3D11 device first, but renders using D3D10
                        'RebelGalaxy': 'D3D11'}  # Creates a D3D10 device first, but renders using D3D11
