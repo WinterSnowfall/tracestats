@@ -1,0 +1,10 @@
+<div id="filter-selection">
+    <form method="post" enctype="multipart/form-data" id="filter-selection-form">
+        <div class="filter-container">
+            {{ filter_selection_form.authorization_token }}
+            {{ filter_selection_form.api_family_filter }}
+            <button type="submit" name="filter-form" id="filter-button">Update filter</button>
+        </div>
+    </form>
+    <div id="filter-notification-area" class="notification-none"></div>
+</div>

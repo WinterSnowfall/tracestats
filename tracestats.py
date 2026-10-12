@@ -2170,4 +2170,3 @@ if __name__ == "__main__":
         tracestats.process_traces()
     else:
         tracestats.join_json()
-

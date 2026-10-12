@@ -156,6 +156,25 @@ a:hover {
     margin-top: 30px;
 }
 
+.filter-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    margin-top: 20px;
+    text-align: center;
+    user-select: none;
+}
+
+.radio-input > div {
+    display: inline-flex;
+    padding: 2px 6px;
+}
+
+.radio-input > div > label {
+    text-shadow: 0 4px 6px #1c1c1c;
+    font-size: 90%;
+}
+
 .search-body {
     margin-top: 60px;
     margin-bottom: 60px;
@@ -177,7 +196,7 @@ a:hover {
     border: 1px solid white;
     border-radius: 10px;
     padding: 2px 6px;
-    width: 550px;
+    width: 600px;
     box-shadow: 0 4px 6px #1c1c1c;
 }
 
@@ -205,7 +224,7 @@ a:hover {
 
 .api-stats-chart {
     display: flex;
-    margin-top: 10px;
+    margin-top: 30px;
     height: 250px;
     justify-content: center;
     align-items: center;
@@ -238,4 +257,3 @@ a:hover {
     text-shadow: 0 4px 6px #1c1c1c;
     user-select: none;
 }
-

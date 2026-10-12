@@ -96,4 +96,3 @@ class Stats(models.Model):
             precision = 0 if result.is_integer() else (2 if (result * 100) % 10 != 0 else 1)
             return f'{result:.{precision}f}'
         return None
-

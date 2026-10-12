@@ -5,6 +5,7 @@ import logging
 from urllib.parse import quote, unquote
 from django.shortcuts import render, redirect
 from django.template import loader
+from django.http import HttpResponse
 from django.http import JsonResponse
 from django.template.context_processors import csrf
 from django.utils.timezone import now
@@ -95,13 +96,17 @@ STATS_TYPE = {'api_calls': 1,
               'vertex_buffer_caps': 33,
               'texture_map_modes': 34}
 
+ONE_YEAR_IN_SECONDS = 31536000
+
 SEARCH_RESULTS_LIMIT = 999
 
 def tracestats(request):
+  request.session['filter_selection_visible'] = False
   request.session['titles_list_visible'] = False
   request.session['api_stats_visible'] = False
   request.session['file_upload_visible'] = False
   request.session.modified = True
+  filter_value = None
   search_form = None
   search_results = None
   context = {}
@@ -282,6 +287,10 @@ def tracestats(request):
         search_input = request.POST['search_input'].strip()
         return redirect(f'{request.path}?search={quote(search_input)}')
 
+    elif 'filter-form' in request.POST:
+      filter_form = forms.FilterSelectionForm(request.POST)
+      filter_value = request.POST['api_family_filter'].strip()
+
     else:
       logger.error('What in the bloody blazes is this?')
 
@@ -351,7 +360,11 @@ def tracestats(request):
   context['form'] = search_form
   context['api_values_decode'] = API_VALUES_DECODE
   context['search_results'] = search_results
-  return render(request, 'home.html', context)
+
+  response = render(request, 'home.html', context)
+  if filter_value is not None:
+    response.set_cookie(key='apiFamilyFilter', max_age=ONE_YEAR_IN_SECONDS, value=filter_value)
+  return response
 
 def generate_titles_list(request):
   if request.method != 'POST':
@@ -391,6 +404,7 @@ def generate_titles_list(request):
     else:
       content = ""
 
+    request.session['filter_selection_visible'] = False
     request.session['api_stats_visible'] = False
     request.session['file_upload_visible'] = False
     request.session.modified = True
@@ -427,6 +441,7 @@ def generate_stats(request):
     else:
       content = ""
 
+    request.session['filter_selection_visible'] = False
     request.session['titles_list_visible'] = False
     request.session['file_upload_visible'] = False
     request.session.modified = True
@@ -453,9 +468,39 @@ def generate_file_upload(request):
     else:
       content = ""
 
+    request.session['filter_selection_visible'] = False
     request.session['titles_list_visible'] = False
     request.session['api_stats_visible'] = False
     request.session.modified = True
 
     return JsonResponse({'content': content})
 
+def generate_filter_selection(request):
+  if request.method != 'POST':
+    return JsonResponse({'error': 'The Rabbit of Caerbannog pounces on you and you die!'}, status=403)
+  else:
+    try:
+      request.session['filter_selection_visible'] = not request.session['filter_selection_visible']
+      request.session.modified = True
+    except KeyError:
+      request.session['filter_selection_visible'] = True
+      request.session.modified = True
+
+    if request.session['filter_selection_visible']:
+      try:
+        filter_selection = request.COOKIES['apiFamilyFilter']
+      except KeyError:
+        filter_selection = 'All'
+      filter_selection_form = forms.FilterSelectionForm({'api_family_filter': (filter_selection, filter_selection)})
+      context = {'filter_selection_form': filter_selection_form}
+      context.update(csrf(request))
+      content = loader.render_to_string('filter_selection.html', context)
+    else:
+      content = ""
+
+    request.session['titles_list_visible'] = False
+    request.session['api_stats_visible'] = False
+    request.session['file_upload_visible'] = False
+    request.session.modified = True
+
+    return JsonResponse({'content': content})

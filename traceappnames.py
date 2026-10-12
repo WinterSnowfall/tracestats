@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 '''
 @author: Winter Snowfall
-@version: 2.03
-@date: 29/09/2026
+@version: 2.04
+@date: 12/10/2026
 '''
 
 import os
@@ -161,9 +161,11 @@ class TraceAppNames:
         'borderzone':                                      ('BorderZone', None, 'D3D8'),
         'Botanicula':                                      (None, None, 'D3D11'),
         'BoundByFlame':                                    ('Bound by Flame', None, 'D3D9'),
+        'BountyTrain':                                     ('Bounty Train', None, 'D3D9'),
         'braid64_d3d11_final':                             ('Braid Anniversary Edition', None, 'D3D11'),
         'Brawls':                                          ('Lego Brawls', None, 'D3D11'),
         'BridgeConstructor':                               ('Bridge Constructor', None, 'D3D11'),
+        'Brighter Shores':                                 (None, 'https://www.brightershores.com/', 'D3D11'),
         'Brothers':                                        ('Brothers: A Tale of Two Sons', None, 'D3D9'),
         'BrutalLegend':                                    ('Brutal Legend', None, 'D3D9'),
         'bs4pc':                                           ('Broken Sword 4: The Angel of Death', None, 'D3D9'),
@@ -621,8 +623,10 @@ class TraceAppNames:
         'incoming':                                        ('Incoming', None, 'D3D5'),
         'indy':                                            ('Indiana Jones and the Emperor\'s Tomb', None, 'D3D8'),
         'Indy3D':                                          ('Indiana Jones and the Infernal Machine', None, 'D3D6'),
+        'infinite_lagrange_gb':                            ('Star Hunter - Infinite Lagrange', 'https://www.infinitelagrange.com/', 'D3D11'),
         'Injustice':                                       ('Injustice: Gods Among Us', None, 'D3D9Ex'),
         'Inquisitor':                                      (None, None, 'D3D8'),
+        'Interceptor':                                     ('X-COM: Interceptor', None, 'D3D5'),
         'Iratus':                                          ('Iratus: Lord of the Dead', None, 'D3D11'),
         'iron_3d':                                         ('Parkan: Iron Strategy', None, 'D3D7'),
         'IronHarvest':                                     ('Iron Harvest', None, 'D3D11'),
@@ -863,6 +867,7 @@ class TraceAppNames:
         'Patrician4':                                      ('Patrician IV: Conquest by Trade', None, 'D3D9'),
         'patriots':                                        ('Rise of Nations', None, 'D3D8'),
         'Paws':                                            ('Paws: A Shelter 2 Game', None, 'D3D9'),
+        'Pc':                                              ('The Fifth Element', None, 'D3D5'),
         'pc_matador':                                      ('El Matador', None, 'D3D9'),
         'PCTomb5':                                         ('Tomb Raider Chronicles', None, 'D3D6'),
         'Per Aspera':                                      (None, None, 'D3D11'),
@@ -918,6 +923,7 @@ class TraceAppNames:
         'QWC':                                             ('Harry Potter: Quidditch World Cup', None, 'D3D8'),
         'r2g_launcher':                                    ('Book of Demons', None, 'D3D9'),
         'Race':                                            ('RACE - The WTCC Game', None, 'D3D9'),
+        'Raid':                                            ('Raid: Shadow Legends', None, 'D3D11'),
         'Raiden3':                                         ('Raiden III Digital Edition', None, 'D3D9'),
         'Railroad':                                        ('Railroad Pioneer', None, 'D3D8'),
         'RainbowSix':                                      ('Tom Clancy\'s Rainbow Six', None, 'D3D5'),
@@ -1387,4 +1393,3 @@ class TraceAppNames:
 
 if __name__ == "__main__":
     TraceAppNames.validate()
-

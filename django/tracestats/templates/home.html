@@ -22,63 +22,67 @@
             {% csrf_token %}
             <div class="input-field">{{ form.search_input }}</div>
             <div class="no-selection">
-                <button class="search-button" type="submit" name="search-form">Let's fly!</button>
+                <button class="search-button" type="submit" name="search-form">Take off!</button>
+                <button class="search-button" type="button" id="toggle-filter-selection">Spotting</button>
                 <button class="search-button" type="reset" id="reset-search-form" value="Reset">Reset.me</button>
-                <button class="search-button" type="button" id="toggle-titles-list">Genus</button>
-                <button class="search-button" type="button" id="toggle-stats">Stats stat!</button>
-                <button class="search-button" type="button" id="toggle-file-upload">Bird seed</button>
+                <button class="search-button" type="button" id="toggle-titles-list">Census</button>
+                <button class="search-button" type="button" id="toggle-stats">Genus</button>
+                <button class="search-button" type="button" id="toggle-file-upload">Birdseed</button>
             </div>
         </form>
+        <div class="no-margin" id="filter-selection-area"></div>
         <div class="no-margin" id="titles-list-area"></div>
         <div class="no-margin" id="stats-area"></div>
         <div class="no-margin" id="file-upload-area"></div>
-        <div class="table-margin" id="search-results">
-            <table>
-                <tr>
-                    <th class="no-selection-align-right"><b>#</b></th>
-                    <th>Application Name</th>
-                    <th>API</th>
-                    <th>🐦</th>
-                    <th>🎮</th>
-                    <th>Stat Name</th>
-                    <th>Stat Count</th>
-                    <th>% Total</th>
-                </tr>
-                {% for stat in search_results %}
-                <tr class="results-row">
-                    <td class="no-selection-align-right"><b>{{ forloop.counter }}</b></td>
-                    <td>{{ stat.trace.name }}</td>
-                    <td>{{ api_values_decode|decode_api:stat.trace.api }}</td>
-                    <td class="no-selection">
-                        <a href="{% url 'tracestats' %}?search={{ stat.trace.name|urlize }} !">🐦</a>
-                    </td>
-                    <td class="no-selection">
-                        {% if stat.trace.link is None %}
-                            <a target="_blank" href="https://www.pcgamingwiki.com/w/index.php?search={{ stat.trace.name|urlize }}&title=Special:Search">🎮</a>
-                        {% else %}
-                            <a target="_blank" href="{{ stat.trace.link }}">🎮</a>
-                        {% endif %}
-                    </td>
-                    <td>{{ stat.stat_name|safe }}</td>
-                    <td>{{ stat.stat_count }}</td>
-                    <td class="align-right">
-                        {% if stat.stat_type == 1 %}
-                            {{ stat.call_percentage }}
-                        {% elif stat.stat_type == 7 %}
-                            {{ stat.render_state_percentage }}
-                        {% elif stat.stat_type == 10 %}
-                            {{ stat.query_type_percentage }}
-                        {% elif stat.stat_type == 19 %}
-                            {{ stat.light_type_percentage }}
-                        {% elif stat.stat_type == 28 %}
-                            {{ stat.eb_opcode_percentage }}
-                        {% else %}
-                            N/A
-                        {% endif %}
-                    </td>
-                </tr>
-                {% endfor %}
-            </table>
+        <div class="{% if search_results %}table-margin{% else %}no-margin{% endif %}" id="search-results">
+            {% if search_results %}
+                <table>
+                    <tr>
+                        <th class="no-selection-align-right"><b>#</b></th>
+                        <th>Application Name</th>
+                        <th>API</th>
+                        <th>🐦</th>
+                        <th>🎮</th>
+                        <th>Stat Name</th>
+                        <th>Stat Count</th>
+                        <th>% Total</th>
+                    </tr>
+                    {% for stat in search_results %}
+                    <tr class="results-row">
+                        <td class="no-selection-align-right"><b>{{ forloop.counter }}</b></td>
+                        <td>{{ stat.trace.name }}</td>
+                        <td>{{ api_values_decode|decode_api:stat.trace.api }}</td>
+                        <td class="no-selection">
+                            <a href="{% url 'tracestats' %}?search={{ stat.trace.name|urlize }} !">🐦</a>
+                        </td>
+                        <td class="no-selection">
+                            {% if stat.trace.link is None %}
+                                <a target="_blank" href="https://www.pcgamingwiki.com/w/index.php?search={{ stat.trace.name|urlize }}&title=Special:Search">🎮</a>
+                            {% else %}
+                                <a target="_blank" href="{{ stat.trace.link }}">🎮</a>
+                            {% endif %}
+                        </td>
+                        <td>{{ stat.stat_name|safe }}</td>
+                        <td>{{ stat.stat_count }}</td>
+                        <td class="align-right">
+                            {% if stat.stat_type == 1 %}
+                                {{ stat.call_percentage }}
+                            {% elif stat.stat_type == 7 %}
+                                {{ stat.render_state_percentage }}
+                            {% elif stat.stat_type == 10 %}
+                                {{ stat.query_type_percentage }}
+                            {% elif stat.stat_type == 19 %}
+                                {{ stat.light_type_percentage }}
+                            {% elif stat.stat_type == 28 %}
+                                {{ stat.eb_opcode_percentage }}
+                            {% else %}
+                                N/A
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </table>
+            {% endif %}
         </div>
         <div id="notification-area" class="{{ notification_type }}">
             {{ notification_message }}
