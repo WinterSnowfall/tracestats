@@ -24,7 +24,8 @@ class Trace(models.Model):
     updated_by          = models.ForeignKey(Tokens,
                                             on_delete=models.PROTECT)
     updated_last        = models.DateTimeField(default=now)
-    api                 = models.IntegerField()
+    api                 = models.IntegerField(db_index=True)
+    api_family          = models.IntegerField(db_index=True)
     # per-trace static fields used in precentage calculations
     api_calls_total     = models.IntegerField(null=True)
     render_states_total = models.IntegerField(null=True)

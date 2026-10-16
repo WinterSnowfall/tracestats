@@ -126,13 +126,17 @@ $(document).on('click', '#toggle-stats', function() {
                     '#33CC33', // Dark Green
                     '#FF3D00', // Dark Orange
                     '#36B4E1', // Light Blue
+                    '#BFBFBF', // Light Gray
+                    '#808080', // Medium Gray
+                    '#404040', // Dark Gray
                 ];
 
                 const ctx = $('#apiStatsPieChart')[0].getContext('2d');
                 const myPieChart = new Chart(ctx, {
                     type: 'pie',
                     data: {
-                        labels: ['D3D3', 'D3D5', 'D3D6', 'D3D7', 'D3D8', 'D3D9', 'D3D9Ex', 'D3D10', 'D3D11'],
+                        labels: ['D3D3', 'D3D5', 'D3D6', 'D3D7', 'D3D8', 'D3D9', 'D3D9Ex',
+                                 'D3D10', 'D3D11', 'Glide1x', 'Glide2x', 'Glide3x'],
                         datasets: [{
                             label: 'apitraces',
                             data: [response.api_stats['d3d3'],
@@ -143,7 +147,10 @@ $(document).on('click', '#toggle-stats', function() {
                                    response.api_stats['d3d9'],
                                    response.api_stats['d3d9ex'],
                                    response.api_stats['d3d10'],
-                                   response.api_stats['d3d11']],
+                                   response.api_stats['d3d11'],
+                                   response.api_stats['glide1x'],
+                                   response.api_stats['glide2x'],
+                                   response.api_stats['glide3x']],
                             backgroundColor: backgroundColors
                         }]
                     },

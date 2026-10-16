@@ -1075,6 +1075,7 @@ class TraceAppNames:
         'sir':                                             ('Sir, You Are Being Hunted', None, 'D3D11'),
         'Skate3':                                          ('Tony Hawk\'s Pro Skater 3', None, 'D3D8'),
         'SkullHorde':                                      ('Skull Horde', '', 'D3D11'), # No PCGW page or homepage whatsoever
+        'Sky Force Anniversary':                           (None, None, 'D3D9'),
         'SkyrimSE':                                        ('The Elder Scrolls V: Skyrim Special Edition', None, 'D3D11'),
         'SL2':                                             ('Still Life 2', None, 'D3D9'),
         'SlaveZero':                                       ('Slave Zero', None, 'D3D6'),
