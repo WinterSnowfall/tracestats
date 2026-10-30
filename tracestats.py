@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 '''
 @author: Winter Snowfall
-@version: 2.03
-@date: 29/09/2026
+@version: 2.10
+@date: 30/10/2026
 '''
 
 import os
@@ -45,10 +45,11 @@ SHADER_DUMPS_CALL_CHUNK_SIZE = 10000
 APITRACE_FAKE_CALL_IDENTIFIER = ' // fake'
 
 API_ENTRY_CALL_IDENTIFIER = '::'
+API_ENTRY_GLIDE_IDENTIFIER = 'Glide'
 API_ENTRY_VALUE_DELIMITER = ','
 SHADER_DUMP_SKIP_IDENTIFIER_D3D8_9 = 'pFunction = NULL'
 SHADER_DUMP_SKIP_IDENTIFIER_D3D10_11 = 'pShaderBytecode = NULL'
-SHADER_DUMP_SKIP_API_LEVELS = ('D3D3', 'D3D5', 'D3D6', 'D3D7')
+SHADER_DUMP_SKIP_API_LEVELS = ('D3D3', 'D3D5', 'D3D6', 'D3D7', 'Glide1X', 'Glide2X', 'Glide3X')
 
 API_ENTRY_CALLS = {'IDirect3DDevice7': 'D3D7',
                    'IDirect3DDevice3': 'D3D6',
@@ -64,7 +65,12 @@ API_ENTRY_CALLS = {'IDirect3DDevice7': 'D3D7',
                    'D3D10CoreCreateDevice': 'D3D10',
                    'D3D11CreateDeviceAndSwapChain': 'D3D11',
                    'D3D11CreateDevice': 'D3D11',
-                   'D3D11CoreCreateDevice': 'D3D11'}
+                   'D3D11CoreCreateDevice': 'D3D11',
+                   'Glide1X': 'Glide1X',
+                   'Glide2X': 'Glide2X',
+                   'Glide3X': 'Glide3X'}
+
+API_FAMILY_GLIDE = ('Glide1X', 'Glide2X', 'Glide3X')
 
 API_BASE_CALLS = {**API_ENTRY_CALLS, 'DirectDrawCreateEx': 'DDraw7',
                                      'DirectDrawEnumerateExA': 'DDraw7',
@@ -1017,12 +1023,15 @@ class TraceStats:
                         logger.debug(f'Skipped parsing of line: {trace_line}')
                         continue
 
+                    glide_entry_call = split_line[1].startswith(API_ENTRY_GLIDE_IDENTIFIER)
+
                     # early skip any fake calls we're not particularly interested in parsing
-                    if fake_call and not execute_buffer_dump_line:
+                    if fake_call and not execute_buffer_dump_line and not glide_entry_call:
                         logger.debug(f'Skipped parsing of fake call: {trace_line}')
                         continue
 
                     if (API_ENTRY_CALL_IDENTIFIER in trace_line or execute_buffer_dump_line or
+                        self.api in API_FAMILY_GLIDE or # Glide does not split calls with an identifier
                         any(api_base_call in trace_line for api_base_call in API_BASE_CALLS.keys())):
                         # parse API calls
                         if not execute_buffer_dump_line:
@@ -1052,6 +1061,9 @@ class TraceStats:
 
                                     if SHADER_DUMP_SKIP_IDENTIFIER_D3D10_11 not in trace_line:
                                         self.shader_dump_call_array.append(str(trace_line_counter))
+
+                        elif self.api in API_FAMILY_GLIDE:
+                            pass
 
                         elif self.api == 'D3D7' or self.api == 'D3D6' or self.api == 'D3D5' or self.api == 'D3D3':
                             if COOPERATIVE_LEVEL_FLAGS_CALL in call:

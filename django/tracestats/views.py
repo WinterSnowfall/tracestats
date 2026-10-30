@@ -29,9 +29,9 @@ API_VALUES_ENCODE = {'D3D3'    : 1,
                      'D3D9Ex'  : 7,
                      'D3D10'   : 8,
                      'D3D11'   : 9,
-                     'Glide1x' : 10,
-                     'Glide2x' : 11,
-                     'Glide3x' : 12}
+                     'Glide1X' : 10,
+                     'Glide2X' : 11,
+                     'Glide3X' : 12}
 
 API_VALUES_DECODE = {1:  'D3D3',
                      2:  'D3D5',
@@ -42,9 +42,11 @@ API_VALUES_DECODE = {1:  'D3D3',
                      7:  'D3D9Ex',
                      8:  'D3D10',
                      9:  'D3D11',
-                     10: 'Glide1x',
-                     11: 'Glide2x',
-                     12: 'Glide3x'}
+                     10: 'Glide1X',
+                     11: 'Glide2X',
+                     12: 'Glide3X'}
+
+API_FAMILY_GLIDE = ('Glide1X', 'Glide2X', 'Glide3X')
 
 API_ENTRY_CALL_IDENTIFIER = '::'
 
@@ -62,7 +64,10 @@ API_ENTRY_CALLS = {'IDirect3DDevice7': 'D3D7',
                    'D3D10CoreCreateDevice': 'D3D10',
                    'D3D11CreateDeviceAndSwapChain': 'D3D11',
                    'D3D11CreateDevice': 'D3D11',
-                   'D3D11CoreCreateDevice': 'D3D11'}
+                   'D3D11CoreCreateDevice': 'D3D11',
+                   'Glide1X': 'Glide1X',
+                   'Glide2X': 'Glide2X',
+                   'Glide3X': 'Glide3X'}
 
 TRACE_API_OVERRIDES = {'ff7'        : 'D3D5',   # Creates a D3D3 device first, but queries for a D3D5 device and renders with it
                        'TSM'        : 'D3D9',   # Ignore queries done on a D3D9Ex interface, as it's not used for rendering
@@ -264,6 +269,10 @@ def tracestats(request):
                   entry_stats_values = entry.get(stat_type, {})
                   stats = []
                   for key, value in entry_stats_values.items():
+                    # Skip saving the Glide API identifier entry in the database
+                    if entry_api >= 10 and stat_type == 'api_calls' and key in API_FAMILY_GLIDE:
+                      continue
+
                     stats.append(models.Stats(trace=trace,
                                               stat_type=STATS_TYPE[stat_type],
                                               stat_name=key,

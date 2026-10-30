@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 '''
 @author: Winter Snowfall
-@version: 2.04
-@date: 12/10/2026
+@version: 2.10
+@date: 30/10/2026
 '''
 
 import os
@@ -526,6 +526,7 @@ class TraceAppNames:
         'GhostRecon':                                      ('Tom Clancy\'s Ghost Recon', None, 'D3D8'),
         'Giants':                                          ('Giants: Citizen Kabuto', None, 'D3D7'),
         'Giants_':                                         ('Giants: Citizen Kabuto', None, 'D3D8'),
+        'GK1':                                             ('Gabriel Knight: Sins of the Fathers - 20th Anniversary Edition', None, 'D3D9'),
         'GK3':                                             ('Gabriel Knight 3', None, 'D3D6'),
         'globalops':                                       ('Global Operations', None, 'D3D8'),
         'go_start':                                        ('Expendable', None, 'D3D6'),
@@ -581,6 +582,7 @@ class TraceAppNames:
         'HellbladeGame-Win64-Shipping':                    ('Hellblade: Senua\'s Sacrifice', None, 'D3D11'),
         'Helldorado':                                      (None, None, 'D3D9'),
         'Hellish Quart':                                   (None, None, 'D3D11'), # Still in beta, should recapture later
+        'HeroesOfTheStorm_x64':                            ('Heroes of the Storm', None, 'D3D11'),
         'hg2':                                             ('Hotel Giant 2', None, 'D3D9'),
         'Hgma':                                            ('Haegemonia: The Solon Heritage', None, 'D3D8'),
         'hitman':                                          ('Hitman: Codename 47', None, 'D3D7'),
@@ -858,6 +860,7 @@ class TraceAppNames:
         'Oxenfree':                                        (None, None, 'D3D9'),
         'Painkiller':                                      (None, None, 'D3D9'),
         'Palworld-Win64-Shipping':                         ('Palworld', None, 'D3D11'),
+        'pandy':                                           ('Pandemonium 2', None, 'Glide2X'),
         'PANZERS':                                         ('Codename: Panzers - Phase One', None, 'D3D9'),
         'PANZERS_Phase_2':                                 ('Codename: Panzers - Phase Two', None, 'D3D9'),
         'Pariah':                                          (None, None, 'D3D8'),
@@ -1298,6 +1301,7 @@ class TraceAppNames:
         'WallaceGromit101':                                ('Wallace & Gromit\'s Grand Adventures', None, 'D3D9'),
         'war3':                                            ('Warcraft III: Reign of Chaos', None, 'D3D8'),
         'WarChess':                                        ('War Chess', None, 'D3D8'),
+        'Warcraft III':                                    ('Warcraft III: Reforged', None, 'D3D11'),
         'wargame':                                         ('Wargame: European Escalation', None, 'D3D11'),
         'wargame_':                                        ('Wargame: European Escalation', None, 'D3D9Ex'), # Uses 9Ex for rendering
         'wargods':                                         ('War Gods', None, 'D3D3'),
