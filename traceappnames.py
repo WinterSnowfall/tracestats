@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 '''
 @author: Winter Snowfall
-@version: 2.10
-@date: 30/10/2026
+@version: 2.11
+@date: 31/10/2026
 '''
 
 import os
@@ -97,6 +97,7 @@ class TraceAppNames:
         'AWE':                                             ('Hard to Be a God', None, 'D3D9'),
         'BackToTheFuture101':                              ('Back to the Future: The Game', None, 'D3D9'),
         'Barbarossa to Berlin':                            ('Combat Mission II: Barbarossa to Berlin', None, 'D3D6'),
+        'Baron':                                           ('Red Baron 3D', None, 'Glide2X'),
         'BatmanAC':                                        ('Batman: Arkham City', None, 'D3D9'),
         'BatmanAC_':                                       ('Batman: Arkham City', None, 'D3D11'),
         'BatmanAK':                                        ('Batman: Arkham Knight', None, 'D3D11'),
@@ -623,6 +624,7 @@ class TraceAppNames:
         'ImperialGlory':                                   ('Imperial Glory', None, 'D3D9'),
         'Imperium Romanum':                                (None, None, 'D3D9'),
         'incoming':                                        ('Incoming', None, 'D3D5'),
+        'Incubation':                                      ('Incubation: Time Is Running Out', None, 'Glide2X'),
         'indy':                                            ('Indiana Jones and the Emperor\'s Tomb', None, 'D3D8'),
         'Indy3D':                                          ('Indiana Jones and the Infernal Machine', None, 'D3D6'),
         'infinite_lagrange_gb':                            ('Star Hunter - Infinite Lagrange', 'https://www.infinitelagrange.com/', 'D3D11'),
@@ -811,6 +813,7 @@ class TraceAppNames:
         'nfs4':                                            ('Need for Speed: High Stakes', None, 'D3D8'), # Modern Patch
         'nfs4_':                                           ('Need for Speed: High Stakes', None, 'D3D7'), # Modern Patch
         'nfs4__':                                          ('Need for Speed: High Stakes', None, 'D3D6'), # Modern Patch
+        'nfs4___':                                         ('Need for Speed: High Stakes', None, 'Glide3X'), # Modern Patch
         'NFSHP2':                                          ('Need for Speed: Hot Pursuit 2', None, 'D3D8'),
         'Night in the Woods':                              (None, None, 'D3D11'),
         'Nikopol':                                         ('Nikopol: Secrets of the Immortals', None, 'D3D9'),
@@ -843,6 +846,7 @@ class TraceAppNames:
         'OfOrcsAndMen':                                    ('Of Orcs and Men', None, 'D3D9'),
         'OLGame':                                          ('Outlast', None, 'D3D9'),
         'olwin':                                           ('Outlaws', None, 'D3D3'),
+        'olwin_':                                          ('Outlaws', None, 'Glide1X'),
         'Omerta':                                          ('Omerta - City of Gangsters', None, 'D3D9'),
         'orb':                                             ('O.R.B: Off-World Resource Base', None, 'D3D6'),
         'oriDE':                                           ('Ori and the Blind Forest: Definitive Edition', None, 'D3D11'),
@@ -861,6 +865,7 @@ class TraceAppNames:
         'Painkiller':                                      (None, None, 'D3D9'),
         'Palworld-Win64-Shipping':                         ('Palworld', None, 'D3D11'),
         'pandy':                                           ('Pandemonium 2', None, 'Glide2X'),
+        'PANDY3':                                          ('Pandemonium', None, 'Glide1X'),
         'PANZERS':                                         ('Codename: Panzers - Phase One', None, 'D3D9'),
         'PANZERS_Phase_2':                                 ('Codename: Panzers - Phase Two', None, 'D3D9'),
         'Pariah':                                          (None, None, 'D3D8'),
@@ -888,6 +893,7 @@ class TraceAppNames:
         'Player':                                          ('Ballance', None, 'D3D8'),
         'podd3d5x':                                        ('POD: Planet of Death', None, 'D3D5'),
         'PODD3DX':                                         ('POD: Planet of Death', None, 'D3D3'),
+        'PODX3Dfx':                                        ('POD: Planet of Death', None, 'Glide2X'),
         'pol':                                             ('Final Fantasy XI', None, 'D3D8'),
         'PoliticalAnimals':                                ('Political Animals', None, 'D3D11'),
         'polmis':                                          ('Cops 2170: The Power of Law', None, 'D3D7'),
@@ -1253,6 +1259,7 @@ class TraceAppNames:
         'Troy':                                            ('A Total War Saga: Troy', None, 'D3D11'),
         'tru':                                             ('Tomb Raider: Underworld', None, 'D3D9'),
         'Truberbrook':                                     ('Trüberbrook', None, 'D3D11'),
+        'TS_3DFX':                                         ('TrickStyle', None, 'Glide2X'),
         'TS_D3D':                                          ('TrickStyle', None, 'D3D6'),
         'TSM':                                             ('The Sims Medieval', None, 'D3D9'),
         'Tunguska':                                        ('Secret Files: Tunguska', None, 'D3D9'),
@@ -1269,9 +1276,13 @@ class TraceAppNames:
         'Underspace':                                      (None, None, 'D3D11'),
         'Undungeon':                                       (None, None, 'D3D11'),
         'Undying':                                         ('Clive Barker\'s Undying', None, 'D3D7'),
+        'Undying_':                                        ('Clive Barker\'s Undying', None, 'Glide2X'),
         'Unreal':                                          (None, None, 'D3D7'),
+        'Unreal_':                                         (None, None, 'Glide2X'),
         'Unreal2':                                         ('Unreal II: The Awakening', None, 'D3D8'),
         'UnrealTournament':                                ('Unreal Tournament', None, 'D3D7'),
+        'uprising':                                        ('Uprising: Join or Die', None, 'Glide2X'),
+        'Uprising 2':                                      ('Uprising 2: Lead and Destroy', None, 'Glide2X'),
         'UrbanTrialFreestyle':                             ('Urban Trial Freestyle', None, 'D3D9'),
         'UruExplorer':                                     ('Uru: Ages Beyond Myst', None, 'D3D8'),
         'UT2003':                                          ('Unreal Tournament 2003', None, 'D3D8'),

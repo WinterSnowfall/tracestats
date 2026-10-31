@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 '''
 @author: Winter Snowfall
-@version: 2.10
-@date: 30/10/2026
+@version: 2.11
+@date: 31/10/2026
 '''
 
 import os
@@ -152,6 +152,19 @@ D3DVOP_TRANSFORM = 0x00000001
 D3DVOP_CLIP      = 0x00000004
 D3DVOP_EXTENTS   = 0x00000008
 D3DVOP_LIGHT     = 0x00000400
+
+######################### Glide1X, Glide2X, Glide3X ############################
+# texture formats
+GLIDE_TEXTURE_DOWNLOAD_CALL = 'grTexDownloadMipMap'
+GLIDE_TEXTURE_ALLOCATE_CALL = 'guTexAllocateMemory'
+GLIDE_TEXTURE_FORMAT_IDENTIFIER = 'format = '
+GLIDE_TEXTURE_FORMAT_IDENTIFIER_LENGTH = len(GLIDE_TEXTURE_FORMAT_IDENTIFIER)
+GLIDE_TEXTURE_FORMAT_IDENTIFIER2 = 'fmt = '
+GLIDE_TEXTURE_FORMAT_IDENTIFIER2_LENGTH = len(GLIDE_TEXTURE_FORMAT_IDENTIFIER2)
+# TMU
+GLIDE_TMU_IDENTIFIER = 'tmu = '
+GLIDE_TMU_IDENTIFIER_LENGTH = len(GLIDE_TMU_IDENTIFIER)
+######################### Glide1X, Glide2X, Glide3X ############################
 
 ####################### DDRAW, D3D3, D3D5, D3D6, D3D7 ##########################
 # device type
@@ -552,6 +565,7 @@ class TraceStats:
         else:
             self.apis_to_skip = None
 
+        # D3D or common dictionaries
         self.force_api_level = force_api_level
         self.shader_dump = shader_dump
         self.compressed_trace = False
@@ -596,6 +610,8 @@ class TraceStats:
         self.surface_cap_dictionary = {}
         self.vertex_buffer_cap_dictionary = {}
         self.texture_map_mode_dictionary = {}
+        # Glide specific dictionaries
+        self.tmu_dictionary = {}
 
         self.process_queue = queue.Queue(maxsize=TRACE_PARSE_QUEUE_SIZE)
         self.api_skip = threading.Event()
@@ -775,6 +791,7 @@ class TraceStats:
                         return_dictionary = {}
                         return_dictionary['binary_name'] = self.binary_name
                         return_dictionary['name'] = self.application_name
+                        # D3D or common dictionaries
                         if self.application_link is not None:
                             return_dictionary['link'] = self.application_link
                         if len(self.api_call_dictionary) > 0:
@@ -845,6 +862,9 @@ class TraceStats:
                             return_dictionary['vertex_buffer_caps'] = self.vertex_buffer_cap_dictionary
                         if len(self.texture_map_mode_dictionary) > 0:
                             return_dictionary['texture_map_modes'] = self.texture_map_mode_dictionary
+                        # Glide specific dictionaries
+                        if len(self.tmu_dictionary) > 0:
+                            return_dictionary['tmu'] = self.tmu_dictionary
 
                         self.json_output[JSON_BASE_KEY].append(return_dictionary)
 
@@ -884,6 +904,8 @@ class TraceStats:
                         logger.error(f'Unable to clean up trace: {trace_path_final}')
 
                 # reset state between processed traces
+
+                # D3D or common dictionaries
                 self.compressed_trace = False
                 self.binary_name_raw = None
                 self.binary_name = None
@@ -924,7 +946,8 @@ class TraceStats:
                 self.surface_cap_dictionary = {}
                 self.vertex_buffer_cap_dictionary = {}
                 self.texture_map_mode_dictionary = {}
-
+                # Glide specific dictionaries
+                self.tmu_dictionary = {}
 
             else:
                 logger.warning(f'File not found, skipping: {trace_path}')
@@ -1063,7 +1086,39 @@ class TraceStats:
                                         self.shader_dump_call_array.append(str(trace_line_counter))
 
                         elif self.api in API_FAMILY_GLIDE:
-                            pass
+                            if GLIDE_TEXTURE_DOWNLOAD_CALL in call:
+                                logger.debug(f'Found texture formats on line: {trace_line}')
+
+                                texture_format_start = trace_line.find(GLIDE_TEXTURE_FORMAT_IDENTIFIER) + GLIDE_TEXTURE_FORMAT_IDENTIFIER_LENGTH
+                                texture_format = trace_line[texture_format_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
+                                                                                                 texture_format_start)].strip()
+
+                                existing_value = self.format_dictionary.get(texture_format, 0)
+                                self.format_dictionary[texture_format] = existing_value + 1
+
+                                tmu_start = trace_line.find(GLIDE_TMU_IDENTIFIER) + GLIDE_TMU_IDENTIFIER_LENGTH
+                                tmu = trace_line[tmu_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
+                                                                           tmu_start)].strip()
+
+                                existing_value = self.tmu_dictionary.get(tmu, 0)
+                                self.tmu_dictionary[tmu] = existing_value + 1
+
+                            elif GLIDE_TEXTURE_ALLOCATE_CALL in call:
+                                logger.debug(f'Found texture formats on line: {trace_line}')
+
+                                texture_format_start = trace_line.find(GLIDE_TEXTURE_FORMAT_IDENTIFIER2) + GLIDE_TEXTURE_FORMAT_IDENTIFIER2_LENGTH
+                                texture_format = trace_line[texture_format_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
+                                                                                                 texture_format_start)].strip()
+
+                                existing_value = self.format_dictionary.get(texture_format, 0)
+                                self.format_dictionary[texture_format] = existing_value + 1
+
+                                tmu_start = trace_line.find(GLIDE_TMU_IDENTIFIER) + GLIDE_TMU_IDENTIFIER_LENGTH
+                                tmu = trace_line[tmu_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
+                                                                           tmu_start)].strip()
+
+                                existing_value = self.tmu_dictionary.get(tmu, 0)
+                                self.tmu_dictionary[tmu] = existing_value + 1
 
                         elif self.api == 'D3D7' or self.api == 'D3D6' or self.api == 'D3D5' or self.api == 'D3D3':
                             if COOPERATIVE_LEVEL_FLAGS_CALL in call:

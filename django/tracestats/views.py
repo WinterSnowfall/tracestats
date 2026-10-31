@@ -75,7 +75,8 @@ TRACE_API_OVERRIDES = {'ff7'        : 'D3D5',   # Creates a D3D3 device first, b
                        'xrEngine___': 'D3D10',  # Creates a D3D11 device first, but renders using D3D10
                        'RebelGalaxy': 'D3D11'}  # Creates a D3D10 device first, but renders using D3D11
 
-STATS_TYPE = {'api_calls': 1,
+STATS_TYPE = {# D3D or common stats
+              'api_calls': 1,
               'vendor_hack_checks': 2,
               'device_types': 3,
               'behavior_flags': 4,
@@ -108,7 +109,9 @@ STATS_TYPE = {'api_calls': 1,
               'draw_flags': 31,
               'surface_caps': 32,
               'vertex_buffer_caps': 33,
-              'texture_map_modes': 34}
+              'texture_map_modes': 34,
+              # Glide specific stats
+              'tmu': 101}
 
 ONE_YEAR_IN_SECONDS = 31536000
 
