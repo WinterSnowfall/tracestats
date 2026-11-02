@@ -16,6 +16,8 @@ logger = logging.getLogger('tracestats')
 
 #constants
 JSON_BASE_KEY = 'tracestats'
+SEARCH_RESULTS_LIMIT = 999
+ONE_YEAR_IN_SECONDS = 31536000
 
 API_FAMILY_ENCODE = {'Direct3D' : 1,
                      'Glide'    : 2}
@@ -46,8 +48,55 @@ API_VALUES_DECODE = {1:  'D3D3',
                      11: 'Glide2X',
                      12: 'Glide3X'}
 
-API_FAMILY_GLIDE = ('Glide1X', 'Glide2X', 'Glide3X')
+STATS_TYPE_ENCODE = {# D3D or common stats
+                     'api_calls': 1,
+                     'vendor_hack_checks': 2,
+                     'device_types': 3,
+                     'behavior_flags': 4,
+                     'present_parameters': 5,
+                     'present_parameter_flags': 6,
+                     'render_states': 7,
+                     'texture_stage_types': 8,
+                     'texture_stage_states': 9,
+                     'query_types': 10,
+                     'lock_flags': 11,
+                     'shader_versions': 12,
+                     'usage': 13,
+                     'pixel_formats': 14,
+                     'formats': 15,
+                     'vendor_hacks': 16,
+                     'pools': 17,
+                     'process_vertices_flags': 18,
+                     'light_types': 19,
+                     'device_flags': 20,
+                     'swapchain_parameters': 21,
+                     'swapchain_buffer_usage': 22,
+                     'swapchain_flags': 23,
+                     'feature_levels': 24,
+                     'rastizer_states': 25,
+                     'blend_states': 26,
+                     'bind_flags': 27,
+                     'execute_buffer_opcodes': 28,
+                     'cooperative_level_flags': 29,
+                     'flip_flags': 30,
+                     'draw_flags': 31,
+                     'surface_caps': 32,
+                     'vertex_buffer_caps': 33,
+                     'texture_map_modes': 34,
+                     # Glide specific stats
+                     'tmus': 101,
+                     'depth_buffer_modes': 102,
+                     'lfb_write_modes': 103,
+                     'hints': 104,
+                     'vertex_layouts': 105}
 
+TRACE_API_OVERRIDES = {'ff7'        : 'D3D5',   # Creates a D3D3 device first, but queries for a D3D5 device and renders with it
+                       'TSM'        : 'D3D9',   # Ignore queries done on a D3D9Ex interface, as it's not used for rendering
+                       'wargame_'   : 'D3D9Ex', # Ignore queries done on a plain D3D9 interface, as it's not used for rendering
+                       'xrEngine___': 'D3D10',  # Creates a D3D11 device first, but renders using D3D10
+                       'RebelGalaxy': 'D3D11'}  # Creates a D3D10 device first, but renders using D3D11
+
+# parsing constants
 API_ENTRY_CALL_IDENTIFIER = '::'
 
 API_ENTRY_CALLS = {'IDirect3DDevice7': 'D3D7',
@@ -69,53 +118,7 @@ API_ENTRY_CALLS = {'IDirect3DDevice7': 'D3D7',
                    'Glide2X': 'Glide2X',
                    'Glide3X': 'Glide3X'}
 
-TRACE_API_OVERRIDES = {'ff7'        : 'D3D5',   # Creates a D3D3 device first, but queries for a D3D5 device and renders with it
-                       'TSM'        : 'D3D9',   # Ignore queries done on a D3D9Ex interface, as it's not used for rendering
-                       'wargame_'   : 'D3D9Ex', # Ignore queries done on a plain D3D9 interface, as it's not used for rendering
-                       'xrEngine___': 'D3D10',  # Creates a D3D11 device first, but renders using D3D10
-                       'RebelGalaxy': 'D3D11'}  # Creates a D3D10 device first, but renders using D3D11
-
-STATS_TYPE = {# D3D or common stats
-              'api_calls': 1,
-              'vendor_hack_checks': 2,
-              'device_types': 3,
-              'behavior_flags': 4,
-              'present_parameters': 5,
-              'present_parameter_flags': 6,
-              'render_states': 7,
-              'texture_stage_types': 8,
-              'texture_stage_states': 9,
-              'query_types': 10,
-              'lock_flags': 11,
-              'shader_versions': 12,
-              'usage': 13,
-              'pixel_formats': 14,
-              'formats': 15,
-              'vendor_hacks': 16,
-              'pools': 17,
-              'process_vertices_flags': 18,
-              'light_types': 19,
-              'device_flags': 20,
-              'swapchain_parameters': 21,
-              'swapchain_buffer_usage': 22,
-              'swapchain_flags': 23,
-              'feature_levels': 24,
-              'rastizer_states': 25,
-              'blend_states': 26,
-              'bind_flags': 27,
-              'execute_buffer_opcodes': 28,
-              'cooperative_level_flags': 29,
-              'flip_flags': 30,
-              'draw_flags': 31,
-              'surface_caps': 32,
-              'vertex_buffer_caps': 33,
-              'texture_map_modes': 34,
-              # Glide specific stats
-              'tmu': 101}
-
-ONE_YEAR_IN_SECONDS = 31536000
-
-SEARCH_RESULTS_LIMIT = 999
+API_FAMILY_GLIDE = ('Glide1X', 'Glide2X', 'Glide3X')
 
 def tracestats(request):
   request.session['filter_selection_visible'] = False
@@ -268,7 +271,7 @@ def tracestats(request):
                   trace.query_types_total = entry_query_types_total
                   trace.save()
 
-                for stat_type in STATS_TYPE.keys():
+                for stat_type in STATS_TYPE_ENCODE.keys():
                   entry_stats_values = entry.get(stat_type, {})
                   stats = []
                   for key, value in entry_stats_values.items():
@@ -277,7 +280,7 @@ def tracestats(request):
                       continue
 
                     stats.append(models.Stats(trace=trace,
-                                              stat_type=STATS_TYPE[stat_type],
+                                              stat_type=STATS_TYPE_ENCODE[stat_type],
                                               stat_name=key,
                                               stat_count=value))
                   if len(stats) > 0:

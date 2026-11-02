@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 '''
 @author: Winter Snowfall
-@version: 2.11
-@date: 31/10/2026
+@version: 2.12
+@date: 02/11/2026
 '''
 
 import os
@@ -178,6 +178,7 @@ class TraceAppNames:
         'c4':                                              ('Comanche 4', None, 'D3D8'),
         'Candle':                                          (None, None, 'D3D9'),
         'CARMA2_HW':                                       ('Carmageddon II: Carpocalypse Now', None, 'D3D5'),
+        'CARMA2_HW_':                                      ('Carmageddon II: Carpocalypse Now', None, 'Glide2X'),
         'Carmageddon_Max_Damage':                          ('Carmageddon: Max Damage', None, 'D3D11'),
         'cars':                                            ('Smash Up Derby', None, 'D3D8'),
         'Castlestrike':                                    ('Castle Strike', None, 'D3D8'),
@@ -796,6 +797,7 @@ class TraceAppNames:
         'n2_arc':                                          ('N.I.C.E. 2', None, 'D3D5'),
         'Napoleon':                                        ('Napoleon: Total War', None, 'D3D9'),
         'NC':                                              ('Nightmare Creatures', None, 'D3D5'),
+        'NC_V15':                                          ('Nightmare Creatures', None, 'Glide2X'),
         'Near-Mage':                                       (None, None, 'D3D11'),
         'NecroVisioN':                                     (None, None, 'D3D9'),
         'NecroVisioN_':                                    (None, None, 'D3D10'),
@@ -982,11 +984,13 @@ class TraceAppNames:
         'rhc':                                             ('15 Days', None, 'D3D9'),
         'RichardBurnsRally_SSE':                           ('Richard Burns Rally', None, 'D3D9'),
         'RIDERS':                                          ('BugRiders: The Race of Kings', None, 'D3D5'),
+        'RIDERS_':                                         ('BugRiders: The Race of Kings', None, 'Glide2X'),
         'Rings':                                           ('The Lord of the Rings: War of the Ring', None, 'D3D9'),
         'Risen':                                           (None, None, 'D3D9'),
         'Risen_':                                          ('Risen 2: Dark Waters', None, 'D3D9'),
         'Risen3':                                          ('Risen 3: Titan Lords', None, 'D3D9'),
         'RiskysRevenge':                                   ('Shantae: Risky\'s Revenge - Director\'s Cut', None, 'D3D9Ex'),
+        'rlr_3dfx':                                        ('Redline Racer', None, 'Glide2X'),
         'rlr_d3d':                                         ('Redline Racer', None, 'D3D5'),
         'Rogue Squadron':                                  ('Star Wars: Rogue Squadron 3D', None, 'D3D6'),
         'RogueTrooper':                                    ('Rogue Trooper', None, 'D3D9'),

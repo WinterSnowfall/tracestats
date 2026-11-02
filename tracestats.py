@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 '''
 @author: Winter Snowfall
-@version: 2.11
-@date: 31/10/2026
+@version: 2.12
+@date: 02/11/2026
 '''
 
 import os
@@ -41,10 +41,103 @@ JSON_EXPORT_DEFAULT_FILE_NAME = 'tracestats.json'
 SHADER_DUMPS_FOLDER_NAME = 'dumps'
 SHADER_DUMPS_CALL_CHUNK_SIZE = 10000
 
+# D3D or common stats
+STATS_API_CALLS = 1
+STATS_VENDOR_HACK_CHECKS = 2
+STATS_DEVICE_TYPES = 3
+STATS_BEHAVIOR_FLAGS = 4
+STATS_PRESENT_PARAMETERS = 5
+STATS_PRESENT_PARAMETER_FLAGS = 6
+STATS_RENDER_STATES = 7
+STATS_TEXTURE_STAGE_TYPES = 8
+STATS_TEXTURE_STAGE_STATES = 9
+STATS_QUERY_TYPES = 10
+STATS_LOCK_FLAGS = 11
+STATS_SHADER_VERSIONS = 12
+STATS_USAGE = 13
+STATS_PIXEL_FORMATS = 14
+STATS_FORMATS = 15
+STATS_VENDOR_HACKS = 16
+STATS_POOLS = 17
+STATS_PROCESS_VERTICES_FLAGS = 18
+STATS_LIGHT_TYPES = 19
+STATS_DEVICE_FLAGS = 20
+STATS_SWAPCHAIN_PARAMETERS = 21
+STATS_SWAPCHAIN_BUFFER_USAGE = 22
+STATS_SWAPCHAIN_FLAGS = 23
+STATS_FEATURE_LEVELS = 24
+STATS_RASTIZER_STATES = 25
+STATS_BLEND_STATES = 26
+STATS_BIND_FLAGS = 27
+STATS_EXECUTE_BUFFER_OPCODES = 28
+STATS_COOPERATIVE_LEVEL_FLAGS = 29
+STATS_FLIP_FLAGS = 30
+STATS_DRAW_FLAGS = 31
+STATS_SURFACE_CAPS = 32
+STATS_VERTEX_BUFFER_CAPS = 33
+STATS_TEXTURE_MAP_MODES = 34
+# Glide specific stats
+STATS_TMUS = 101
+STATS_DEPTH_BUFFER_MODES = 102
+STATS_LFB_WRITE_MODES = 103
+STATS_HINTS = 104
+STATS_VERTEX_LAYOUTS = 105
+
+STATS_TYPE_DECODE = {# D3D or common stats
+                     1:   'api_calls',
+                     2:   'vendor_hack_checks',
+                     3:   'device_types',
+                     4:   'behavior_flags',
+                     5:   'present_parameters',
+                     6:   'present_parameter_flags',
+                     7:   'render_states',
+                     8:   'texture_stage_types',
+                     9:   'texture_stage_states',
+                     10:  'query_types',
+                     11:  'lock_flags',
+                     12:  'shader_versions',
+                     13:  'usage',
+                     14:  'pixel_formats',
+                     15:  'formats',
+                     16:  'vendor_hacks',
+                     17:  'pools',
+                     18:  'process_vertices_flags',
+                     19:  'light_types',
+                     20:  'device_flags',
+                     21:  'swapchain_parameters',
+                     22:  'swapchain_buffer_usage',
+                     23:  'swapchain_flags',
+                     24:  'feature_levels',
+                     25:  'rastizer_states',
+                     26:  'blend_states',
+                     27:  'bind_flags',
+                     28:  'execute_buffer_opcodes',
+                     29:  'cooperative_level_flags',
+                     30:  'flip_flags',
+                     31:  'draw_flags',
+                     32:  'surface_caps',
+                     33:  'vertex_buffer_caps',
+                     34:  'texture_map_modes',
+                     # Glide specific stats
+                     101: 'tmus',
+                     102: 'depth_buffer_modes',
+                     103: 'lfb_write_modes',
+                     104: 'hints',
+                     105: 'vertex_layouts'}
+
+TRACE_API_OVERRIDES = {'ff7'        : 'D3D5',   # Creates a D3D3 device first, but queries for a D3D5 device and renders with it
+                       'TSM'        : 'D3D9',   # Ignore queries done on a D3D9Ex interface, as it's not used for rendering
+                       'wargame_'   : 'D3D9Ex', # Ignore queries done on a plain D3D9 interface, as it's not used for rendering
+                       'xrEngine___': 'D3D10',  # Creates a D3D11 device first, but renders using D3D10
+                       'RebelGalaxy': 'D3D11'}  # Creates a D3D10 device first, but renders using D3D11
+
+TRACE_NAME_EXCEPTION_LIST = ('gameProject', 'warhogs_', 'Z_XVT__')
+
 # parsing constants
 APITRACE_FAKE_CALL_IDENTIFIER = ' // fake'
 
 API_ENTRY_CALL_IDENTIFIER = '::'
+API_ENTRY_CALL_DELIMITER = '('
 API_ENTRY_GLIDE_IDENTIFIER = 'Glide'
 API_ENTRY_VALUE_DELIMITER = ','
 SHADER_DUMP_SKIP_IDENTIFIER_D3D8_9 = 'pFunction = NULL'
@@ -83,14 +176,6 @@ API_BASE_CALLS = {**API_ENTRY_CALLS, 'DirectDrawCreateEx': 'DDraw7',
                                      'CreateDXGIFactory': 'DXGI',
                                      'CreateDXGIFactory1': 'DXGI',
                                      'CreateDXGIFactory2': 'DXGI'}
-
-TRACE_API_OVERRIDES = {'ff7'        : 'D3D5',   # Creates a D3D3 device first, but queries for a D3D5 device and renders with it
-                       'TSM'        : 'D3D9',   # Ignore queries done on a D3D9Ex interface, as it's not used for rendering
-                       'wargame_'   : 'D3D9Ex', # Ignore queries done on a plain D3D9 interface, as it's not used for rendering
-                       'xrEngine___': 'D3D10',  # Creates a D3D11 device first, but renders using D3D10
-                       'RebelGalaxy': 'D3D11'}  # Creates a D3D10 device first, but renders using D3D11
-
-TRACE_NAME_EXCEPTION_LIST = ('gameProject', 'warhogs_', 'Z_XVT__')
 
 # To convert, use: int.from_bytes(b'ATOC', 'little') or:
 # (1129272385).to_bytes(4, 'little').decode('ascii')
@@ -161,9 +246,36 @@ GLIDE_TEXTURE_FORMAT_IDENTIFIER = 'format = '
 GLIDE_TEXTURE_FORMAT_IDENTIFIER_LENGTH = len(GLIDE_TEXTURE_FORMAT_IDENTIFIER)
 GLIDE_TEXTURE_FORMAT_IDENTIFIER2 = 'fmt = '
 GLIDE_TEXTURE_FORMAT_IDENTIFIER2_LENGTH = len(GLIDE_TEXTURE_FORMAT_IDENTIFIER2)
-# TMU
+# TMUs
 GLIDE_TMU_IDENTIFIER = 'tmu = '
 GLIDE_TMU_IDENTIFIER_LENGTH = len(GLIDE_TMU_IDENTIFIER)
+# depth buffer modes
+GLIDE_DEPTH_BUFFER_MODE_CALL = 'grDepthBufferMode'
+GLIDE_DEPTH_BUFFER_MODE_IDENTIFIER = 'mode = '
+GLIDE_DEPTH_BUFFER_MODE_IDENTIFIER_LENGTH = len(GLIDE_DEPTH_BUFFER_MODE_IDENTIFIER)
+GLIDE_DEPTH_BUFFER_MODE_IDENTIFIER_END = ')'
+# LFB write modes
+GLIDE_LFB_CALL = 'grLfbWriteMode'
+GLIDE_LFB_CALL2 = 'grLfbLock'
+GLIDE_LFB_CALL3 = 'grLfbWriteRegion'
+GLIDE_LFB_WRITE_MODE_IDENTIFIER = 'mode = '
+GLIDE_LFB_WRITE_MODE_IDENTIFIER_LENGTH = len(GLIDE_LFB_WRITE_MODE_IDENTIFIER)
+GLIDE_LFB_WRITE_MODE_IDENTIFIER2 = 'writeMode = '
+GLIDE_LFB_WRITE_MODE_IDENTIFIER2_LENGTH = len(GLIDE_LFB_WRITE_MODE_IDENTIFIER2)
+GLIDE_LFB_WRITE_MODE_IDENTIFIER3 = 'src_format = '
+GLIDE_LFB_WRITE_MODE_IDENTIFIER3_LENGTH = len(GLIDE_LFB_WRITE_MODE_IDENTIFIER3)
+# hint types and values
+GLIDE_HINTS_CALL = 'grHints'
+GLIDE_HINTS_IDENTIFIER = 'hintMask = '
+GLIDE_HINTS_IDENTIFIER_LENGTH = len(GLIDE_HINTS_IDENTIFIER)
+GLIDE_HINTS_IDENTIFIER_END = ')'
+GLIDE_HINTS_SPLIT_DELIMITER = '|'
+GLIDE_HINTS_SKIP_IDENTIFIER = 'hintMask = 0x0'
+# vertex layouts
+GLIDE_VERTEX_LAYOUT_CALL = 'grVertexLayout'
+GLIDE_VERTEX_LAYOUT_IDENTIFIER = 'param = '
+GLIDE_VERTEX_LAYOUT_IDENTIFIER_LENGTH = len(GLIDE_VERTEX_LAYOUT_IDENTIFIER)
+GLIDE_VERTEX_LAYOUT_SKIP_IDENTIFIER = 'mode = GR_PARAM_DISABLE'
 ######################### Glide1X, Glide2X, Glide3X ############################
 
 ####################### DDRAW, D3D3, D3D5, D3D6, D3D7 ##########################
@@ -565,9 +677,9 @@ class TraceStats:
         else:
             self.apis_to_skip = None
 
-        # D3D or common dictionaries
         self.force_api_level = force_api_level
         self.shader_dump = shader_dump
+
         self.compressed_trace = False
         self.binary_name_raw = None
         self.binary_name = None
@@ -575,43 +687,10 @@ class TraceStats:
         self.application_link = application_link
         self.traceappnames_api = None
         self.api = None
+        self.stats_dictionaries = {}
+        for stat_type in STATS_TYPE_DECODE.keys():
+            self.stats_dictionaries[stat_type] = {}
         self.shader_dump_call_array = []
-        self.api_call_dictionary = {}
-        self.vendor_hack_check_dictionary = {}
-        self.device_type_dictionary = {}
-        self.behavior_flag_dictionary = {}
-        self.present_parameter_dictionary = {}
-        self.present_parameter_flag_dictionary = {}
-        self.render_state_dictionary = {}
-        self.texture_stage_type_dictionary = {}
-        self.texture_stage_state_dictionary = {}
-        self.query_type_dictionary = {}
-        self.lock_flag_dictionary = {}
-        self.shader_version_dictionary = {}
-        self.pixel_format_dictionary = {}
-        self.format_dictionary = {}
-        self.vendor_hack_dictionary = {}
-        self.pool_dictionary = {}
-        self.process_vertices_flag_dictionary = {}
-        self.light_type_dictionary = {}
-        self.device_flag_dictionary = {}
-        self.swapchain_parameter_dictionary = {}
-        self.swapchain_buffer_usage_dictionary = {}
-        self.swapchain_flag_dictionary = {}
-        self.feature_level_dictionary = {}
-        self.rastizer_state_dictionary = {}
-        self.blend_state_dictionary = {}
-        self.usage_dictionary = {}
-        self.bind_flag_dictionary = {}
-        self.execute_buffer_opcode_dictionary = {}
-        self.cooperative_level_flag_dictionary = {}
-        self.flip_flag_dictionary = {}
-        self.draw_flag_dictionary = {}
-        self.surface_cap_dictionary = {}
-        self.vertex_buffer_cap_dictionary = {}
-        self.texture_map_mode_dictionary = {}
-        # Glide specific dictionaries
-        self.tmu_dictionary = {}
 
         self.process_queue = queue.Queue(maxsize=TRACE_PARSE_QUEUE_SIZE)
         self.api_skip = threading.Event()
@@ -791,80 +870,12 @@ class TraceStats:
                         return_dictionary = {}
                         return_dictionary['binary_name'] = self.binary_name
                         return_dictionary['name'] = self.application_name
-                        # D3D or common dictionaries
                         if self.application_link is not None:
                             return_dictionary['link'] = self.application_link
-                        if len(self.api_call_dictionary) > 0:
-                            return_dictionary['api_calls'] = self.api_call_dictionary
-                        if len(self.vendor_hack_check_dictionary) > 0:
-                            return_dictionary['vendor_hack_checks'] = self.vendor_hack_check_dictionary
-                        if len(self.device_type_dictionary) > 0:
-                            return_dictionary['device_types'] = self.device_type_dictionary
-                        if len(self.present_parameter_dictionary) > 0:
-                            return_dictionary['present_parameters'] = self.present_parameter_dictionary
-                        if len(self.present_parameter_flag_dictionary) > 0:
-                            return_dictionary['present_parameter_flags'] = self.present_parameter_flag_dictionary
-                        if len(self.behavior_flag_dictionary) > 0:
-                            return_dictionary['behavior_flags'] = self.behavior_flag_dictionary
-                        if len(self.render_state_dictionary) > 0:
-                            return_dictionary['render_states'] = self.render_state_dictionary
-                        if len(self.texture_stage_type_dictionary) > 0:
-                            return_dictionary['texture_stage_types'] = self.texture_stage_type_dictionary
-                        if len(self.texture_stage_state_dictionary) > 0:
-                            return_dictionary['texture_stage_states'] = self.texture_stage_state_dictionary
-                        if len(self.query_type_dictionary) > 0:
-                            return_dictionary['query_types'] = self.query_type_dictionary
-                        if len(self.lock_flag_dictionary) > 0:
-                            return_dictionary['lock_flags'] = self.lock_flag_dictionary
-                        if len(self.shader_version_dictionary) > 0:
-                            return_dictionary['shader_versions'] = self.shader_version_dictionary
-                        if len(self.pixel_format_dictionary) > 0:
-                            return_dictionary['pixel_formats'] = self.pixel_format_dictionary
-                        if len(self.format_dictionary) > 0:
-                            return_dictionary['formats'] = self.format_dictionary
-                        if len(self.vendor_hack_dictionary) > 0:
-                            return_dictionary['vendor_hacks'] = self.vendor_hack_dictionary
-                        if len(self.pool_dictionary) > 0:
-                            return_dictionary['pools'] = self.pool_dictionary
-                        if len(self.process_vertices_flag_dictionary) > 0:
-                            return_dictionary['process_vertices_flags'] = self.process_vertices_flag_dictionary
-                        if len(self.light_type_dictionary) > 0:
-                            return_dictionary['light_types'] = self.light_type_dictionary
-                        if len(self.device_flag_dictionary) > 0:
-                            return_dictionary['device_flags'] = self.device_flag_dictionary
-                        if len(self.swapchain_parameter_dictionary) > 0:
-                            return_dictionary['swapchain_parameters'] = self.swapchain_parameter_dictionary
-                        if len(self.swapchain_buffer_usage_dictionary) > 0:
-                            return_dictionary['swapchain_buffer_usage'] = self.swapchain_buffer_usage_dictionary
-                        if len(self.swapchain_flag_dictionary) > 0:
-                            return_dictionary['swapchain_flags'] = self.swapchain_flag_dictionary
-                        if len(self.feature_level_dictionary) > 0:
-                            return_dictionary['feature_levels'] = self.feature_level_dictionary
-                        if len(self.rastizer_state_dictionary) > 0:
-                            return_dictionary['rastizer_states'] = self.rastizer_state_dictionary
-                        if len(self.blend_state_dictionary) > 0:
-                            return_dictionary['blend_states'] = self.blend_state_dictionary
-                        if len(self.usage_dictionary) > 0:
-                            return_dictionary['usage'] = self.usage_dictionary
-                        if len(self.bind_flag_dictionary) > 0:
-                            return_dictionary['bind_flags'] = self.bind_flag_dictionary
-                        if len(self.execute_buffer_opcode_dictionary) > 0:
-                            return_dictionary['execute_buffer_opcodes'] = self.execute_buffer_opcode_dictionary
-                        if len(self.cooperative_level_flag_dictionary) > 0:
-                            return_dictionary['cooperative_level_flags'] = self.cooperative_level_flag_dictionary
-                        if len(self.flip_flag_dictionary) > 0:
-                            return_dictionary['flip_flags'] = self.flip_flag_dictionary
-                        if len(self.draw_flag_dictionary) > 0:
-                            return_dictionary['draw_flags'] = self.draw_flag_dictionary
-                        if len(self.surface_cap_dictionary) > 0:
-                            return_dictionary['surface_caps'] = self.surface_cap_dictionary
-                        if len(self.vertex_buffer_cap_dictionary) > 0:
-                            return_dictionary['vertex_buffer_caps'] = self.vertex_buffer_cap_dictionary
-                        if len(self.texture_map_mode_dictionary) > 0:
-                            return_dictionary['texture_map_modes'] = self.texture_map_mode_dictionary
-                        # Glide specific dictionaries
-                        if len(self.tmu_dictionary) > 0:
-                            return_dictionary['tmu'] = self.tmu_dictionary
+
+                        for stats_type in self.stats_dictionaries.keys():
+                            if len(self.stats_dictionaries[stats_type]) > 0:
+                                return_dictionary[STATS_TYPE_DECODE[stats_type]] = self.stats_dictionaries[stats_type]
 
                         self.json_output[JSON_BASE_KEY].append(return_dictionary)
 
@@ -904,50 +915,18 @@ class TraceStats:
                         logger.error(f'Unable to clean up trace: {trace_path_final}')
 
                 # reset state between processed traces
-
-                # D3D or common dictionaries
                 self.compressed_trace = False
                 self.binary_name_raw = None
                 self.binary_name = None
+                #self.application_name = None
+                #self.application_link = None
                 self.traceappnames_api = None
                 self.api = None
-                self.shader_dump_call_array = []
-                self.api_call_dictionary = {}
-                self.vendor_hack_check_dictionary = {}
-                self.device_type_dictionary = {}
-                self.behavior_flag_dictionary = {}
-                self.present_parameter_dictionary = {}
-                self.present_parameter_flag_dictionary = {}
-                self.render_state_dictionary = {}
-                self.texture_stage_type_dictionary = {}
-                self.texture_stage_state_dictionary = {}
-                self.query_type_dictionary = {}
-                self.lock_flag_dictionary = {}
-                self.shader_version_dictionary = {}
-                self.pixel_format_dictionary = {}
-                self.format_dictionary = {}
-                self.vendor_hack_dictionary = {}
-                self.pool_dictionary = {}
-                self.process_vertices_flag_dictionary = {}
-                self.light_type_dictionary = {}
-                self.device_flag_dictionary = {}
-                self.swapchain_parameter_dictionary = {}
-                self.swapchain_buffer_usage_dictionary = {}
-                self.swapchain_flag_dictionary = {}
-                self.feature_level_dictionary = {}
-                self.rastizer_state_dictionary = {}
-                self.blend_state_dictionary = {}
-                self.usage_dictionary = {}
-                self.bind_flag_dictionary = {}
-                self.execute_buffer_opcode_dictionary = {}
-                self.cooperative_level_flag_dictionary = {}
-                self.flip_flag_dictionary = {}
-                self.draw_flag_dictionary = {}
-                self.surface_cap_dictionary = {}
-                self.vertex_buffer_cap_dictionary = {}
-                self.texture_map_mode_dictionary = {}
-                # Glide specific dictionaries
-                self.tmu_dictionary = {}
+                if not self.shader_dump:
+                    for stat_type in STATS_TYPE_DECODE.keys():
+                        self.stats_dictionaries[stats_type] = {}
+                else:
+                    self.shader_dump_call_array = []
 
             else:
                 logger.warning(f'File not found, skipping: {trace_path}')
@@ -971,27 +950,32 @@ class TraceStats:
             logger.info('JSON export complete')
 
     def trace_api_prepass(self, trace_line_raw):
-        #logger.debug(f'Processing line: {trace_line_raw}')
+        # raw lines end with a newline, so strip that out
+        trace_line = trace_line_raw.rstrip()
+
+        #logger.debug(f'Processing line: {trace_line}')
 
         # early skip embedded full line comments
-        if trace_line_raw.startswith('//'):
+        if trace_line.startswith('//'):
             return
 
-        trace_line = trace_line_raw.rstrip()
-        # no need to do more than 2 splits, as we only need
+        # no need to do more than one split, as we only need
         # the trace line number and later on the api call name
-        split_line = trace_line.split(maxsplit=2)
+        split_line = trace_line.split(maxsplit=1)
 
         # apitraces which end abruptly can output unnumbered or
         # blank lines, which will raise ValueError or IndexError
         try:
             trace_line_counter = int(split_line[0])
-            logger.debug(f'Found line count: {trace_line_counter}')
+            # drop the counter from the trace line going forward
+            trace_line = split_line[1]
 
-            trace_line_filtered = split_line[1].split('(', 1)[0]
+            call = trace_line[:trace_line.find(API_ENTRY_CALL_DELIMITER)]
 
             for key, value in API_ENTRY_CALLS.items():
-                if key in trace_line_filtered:
+                if key in call:
+                    logger.debug(f"Found API entry call on line {trace_line_counter}")
+
                     self.api = value
 
                     if self.traceappnames_api is not None and self.traceappnames_api != self.api:
@@ -1008,7 +992,6 @@ class TraceStats:
 
                     break
         except:
-            logger.debug(f'Skipped line: {trace_line}')
             return
 
     def trace_parse_worker(self):
@@ -1020,37 +1003,40 @@ class TraceStats:
                 trace_line_counter = 0
 
                 for trace_line_raw in trace_chunk_lines:
-                    #logger.debug(f'Processing line: {trace_line_raw}')
+                    # raw lines end with a newline, so strip that out
+                    trace_line = trace_line_raw.rstrip()
+
+                    #logger.info(f'Processing line: {trace_line}')
 
                     # early skip embedded full line comments
-                    if trace_line_raw.startswith('//'):
+                    if trace_line.startswith('//'):
                         continue
 
-                    trace_line = trace_line_raw.rstrip()
-                    # no need to do more than 2 splits, as we only need
+                    # no need to do more than one split, as we only need
                     # the trace line number and later on the api call name
-                    split_line = trace_line.split(maxsplit=2)
+                    split_line = trace_line.split(maxsplit=1)
 
                     fake_call = trace_line.endswith(APITRACE_FAKE_CALL_IDENTIFIER)
                     execute_buffer_dump_line = False
+                    glide_entry_call = False
 
                     # apitraces which end abruptly can output unnumbered or
                     # blank lines, which will raise ValueError or IndexError
                     try:
                         trace_line_counter = int(split_line[0])
-                        logger.debug(f'Found line count: {trace_line_counter}')
+                        # drop the counter from the trace line going forward
+                        trace_line = split_line[1]
 
                         # older versions of apitrace used a lowercase variant, so be case insensitive about it
-                        execute_buffer_dump_line = split_line[1].upper().startswith(EXECUTE_BUFFER_DUMP_IDENTIFIER.upper())
-                    except:
-                        logger.debug(f'Skipped parsing of line: {trace_line}')
-                        continue
+                        execute_buffer_dump_line = trace_line.upper().startswith(EXECUTE_BUFFER_DUMP_IDENTIFIER.upper())
 
-                    glide_entry_call = split_line[1].startswith(API_ENTRY_GLIDE_IDENTIFIER)
+                        glide_entry_call = trace_line.startswith(API_ENTRY_GLIDE_IDENTIFIER)
+                    except:
+                        continue
 
                     # early skip any fake calls we're not particularly interested in parsing
                     if fake_call and not execute_buffer_dump_line and not glide_entry_call:
-                        logger.debug(f'Skipped parsing of fake call: {trace_line}')
+                        #logger.debug(f'Skipped parsing of fake call on line {trace_line_counter}')
                         continue
 
                     if (API_ENTRY_CALL_IDENTIFIER in trace_line or execute_buffer_dump_line or
@@ -1058,11 +1044,15 @@ class TraceStats:
                         any(api_base_call in trace_line for api_base_call in API_BASE_CALLS.keys())):
                         # parse API calls
                         if not execute_buffer_dump_line:
-                            call = split_line[1].split('(', 1)[0]
-                            logger.debug(f'Found call: {call}')
+                            split_line = trace_line.split(API_ENTRY_CALL_DELIMITER, 1)
 
-                            existing_value = self.api_call_dictionary.get(call, 0)
-                            self.api_call_dictionary[call] = existing_value + 1
+                            call = split_line[0]
+
+                            existing_value = self.stats_dictionaries[STATS_API_CALLS].get(call, 0)
+                            self.stats_dictionaries[STATS_API_CALLS][call] = existing_value + 1
+
+                            # drop the call string from the trace line going forward
+                            trace_line = split_line[1]
                         else:
                             # execute buffer dumps or other fake calls we want to parse
                             call = ''
@@ -1071,7 +1061,7 @@ class TraceStats:
                         if self.shader_dump:
                             if self.api == 'D3D8' or self.api == 'D3D9Ex' or self.api == 'D3D9':
                                 if VERTEX_SHADER_CALL in call or PIXEL_SHADER_CALL in call:
-                                    logger.debug(f'Found shader on line: {trace_line}')
+                                    logger.debug(f'Found shader on line {trace_line_counter}')
 
                                     if SHADER_DUMP_SKIP_IDENTIFIER_D3D8_9 not in trace_line:
                                         self.shader_dump_call_array.append(str(trace_line_counter))
@@ -1080,49 +1070,103 @@ class TraceStats:
                                 if (VERTEX_SHADER_CALL in call or PIXEL_SHADER_CALL in call or
                                     COMPUTE_SHADER_CALL in call or DOMAIN_SHADER_CALL in call or
                                     GEOMETRY_SHADER_CALL in call or HULL_SHADER_CALL in call):
-                                    logger.debug(f'Found shader on line: {trace_line}')
+                                    logger.debug(f'Found shader on line {trace_line_counter}')
 
                                     if SHADER_DUMP_SKIP_IDENTIFIER_D3D10_11 not in trace_line:
                                         self.shader_dump_call_array.append(str(trace_line_counter))
 
                         elif self.api in API_FAMILY_GLIDE:
                             if GLIDE_TEXTURE_DOWNLOAD_CALL in call:
-                                logger.debug(f'Found texture formats on line: {trace_line}')
+                                logger.debug(f'Found texture formats on line {trace_line_counter}')
 
                                 texture_format_start = trace_line.find(GLIDE_TEXTURE_FORMAT_IDENTIFIER) + GLIDE_TEXTURE_FORMAT_IDENTIFIER_LENGTH
                                 texture_format = trace_line[texture_format_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
                                                                                                  texture_format_start)].strip()
 
-                                existing_value = self.format_dictionary.get(texture_format, 0)
-                                self.format_dictionary[texture_format] = existing_value + 1
+                                existing_value = self.stats_dictionaries[STATS_FORMATS].get(texture_format, 0)
+                                self.stats_dictionaries[STATS_FORMATS][texture_format] = existing_value + 1
 
                                 tmu_start = trace_line.find(GLIDE_TMU_IDENTIFIER) + GLIDE_TMU_IDENTIFIER_LENGTH
                                 tmu = trace_line[tmu_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
                                                                            tmu_start)].strip()
 
-                                existing_value = self.tmu_dictionary.get(tmu, 0)
-                                self.tmu_dictionary[tmu] = existing_value + 1
+                                existing_value = self.stats_dictionaries[STATS_TMUS].get(tmu, 0)
+                                self.stats_dictionaries[STATS_TMUS][tmu] = existing_value + 1
 
                             elif GLIDE_TEXTURE_ALLOCATE_CALL in call:
-                                logger.debug(f'Found texture formats on line: {trace_line}')
+                                logger.debug(f'Found texture formats on line {trace_line_counter}')
 
                                 texture_format_start = trace_line.find(GLIDE_TEXTURE_FORMAT_IDENTIFIER2) + GLIDE_TEXTURE_FORMAT_IDENTIFIER2_LENGTH
                                 texture_format = trace_line[texture_format_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
                                                                                                  texture_format_start)].strip()
 
-                                existing_value = self.format_dictionary.get(texture_format, 0)
-                                self.format_dictionary[texture_format] = existing_value + 1
+                                existing_value = self.stats_dictionaries[STATS_FORMATS].get(texture_format, 0)
+                                self.stats_dictionaries[STATS_FORMATS][texture_format] = existing_value + 1
 
                                 tmu_start = trace_line.find(GLIDE_TMU_IDENTIFIER) + GLIDE_TMU_IDENTIFIER_LENGTH
                                 tmu = trace_line[tmu_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
                                                                            tmu_start)].strip()
 
-                                existing_value = self.tmu_dictionary.get(tmu, 0)
-                                self.tmu_dictionary[tmu] = existing_value + 1
+                                existing_value = self.stats_dictionaries[STATS_TMUS].get(tmu, 0)
+                                self.stats_dictionaries[STATS_TMUS][tmu] = existing_value + 1
+
+                            elif GLIDE_DEPTH_BUFFER_MODE_CALL in call:
+                                logger.debug(f'Found depth buffer mode on line {trace_line_counter}')
+
+                                depth_buffer_mode_start = trace_line.find(GLIDE_DEPTH_BUFFER_MODE_IDENTIFIER) + GLIDE_DEPTH_BUFFER_MODE_IDENTIFIER_LENGTH
+                                depth_buffer_mode = trace_line[depth_buffer_mode_start:trace_line.find(GLIDE_DEPTH_BUFFER_MODE_IDENTIFIER_END,
+                                                                                                       depth_buffer_mode_start)].strip()
+
+                                existing_value = self.stats_dictionaries[STATS_DEPTH_BUFFER_MODES].get(depth_buffer_mode, 0)
+                                self.stats_dictionaries[STATS_DEPTH_BUFFER_MODES][depth_buffer_mode] = existing_value + 1
+
+                            elif GLIDE_LFB_CALL in call or GLIDE_LFB_CALL2 in call or GLIDE_LFB_CALL3 in call:
+                                logger.debug(f'Found LFB write modes on line {trace_line_counter}')
+
+                                if GLIDE_LFB_CALL in call:
+                                    lfb_format_start = trace_line.find(GLIDE_LFB_WRITE_MODE_IDENTIFIER) + GLIDE_LFB_WRITE_MODE_IDENTIFIER_LENGTH
+                                elif GLIDE_LFB_CALL2 in call:
+                                    lfb_format_start = trace_line.find(GLIDE_LFB_WRITE_MODE_IDENTIFIER2) + GLIDE_LFB_WRITE_MODE_IDENTIFIER2_LENGTH
+                                elif GLIDE_LFB_CALL3 in call:
+                                    lfb_format_start = trace_line.find(GLIDE_LFB_WRITE_MODE_IDENTIFIER3) + GLIDE_LFB_WRITE_MODE_IDENTIFIER3_LENGTH
+
+                                lfb_format = trace_line[lfb_format_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
+                                                                                         lfb_format_start)].strip()
+
+                                existing_value = self.stats_dictionaries[STATS_LFB_WRITE_MODES].get(lfb_format, 0)
+                                self.stats_dictionaries[STATS_LFB_WRITE_MODES][lfb_format] = existing_value + 1
+
+                            if self.api == 'Glide1X' or self.api == 'Glide2X':
+                                if GLIDE_HINTS_CALL in call:
+                                    logger.debug(f'Found hints on line {trace_line_counter}')
+
+                                    if GLIDE_HINTS_SKIP_IDENTIFIER not in trace_line:
+                                        hints_start = trace_line.find(GLIDE_HINTS_IDENTIFIER) + GLIDE_HINTS_IDENTIFIER_LENGTH
+                                        hints = trace_line[hints_start:trace_line.find(GLIDE_HINTS_IDENTIFIER_END,
+                                                                                    hints_start)].strip()
+
+                                        hints = hints.split(GLIDE_HINTS_SPLIT_DELIMITER)
+
+                                        for hint in hints:
+                                            hint_stripped = hint.strip()
+                                            existing_value = self.stats_dictionaries[STATS_HINTS].get(hint_stripped, 0)
+                                            self.stats_dictionaries[STATS_HINTS][hint_stripped] = existing_value + 1
+
+                            elif self.api == 'Glide3X':
+                                if GLIDE_VERTEX_LAYOUT_CALL in call:
+                                    logger.debug(f'Found vertex layouts on line {trace_line_counter}')
+
+                                    if GLIDE_VERTEX_LAYOUT_SKIP_IDENTIFIER not in trace_line:
+                                        vertex_layout_start = trace_line.find(GLIDE_VERTEX_LAYOUT_IDENTIFIER) + GLIDE_VERTEX_LAYOUT_IDENTIFIER_LENGTH
+                                        vertex_layout = trace_line[vertex_layout_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
+                                                                                                       vertex_layout_start)].strip()
+
+                                        existing_value = self.stats_dictionaries[STATS_VERTEX_LAYOUTS].get(vertex_layout, 0)
+                                        self.stats_dictionaries[STATS_VERTEX_LAYOUTS][vertex_layout] = existing_value + 1
 
                         elif self.api == 'D3D7' or self.api == 'D3D6' or self.api == 'D3D5' or self.api == 'D3D3':
                             if COOPERATIVE_LEVEL_FLAGS_CALL in call:
-                                logger.debug(f'Found cooperative level flags on line: {trace_line}')
+                                logger.debug(f'Found cooperative level flags on line {trace_line_counter}')
 
                                 cooperative_level_flags_start = trace_line.find(COOPERATIVE_LEVEL_FLAGS_IDENTIFIER) + COOPERATIVE_LEVEL_FLAGS_IDENTIFIER_LENGTH
                                 cooperative_level_flags = trace_line[cooperative_level_flags_start:trace_line.find(COOPERATIVE_LEVEL_FLAGS_IDENTIFIER_END,
@@ -1131,11 +1175,11 @@ class TraceStats:
 
                                 for cooperative_level_flag in cooperative_level_flags:
                                     cooperative_level_flag_stripped = cooperative_level_flag.strip()
-                                    existing_value = self.cooperative_level_flag_dictionary.get(cooperative_level_flag_stripped, 0)
-                                    self.cooperative_level_flag_dictionary[cooperative_level_flag_stripped] = existing_value + 1
+                                    existing_value = self.stats_dictionaries[STATS_COOPERATIVE_LEVEL_FLAGS].get(cooperative_level_flag_stripped, 0)
+                                    self.stats_dictionaries[STATS_COOPERATIVE_LEVEL_FLAGS][cooperative_level_flag_stripped] = existing_value + 1
 
                             elif SURFACE_CAPS_CALL in call:
-                                logger.debug(f'Found surface caps and pixel format flags on line: {trace_line}')
+                                logger.debug(f'Found surface caps and pixel format flags on line {trace_line_counter}')
 
                                 # dwCaps
                                 if SURFACE_CAPS_SKIP_IDENTIFIER not in trace_line:
@@ -1148,8 +1192,8 @@ class TraceStats:
                                         # IDirectDraw::CreateSurface and IDirectDraw2::CreateSurface calls
                                         # will have a dwCaps field which will end in '}}', so strip that out
                                         surface_cap_stripped = surface_cap.replace('}}', '').strip()
-                                        existing_value = self.surface_cap_dictionary.get(surface_cap_stripped, 0)
-                                        self.surface_cap_dictionary[surface_cap_stripped] = existing_value + 1
+                                        existing_value = self.stats_dictionaries[STATS_SURFACE_CAPS].get(surface_cap_stripped, 0)
+                                        self.stats_dictionaries[STATS_SURFACE_CAPS][surface_cap_stripped] = existing_value + 1
 
                                 # dwCaps2
                                 if SURFACE_CAPS2_SKIP_IDENTIFIER not in trace_line:
@@ -1165,8 +1209,8 @@ class TraceStats:
 
                                         for surface_cap2 in surface_caps2:
                                             surface_cap2_stripped = surface_cap2.strip()
-                                            existing_value = self.surface_cap_dictionary.get(surface_cap2_stripped, 0)
-                                            self.surface_cap_dictionary[surface_cap2_stripped] = existing_value + 1
+                                            existing_value = self.stats_dictionaries[STATS_SURFACE_CAPS].get(surface_cap2_stripped, 0)
+                                            self.stats_dictionaries[STATS_SURFACE_CAPS][surface_cap2_stripped] = existing_value + 1
 
                                 # ddpfPixelFormat
                                 if PIXEL_FORMAT_IDENTIFIER in trace_line and PIXEL_FORMAT_SKIP_IDENTIFIER not in trace_line:
@@ -1179,8 +1223,8 @@ class TraceStats:
                                         for pixel_format in pixel_formats:
                                             pixel_format_stripped = pixel_format.strip()
                                             if not pixel_format_stripped.startswith('0x'):
-                                                existing_value = self.pixel_format_dictionary.get(pixel_format_stripped, 0)
-                                                self.pixel_format_dictionary[pixel_format_stripped] = existing_value + 1
+                                                existing_value = self.stats_dictionaries[STATS_PIXEL_FORMATS].get(pixel_format_stripped, 0)
+                                                self.stats_dictionaries[STATS_PIXEL_FORMATS][pixel_format_stripped] = existing_value + 1
                                             elif pixel_format_stripped not in PIXEL_FORMAT_KNOWN_BOGUS_VALUES:
                                                 logger.warning(f'Detected an unhandled pixel format flag: {pixel_format}')
 
@@ -1196,12 +1240,12 @@ class TraceStats:
                                                     try:
                                                         pixel_format_fourcc_decoded = int(pixel_format_fourcc, 16).to_bytes(4, 'little').decode('ascii')
                                                         if pixel_format_fourcc_decoded in DDRAW_FOURCC_FORMATS.values():
-                                                            logger.debug(f'Found FOURCC on line: {trace_line}')
+                                                            logger.debug(f'Found FOURCC on line {trace_line_counter}')
 
                                                             pixel_format_fourcc_decoded = ''.join((PIXEL_FORMAT_PREFIX, pixel_format_fourcc_decoded))
 
-                                                            existing_value = self.format_dictionary.get(pixel_format_fourcc_decoded, 0)
-                                                            self.format_dictionary[pixel_format_fourcc_decoded] = existing_value + 1
+                                                            existing_value = self.stats_dictionaries[STATS_FORMATS].get(pixel_format_fourcc_decoded, 0)
+                                                            self.stats_dictionaries[STATS_FORMATS][pixel_format_fourcc_decoded] = existing_value + 1
                                                         elif pixel_format_fourcc not in PIXEL_FORMAT_KNOWN_BOGUS_FOURCC_VALUES:
                                                             logger.warning(f'Detected an unhandled FOURCC: {pixel_format_fourcc}')
                                                     except ValueError:
@@ -1209,29 +1253,29 @@ class TraceStats:
 
                                             elif pixel_format_fourcc.isdigit():
                                                 if pixel_format_fourcc in DDRAW_FOURCC_FORMATS.keys():
-                                                    logger.debug(f'Found FOURCC on line: {trace_line}')
+                                                    logger.debug(f'Found FOURCC on line {trace_line_counter}')
 
                                                     pixel_format_fourcc_lookup = DDRAW_FOURCC_FORMATS[pixel_format_fourcc]
                                                     pixel_format_fourcc_decoded = ''.join((PIXEL_FORMAT_PREFIX, pixel_format_fourcc_lookup))
-                                                    existing_value = self.format_dictionary.get(pixel_format_fourcc_decoded, 0)
-                                                    self.format_dictionary[pixel_format_fourcc_decoded] = existing_value + 1
+                                                    existing_value = self.stats_dictionaries[STATS_FORMATS].get(pixel_format_fourcc_decoded, 0)
+                                                    self.stats_dictionaries[STATS_FORMATS][pixel_format_fourcc_decoded] = existing_value + 1
 
                                                 elif pixel_format_fourcc != PIXEL_FORMAT_FOURCC_SKIP_VALUE:
                                                     logger.warning(f'Detected an unhandled FOURCC: {pixel_format_fourcc}')
 
                                             # 0x can be found later in a decoded string, so make sure it's not present
                                             elif pixel_format_fourcc.find('0x') == -1:
-                                                logger.debug(f'Found FOURCC on line: {trace_line}')
+                                                logger.debug(f'Found FOURCC on line {trace_line_counter}')
 
                                                 pixel_format_fourcc_stripped = pixel_format_fourcc.strip()
-                                                existing_value = self.format_dictionary.get(pixel_format_fourcc_stripped, 0)
-                                                self.format_dictionary[pixel_format_fourcc_stripped] = existing_value + 1
+                                                existing_value = self.stats_dictionaries[STATS_FORMATS].get(pixel_format_fourcc_stripped, 0)
+                                                self.stats_dictionaries[STATS_FORMATS][pixel_format_fourcc_stripped] = existing_value + 1
 
                                             else:
                                                 logger.warning(f'Detected an unparsable FOURCC: {pixel_format_fourcc}')
 
                             elif FLIP_FLAGS_CALL in call and FLIP_TO_GDI_CALL not in call:
-                                logger.debug(f'Found flip flags on line: {trace_line}')
+                                logger.debug(f'Found flip flags on line {trace_line_counter}')
 
                                 if FLIP_FLAGS_SKIP_IDENTIFIER not in trace_line:
                                     flip_flags_start = trace_line.find(FLIP_FLAGS_IDENTIFIER) + FLIP_FLAGS_IDENTIFIER_LENGTH
@@ -1241,11 +1285,11 @@ class TraceStats:
 
                                     for flip_flag in flip_flags:
                                         flip_flag_stripped = flip_flag.strip()
-                                        existing_value = self.flip_flag_dictionary.get(flip_flag_stripped, 0)
-                                        self.flip_flag_dictionary[flip_flag_stripped] = existing_value + 1
+                                        existing_value = self.stats_dictionaries[STATS_FLIP_FLAGS].get(flip_flag_stripped, 0)
+                                        self.stats_dictionaries[STATS_FLIP_FLAGS][flip_flag_stripped] = existing_value + 1
 
                             elif LOCK_FLAGS_CALL_DDRAW in call:
-                                logger.debug(f'Found lock flags on line: {trace_line}')
+                                logger.debug(f'Found lock flags on line {trace_line_counter}')
 
                                 # IDirectDrawSurface7::Lock actually has two sets of dwFlags, with the latter
                                 # being the one related to the actual locks, and what we are interested in
@@ -1261,22 +1305,22 @@ class TraceStats:
 
                                         # Praetorians sets several bogus lock values (not part of the enum)
                                         if lock_flag_stripped.startswith(LOCK_FLAGS_VALUE_IDENTIFIER_DDRAW):
-                                            existing_value = self.lock_flag_dictionary.get(lock_flag_stripped, 0)
-                                            self.lock_flag_dictionary[lock_flag_stripped] = existing_value + 1
+                                            existing_value = self.stats_dictionaries[STATS_LOCK_FLAGS].get(lock_flag_stripped, 0)
+                                            self.stats_dictionaries[STATS_LOCK_FLAGS][lock_flag_stripped] = existing_value + 1
 
                             if self.api != 'D3D7':
                                 if LIGHT_TYPE_CALL in call and LIGHT_TYPE_CALL_SKIP not in call:
-                                    logger.debug(f'Found light type on line: {trace_line}')
+                                    logger.debug(f'Found light type on line {trace_line_counter}')
 
                                     light_type_start = trace_line.find(LIGHT_TYPE_IDENTIFIER2) + LIGHT_TYPE_IDENTIFIER2_LENGTH
                                     light_type = trace_line[light_type_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
                                                                                              light_type_start)].strip()
 
-                                    existing_value = self.light_type_dictionary.get(light_type, 0)
-                                    self.light_type_dictionary[light_type] = existing_value + 1
+                                    existing_value = self.stats_dictionaries[STATS_LIGHT_TYPES].get(light_type, 0)
+                                    self.stats_dictionaries[STATS_LIGHT_TYPES][light_type] = existing_value + 1
 
                                 elif execute_buffer_dump_line:
-                                    logger.debug(f'Found execute buffer content on line: {trace_line}')
+                                    logger.debug(f'Found execute buffer content on line {trace_line_counter}')
 
                                     # Multiple execute buffer operation codes can be included in the same execute buffer dump
                                     execute_buffer_opcode_start = trace_line.find(EXECUTE_BUFFER_OPCODE_IDENTIFIER)
@@ -1284,8 +1328,8 @@ class TraceStats:
                                         execute_buffer_opcode = trace_line[execute_buffer_opcode_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
                                                                                                                        execute_buffer_opcode_start)].strip()
 
-                                        existing_value = self.execute_buffer_opcode_dictionary.get(execute_buffer_opcode, 0)
-                                        self.execute_buffer_opcode_dictionary[execute_buffer_opcode] = existing_value + 1
+                                        existing_value = self.stats_dictionaries[STATS_EXECUTE_BUFFER_OPCODES].get(execute_buffer_opcode, 0)
+                                        self.stats_dictionaries[STATS_EXECUTE_BUFFER_OPCODES][execute_buffer_opcode] = existing_value + 1
 
                                         execute_buffer_opcode_start = trace_line.find(EXECUTE_BUFFER_OPCODE_IDENTIFIER,
                                                                                       execute_buffer_opcode_start + EXECUTE_BUFFER_OPCODE_IDENTIFIER_LENGTH)
@@ -1300,8 +1344,8 @@ class TraceStats:
 
                                         for process_vertices_flag in process_vertices_flags_actual:
                                             process_vertices_flag_stripped = process_vertices_flag.strip()
-                                            existing_value = self.process_vertices_flag_dictionary.get(process_vertices_flag_stripped, 0)
-                                            self.process_vertices_flag_dictionary[process_vertices_flag_stripped] = existing_value + 1
+                                            existing_value = self.stats_dictionaries[STATS_PROCESS_VERTICES_FLAGS].get(process_vertices_flag_stripped, 0)
+                                            self.stats_dictionaries[STATS_PROCESS_VERTICES_FLAGS][process_vertices_flag_stripped] = existing_value + 1
 
                                         process_vertices_flags_start = trace_line.find(PROCESS_VERTICES_FLAGS_IDENTIFIER_EB, process_vertices_flags_end)
 
@@ -1311,34 +1355,34 @@ class TraceStats:
                                         render_state = trace_line[render_state_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
                                                                                                      render_state_start)].strip()
 
-                                        existing_value = self.render_state_dictionary.get(render_state, 0)
-                                        self.render_state_dictionary[render_state] = existing_value + 1
+                                        existing_value = self.stats_dictionaries[STATS_RENDER_STATES].get(render_state, 0)
+                                        self.stats_dictionaries[STATS_RENDER_STATES][render_state] = existing_value + 1
 
                                         render_state_start = trace_line.find(RENDER_STATES_IDENTIFIER_DDRAW,
                                                                              render_state_start + RENDER_STATES_IDENTIFIER_DDRAW_LENGTH)
 
                             if self.api == 'D3D7' or self.api == 'D3D6' or self.api == 'D3D5':
                                 if DEVICE_CREATION_CALL_DDRAW in call:
-                                    logger.debug(f'Found device type flags on line: {trace_line}')
+                                    logger.debug(f'Found device type flags on line {trace_line_counter}')
 
                                     device_type_start = trace_line.find(DEVICE_TYPE_IDENTIFIER_DDRAW) + DEVICE_TYPE_IDENTIFIER_DDRAW_LENGTH
                                     device_type = trace_line[device_type_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
                                                                                                device_type_start)].strip()
 
                                     if device_type not in DEVICE_TYPE_SKIP_IDENTIFIERS_DDRAW:
-                                        existing_value = self.device_type_dictionary.get(device_type, 0)
-                                        self.device_type_dictionary[device_type] = existing_value + 1
+                                        existing_value = self.stats_dictionaries[STATS_DEVICE_TYPES].get(device_type, 0)
+                                        self.stats_dictionaries[STATS_DEVICE_TYPES][device_type] = existing_value + 1
 
                                 elif RENDER_STATES_CALL_DDRAW in call:
-                                    logger.debug(f'Found render states on line: {trace_line}')
+                                    logger.debug(f'Found render states on line {trace_line_counter}')
 
                                     render_state_start = trace_line.find(RENDER_STATES_IDENTIFIER_DDRAW)
                                     if render_state_start != -1:
                                         render_state = trace_line[render_state_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
                                                                                                      render_state_start)].strip()
 
-                                        existing_value = self.render_state_dictionary.get(render_state, 0)
-                                        self.render_state_dictionary[render_state] = existing_value + 1
+                                        existing_value = self.stats_dictionaries[STATS_RENDER_STATES].get(render_state, 0)
+                                        self.stats_dictionaries[STATS_RENDER_STATES][render_state] = existing_value + 1
 
                                         if render_state == TEXTURE_MAP_BLEND_MODE_VALUE:
                                             texture_map_mode_start = trace_line.find(TEXTURE_MAP_BLEND_MODE_IDENTIFIER) + TEXTURE_MAP_BLEND_MODE_IDENTIFIER_LENGTH
@@ -1373,11 +1417,11 @@ class TraceStats:
 
                                             # work around an older apitrace bug which decoded values to D3DBLEND_
                                             if texture_map_mode is not None and not texture_map_mode.startswith('D3DBLEND_'):
-                                                existing_value = self.texture_map_mode_dictionary.get(texture_map_mode, 0)
-                                                self.texture_map_mode_dictionary[texture_map_mode] = existing_value + 1
+                                                existing_value = self.stats_dictionaries[STATS_TEXTURE_MAP_MODES].get(texture_map_mode, 0)
+                                                self.stats_dictionaries[STATS_TEXTURE_MAP_MODES][texture_map_mode] = existing_value + 1
 
                                 elif DRAW_FLAGS_CALL in call:
-                                    logger.debug(f'Found draw flags on line: {trace_line}')
+                                    logger.debug(f'Found draw flags on line {trace_line_counter}')
 
                                     if DRAW_FLAGS_SKIP_IDENTIFIER not in trace_line:
                                         draw_flags_start = trace_line.find(DRAW_FLAGS_IDENTIFIER) + DRAW_FLAGS_IDENTIFIER_LENGTH
@@ -1405,12 +1449,12 @@ class TraceStats:
 
                                         for draw_flag in draw_flags_actual:
                                             draw_flag_stripped = draw_flag.strip()
-                                            existing_value = self.draw_flag_dictionary.get(draw_flag_stripped, 0)
-                                            self.draw_flag_dictionary[draw_flag_stripped] = existing_value + 1
+                                            existing_value = self.stats_dictionaries[STATS_DRAW_FLAGS].get(draw_flag_stripped, 0)
+                                            self.stats_dictionaries[STATS_DRAW_FLAGS][draw_flag_stripped] = existing_value + 1
 
                                 if self.api == 'D3D7' or self.api == 'D3D6':
                                     if PROCESS_VERTICES_FLAGS_CALL in call:
-                                        logger.debug(f'Found process vertices flags on line: {trace_line}')
+                                        logger.debug(f'Found process vertices flags on line {trace_line_counter}')
 
                                         # we call these flags as well, but they are actually the opcodes
                                         if PROCESS_VERTICES_FLAGS_SKIP_IDENTIFIER not in trace_line:
@@ -1437,8 +1481,8 @@ class TraceStats:
 
                                             for process_vertices_flag in process_vertices_flags_actual:
                                                 process_vertices_flag_stripped = process_vertices_flag.strip()
-                                                existing_value = self.process_vertices_flag_dictionary.get(process_vertices_flag_stripped, 0)
-                                                self.process_vertices_flag_dictionary[process_vertices_flag_stripped] = existing_value + 1
+                                                existing_value = self.stats_dictionaries[STATS_PROCESS_VERTICES_FLAGS].get(process_vertices_flag_stripped, 0)
+                                                self.stats_dictionaries[STATS_PROCESS_VERTICES_FLAGS][process_vertices_flag_stripped] = existing_value + 1
 
                                         # these are the actual process vertices flags
                                         if PROCESS_VERTICES_FLAGS_SKIP_IDENTIFIER2 not in trace_line:
@@ -1446,11 +1490,11 @@ class TraceStats:
                                             process_vertices_flag = trace_line[process_vertices_flags_start:trace_line.find(PROCESS_VERTICES_FLAGS_IDENTIFIER2_END,
                                                                                                                             process_vertices_flags_start)].strip()
 
-                                            existing_value = self.process_vertices_flag_dictionary.get(process_vertices_flag, 0)
-                                            self.process_vertices_flag_dictionary[process_vertices_flag] = existing_value + 1
+                                            existing_value = self.stats_dictionaries[STATS_PROCESS_VERTICES_FLAGS].get(process_vertices_flag, 0)
+                                            self.stats_dictionaries[STATS_PROCESS_VERTICES_FLAGS][process_vertices_flag] = existing_value + 1
 
                                     elif VERTEX_BUFFER_CAPS_CALL in call:
-                                        logger.debug(f'Found vertex buffer caps on line: {trace_line}')
+                                        logger.debug(f'Found vertex buffer caps on line {trace_line_counter}')
 
                                         if VERTEX_BUFFER_CAPS_SKIP_IDENTIFIER not in trace_line:
                                             vertex_buffer_caps_start = trace_line.find(VERTEX_BUFFER_CAPS_IDENTIFIER) + VERTEX_BUFFER_CAPS_IDENTIFIER_LENGTH
@@ -1476,18 +1520,18 @@ class TraceStats:
 
                                             for vertex_buffer_cap in vertex_buffer_caps_actual:
                                                 vertex_buffer_cap_stripped = vertex_buffer_cap.strip()
-                                                existing_value = self.vertex_buffer_cap_dictionary.get(vertex_buffer_cap_stripped, 0)
-                                                self.vertex_buffer_cap_dictionary[vertex_buffer_cap_stripped] = existing_value + 1
+                                                existing_value = self.stats_dictionaries[STATS_VERTEX_BUFFER_CAPS].get(vertex_buffer_cap_stripped, 0)
+                                                self.stats_dictionaries[STATS_VERTEX_BUFFER_CAPS][vertex_buffer_cap_stripped] = existing_value + 1
 
                                     elif TEXTURE_STAGE_TYPE_CALL in call:
-                                        logger.debug(f'Found texture stage state on line: {trace_line}')
+                                        logger.debug(f'Found texture stage state on line {trace_line_counter}')
 
                                         texture_stage_type_start = trace_line.find(TEXTURE_STAGE_TYPE_IDENTIFIER_DDRAW) + TEXTURE_STAGE_TYPE_IDENTIFIER_DDRAW_LENGTH
                                         texture_stage_type = trace_line[texture_stage_type_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
                                                                                                                 texture_stage_type_start)].strip()
 
-                                        existing_value = self.texture_stage_type_dictionary.get(texture_stage_type, 0)
-                                        self.texture_stage_type_dictionary[texture_stage_type] = existing_value + 1
+                                        existing_value = self.stats_dictionaries[STATS_TEXTURE_STAGE_TYPES].get(texture_stage_type, 0)
+                                        self.stats_dictionaries[STATS_TEXTURE_STAGE_TYPES][texture_stage_type] = existing_value + 1
 
                                         texture_stage_state_start = trace_line.find(TEXTURE_STAGE_STATE_IDENTIFIER_DDRAW) + TEXTURE_STAGE_STATE_IDENTIFIER_DDRAW_LENGTH
                                         texture_stage_states = trace_line[texture_stage_state_start:trace_line.find(TEXTURE_STAGE_STATE_IDENTIFIER_END,
@@ -1499,24 +1543,24 @@ class TraceStats:
                                             texture_stage_state_stripped = texture_stage_state.strip()
                                             # There are some stage states with simple numeric values, skip those
                                             if texture_stage_state_stripped.startswith(TEXTURE_STAGE_STATE_VALUE_IDENTIFIER):
-                                                existing_value = self.texture_stage_state_dictionary.get(texture_stage_state_stripped, 0)
-                                                self.texture_stage_state_dictionary[texture_stage_state_stripped] = existing_value + 1
+                                                existing_value = self.stats_dictionaries[STATS_TEXTURE_STAGE_STATES].get(texture_stage_state_stripped, 0)
+                                                self.stats_dictionaries[STATS_TEXTURE_STAGE_STATES][texture_stage_state_stripped] = existing_value + 1
 
                                     if self.api == 'D3D7':
                                         # Identical to its later D3D8/9 counterpart, but different from earlier D3D APIs
                                         if LIGHT_TYPE_CALL in call:
-                                            logger.debug(f'Found light type on line: {trace_line}')
+                                            logger.debug(f'Found light type on line {trace_line_counter}')
 
                                             light_type_start = trace_line.find(LIGHT_TYPE_IDENTIFIER) + LIGHT_TYPE_IDENTIFIER_LENGTH
                                             light_type = trace_line[light_type_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
                                                                                                     light_type_start)].strip()
 
-                                            existing_value = self.light_type_dictionary.get(light_type, 0)
-                                            self.light_type_dictionary[light_type] = existing_value + 1
+                                            existing_value = self.stats_dictionaries[STATS_LIGHT_TYPES].get(light_type, 0)
+                                            self.stats_dictionaries[STATS_LIGHT_TYPES][light_type] = existing_value + 1
 
                             # if self.api == 'D3D3' only branch, basically
                             elif DEVICE_CREATION_CALL_D3D3 in call:
-                                logger.debug(f'Found D3D3 device type flags on line: {trace_line}')
+                                logger.debug(f'Found D3D3 device type flags on line {trace_line_counter}')
 
                                 device_type_start = trace_line.find(DEVICE_TYPE_IDENTIFIER_D3D3) + DEVICE_TYPE_IDENTIFIER_D3D3_LENGTH
                                 device_type = trace_line[device_type_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
@@ -1524,8 +1568,8 @@ class TraceStats:
 
                                 # D3D3 uses a limited number of IIDs to create a device from a surface object
                                 if device_type in DEVICE_TYPE_VALUES_D3D3:
-                                    existing_value = self.device_type_dictionary.get(device_type, 0)
-                                    self.device_type_dictionary[device_type] = existing_value + 1
+                                    existing_value = self.stats_dictionaries[STATS_DEVICE_TYPES].get(device_type, 0)
+                                    self.stats_dictionaries[STATS_DEVICE_TYPES][device_type] = existing_value + 1
 
                         elif self.api == 'D3D8' or self.api == 'D3D9Ex' or self.api == 'D3D9':
                             if CHECK_DEVICE_FORMAT_CALL in call:
@@ -1540,12 +1584,12 @@ class TraceStats:
                                     check_device_format_value_int = int(check_device_format_value)
 
                                     if check_device_format_value in VENDOR_HACK_VALUES.keys():
-                                        logger.debug(f'Found vendor hack check on line: {trace_line}')
+                                        logger.debug(f'Found vendor hack check on line {trace_line_counter}')
                                         vendor_hack_format_value_lookup = VENDOR_HACK_VALUES[check_device_format_value]
                                         vendor_hack_format_value_decoded = ''.join((CHECK_DEVICE_FORMAT_IDENTIFIER, vendor_hack_format_value_lookup))
 
-                                        existing_value = self.vendor_hack_check_dictionary.get(vendor_hack_format_value_decoded, 0)
-                                        self.vendor_hack_check_dictionary[vendor_hack_format_value_decoded] = existing_value + 1
+                                        existing_value = self.stats_dictionaries[STATS_VENDOR_HACK_CHECKS].get(vendor_hack_format_value_decoded, 0)
+                                        self.stats_dictionaries[STATS_VENDOR_HACK_CHECKS][vendor_hack_format_value_decoded] = existing_value + 1
                                     elif check_device_format_value_int > 0:
                                         potential_vendor_hack_format_value = self.detect_potential_vendor_hack(check_device_format_value_int, trace_line)
 
@@ -1553,14 +1597,14 @@ class TraceStats:
                                             logger.warning(f'Detected a check for a FOURCC/potential vendor hack value: {potential_vendor_hack_format_value}')
 
                             elif DEVICE_CREATION_CALL in call:
-                                logger.debug(f'Found device type, behavior flags and present parameters on line: {trace_line}')
+                                logger.debug(f'Found device type, behavior flags and present parameters on line {trace_line_counter}')
 
                                 device_type_start = trace_line.find(DEVICE_TYPE_IDENTIFIER) + DEVICE_TYPE_IDENTIFIER_LENGTH
                                 device_type = trace_line[device_type_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
                                                                                            device_type_start)].strip()
 
-                                existing_value = self.device_type_dictionary.get(device_type, 0)
-                                self.device_type_dictionary[device_type] = existing_value + 1
+                                existing_value = self.stats_dictionaries[STATS_DEVICE_TYPES].get(device_type, 0)
+                                self.stats_dictionaries[STATS_DEVICE_TYPES][device_type] = existing_value + 1
 
                                 behavior_flags_start = trace_line.find(BEHAVIOR_FLAGS_IDENTIFIER) + BEHAVIOR_FLAGS_IDENTIFIER_LENGTH
                                 behavior_flags = trace_line[behavior_flags_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
@@ -1569,8 +1613,8 @@ class TraceStats:
 
                                 for behavior_flag in behavior_flags:
                                     behavior_flag_stripped = behavior_flag.strip()
-                                    existing_value = self.behavior_flag_dictionary.get(behavior_flag_stripped, 0)
-                                    self.behavior_flag_dictionary[behavior_flag_stripped] = existing_value + 1
+                                    existing_value = self.stats_dictionaries[STATS_BEHAVIOR_FLAGS].get(behavior_flag_stripped, 0)
+                                    self.stats_dictionaries[STATS_BEHAVIOR_FLAGS][behavior_flag_stripped] = existing_value + 1
 
                                 if PRESENT_PARAMETERS_SKIP_IDENTIFIER not in trace_line:
                                     if PRESENT_PARAMETER_FLAGS_SKIP_IDENTIFIER not in trace_line:
@@ -1581,8 +1625,8 @@ class TraceStats:
 
                                         for present_parameter_flag in present_parameter_flags:
                                             present_parameter_flag_stripped = present_parameter_flag.strip()
-                                            existing_value = self.present_parameter_flag_dictionary.get(present_parameter_flag_stripped, 0)
-                                            self.present_parameter_flag_dictionary[present_parameter_flag_stripped] = existing_value + 1
+                                            existing_value = self.stats_dictionaries[STATS_PRESENT_PARAMETER_FLAGS].get(present_parameter_flag_stripped, 0)
+                                            self.stats_dictionaries[STATS_PRESENT_PARAMETER_FLAGS][present_parameter_flag_stripped] = existing_value + 1
 
                                     present_parameters_start = trace_line.find(PRESENT_PARAMETERS_IDENTIFIER) + PRESENT_PARAMETERS_IDENTIFIER_LENGTH
                                     present_parameters = trace_line[present_parameters_start:trace_line.find(PRESENT_PARAMETERS_IDENTIFIER_END,
@@ -1594,19 +1638,19 @@ class TraceStats:
                                         present_parameter_key, present_parameter_value = present_parameter_stripped.split(PRESENT_PARAMETERS_VALUE_SPLIT_DELIMITER)
 
                                         if present_parameter_key not in PRESENT_PARAMETERS_SKIPPED:
-                                            existing_value = self.present_parameter_dictionary.get(present_parameter_stripped, 0)
-                                            self.present_parameter_dictionary[present_parameter_stripped] = existing_value + 1
+                                            existing_value = self.stats_dictionaries[STATS_PRESENT_PARAMETERS].get(present_parameter_stripped, 0)
+                                            self.stats_dictionaries[STATS_PRESENT_PARAMETERS][present_parameter_stripped] = existing_value + 1
 
                             elif RENDER_STATES_CALL in call:
-                                logger.debug(f'Found render states on line: {trace_line}')
+                                logger.debug(f'Found render states on line {trace_line_counter}')
 
                                 render_state_start = trace_line.find(RENDER_STATES_IDENTIFIER) + RENDER_STATES_IDENTIFIER_LENGTH
                                 render_state = trace_line[render_state_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
                                                                                              render_state_start)].strip()
 
                                 if render_state.startswith(RENDER_STATES_PREFIX):
-                                    existing_value = self.render_state_dictionary.get(render_state, 0)
-                                    self.render_state_dictionary[render_state] = existing_value + 1
+                                    existing_value = self.stats_dictionaries[STATS_RENDER_STATES].get(render_state, 0)
+                                    self.stats_dictionaries[STATS_RENDER_STATES][render_state] = existing_value + 1
                                 else:
                                     logger.warn(f'Detected an invalid render state: {render_state}')
 
@@ -1629,12 +1673,12 @@ class TraceStats:
                                     vendor_hack_value_int = int(vendor_hack_value)
 
                                     if vendor_hack_value in VENDOR_HACK_VALUES.keys():
-                                        logger.debug(f'Found vendor hack on line: {trace_line}')
+                                        logger.debug(f'Found vendor hack on line {trace_line_counter}')
 
                                         vendor_hack_value_lookup = VENDOR_HACK_VALUES[vendor_hack_value]
                                         vendor_hack_value_decoded = ''.join((vendor_hack_render_state, vendor_hack_value_lookup))
-                                        existing_value = self.vendor_hack_dictionary.get(vendor_hack_value_decoded, 0)
-                                        self.vendor_hack_dictionary[vendor_hack_value_decoded] = existing_value + 1
+                                        existing_value = self.stats_dictionaries[STATS_VENDOR_HACKS].get(vendor_hack_value_decoded, 0)
+                                        self.stats_dictionaries[STATS_VENDOR_HACKS][vendor_hack_value_decoded] = existing_value + 1
                                     elif vendor_hack_value_int > 0:
                                         potential_vendor_hack_value = self.detect_potential_vendor_hack(vendor_hack_value_int, trace_line)
 
@@ -1642,14 +1686,14 @@ class TraceStats:
                                             logger.warning(f'Detected a potential vendor hack value: {potential_vendor_hack_value}')
 
                             elif TEXTURE_STAGE_TYPE_CALL in call:
-                                logger.debug(f'Found texture stage state on line: {trace_line}')
+                                logger.debug(f'Found texture stage state on line {trace_line_counter}')
 
                                 texture_stage_type_start = trace_line.find(TEXTURE_STAGE_TYPE_IDENTIFIER) + TEXTURE_STAGE_TYPE_IDENTIFIER_LENGTH
                                 texture_stage_type = trace_line[texture_stage_type_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
                                                                                                          texture_stage_type_start)].strip()
 
-                                existing_value = self.texture_stage_type_dictionary.get(texture_stage_type, 0)
-                                self.texture_stage_type_dictionary[texture_stage_type] = existing_value + 1
+                                existing_value = self.stats_dictionaries[STATS_TEXTURE_STAGE_TYPES].get(texture_stage_type, 0)
+                                self.stats_dictionaries[STATS_TEXTURE_STAGE_TYPES][texture_stage_type] = existing_value + 1
 
                                 texture_stage_state_start = trace_line.find(TEXTURE_STAGE_STATE_IDENTIFIER) + TEXTURE_STAGE_STATE_IDENTIFIER_LENGTH
                                 texture_stage_states = trace_line[texture_stage_state_start:trace_line.find(TEXTURE_STAGE_STATE_IDENTIFIER_END,
@@ -1661,12 +1705,12 @@ class TraceStats:
                                     texture_stage_state_stripped = texture_stage_state.strip()
                                     # There are some stage states with simple numeric values, skip those
                                     if texture_stage_state_stripped.startswith(TEXTURE_STAGE_STATE_VALUE_IDENTIFIER):
-                                        existing_value = self.texture_stage_state_dictionary.get(texture_stage_state_stripped, 0)
-                                        self.texture_stage_state_dictionary[texture_stage_state_stripped] = existing_value + 1
+                                        existing_value = self.stats_dictionaries[STATS_TEXTURE_STAGE_STATES].get(texture_stage_state_stripped, 0)
+                                        self.stats_dictionaries[STATS_TEXTURE_STAGE_STATES][texture_stage_state_stripped] = existing_value + 1
 
                             # D3D8 uses IDirect3DDevice8::GetInfo calls to initiate queries
                             elif self.api == 'D3D8' and QUERY_TYPE_CALL_D3D8 in call:
-                                logger.debug(f'Found query type on line: {trace_line}')
+                                logger.debug(f'Found query type on line {trace_line_counter}')
 
                                 query_type_start = trace_line.find(QUERY_TYPE_IDENTIFIER_D3D8) + QUERY_TYPE_IDENTIFIER_LENGTH_D3D8
                                 query_type = trace_line[query_type_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
@@ -1674,22 +1718,22 @@ class TraceStats:
                                 query_type_decoded = self.d3d8_query_type(query_type)
                                 logger.debug(f'Decoded query type is: {query_type_decoded}')
 
-                                existing_value = self.query_type_dictionary.get(query_type_decoded, 0)
-                                self.query_type_dictionary[query_type_decoded] = existing_value + 1
+                                existing_value = self.stats_dictionaries[STATS_QUERY_TYPES].get(query_type_decoded, 0)
+                                self.stats_dictionaries[STATS_QUERY_TYPES][query_type_decoded] = existing_value + 1
 
                             # D3D9Ex/D3D9 use IDirect3DQuery9::CreateQuery to initiate queries
                             elif (self.api == 'D3D9Ex' or self.api == 'D3D9') and QUERY_TYPE_CALL_D3D9_10_11 in call:
-                                logger.debug(f'Found query type on line: {trace_line}')
+                                logger.debug(f'Found query type on line {trace_line_counter}')
 
                                 query_type_start = trace_line.find(QUERY_TYPE_IDENTIFIER_D3D9) + QUERY_TYPE_IDENTIFIER_LENGTH_D3D9
                                 query_type = trace_line[query_type_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
                                                                                          query_type_start)].strip()
 
-                                existing_value = self.query_type_dictionary.get(query_type, 0)
-                                self.query_type_dictionary[query_type] = existing_value + 1
+                                existing_value = self.stats_dictionaries[STATS_QUERY_TYPES].get(query_type, 0)
+                                self.stats_dictionaries[STATS_QUERY_TYPES][query_type] = existing_value + 1
 
                             elif LOCK_FLAGS_CALL in call:
-                                logger.debug(f'Found lock flags on line: {trace_line}')
+                                logger.debug(f'Found lock flags on line {trace_line_counter}')
 
                                 if LOCK_FLAGS_SKIP_IDENTIFIER not in trace_line:
                                     lock_flags_start = trace_line.find(LOCK_FLAGS_IDENTIFIER) + LOCK_FLAGS_IDENTIFIER_LENGTH
@@ -1703,11 +1747,11 @@ class TraceStats:
 
                                         # Mafia sets several bogus lock values (not part of the enum)
                                         if lock_flag_stripped.startswith(LOCK_FLAGS_VALUE_IDENTIFIER):
-                                            existing_value = self.lock_flag_dictionary.get(lock_flag_stripped, 0)
-                                            self.lock_flag_dictionary[lock_flag_stripped] = existing_value + 1
+                                            existing_value = self.stats_dictionaries[STATS_LOCK_FLAGS].get(lock_flag_stripped, 0)
+                                            self.stats_dictionaries[STATS_LOCK_FLAGS][lock_flag_stripped] = existing_value + 1
 
                             elif VERTEX_SHADER_CALL in call or PIXEL_SHADER_CALL in call:
-                                logger.debug(f'Found shader on line: {trace_line}')
+                                logger.debug(f'Found shader on line {trace_line_counter}')
 
                                 shader_call_disassembled = False
 
@@ -1725,8 +1769,8 @@ class TraceStats:
                                         shader_version = 'vs_fvf'
                                         logger.debug(f'Shader version: {shader_version}')
 
-                                        existing_value = self.shader_version_dictionary.get(shader_version, 0)
-                                        self.shader_version_dictionary[shader_version] = existing_value + 1
+                                        existing_value = self.stats_dictionaries[STATS_SHADER_VERSIONS].get(shader_version, 0)
+                                        self.stats_dictionaries[STATS_SHADER_VERSIONS][shader_version] = existing_value + 1
 
                                     else:
                                         shader_version = None
@@ -1764,24 +1808,22 @@ class TraceStats:
                                         if shader_version is not None:
                                             logger.debug(f'Shader version: {shader_version}')
 
-                                            existing_value = self.shader_version_dictionary.get(shader_version, 0)
-                                            self.shader_version_dictionary[shader_version] = existing_value + 1
-                                else:
-                                    logger.debug(f'Skipped parsing of shader line: {trace_line}')
+                                            existing_value = self.stats_dictionaries[STATS_SHADER_VERSIONS].get(shader_version, 0)
+                                            self.stats_dictionaries[STATS_SHADER_VERSIONS][shader_version] = existing_value + 1
 
                             elif API_ENTRY_FORMAT_BASE_CALL in call:
                                 if FORMAT_IDENTIFIER in trace_line:
-                                    logger.debug(f'Found format on line: {trace_line}')
+                                    logger.debug(f'Found format on line {trace_line_counter}')
 
                                     format_start = trace_line.find(FORMAT_IDENTIFIER) + FORMAT_IDENTIFIER_LENGTH
                                     format_value = trace_line[format_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
                                                                                            format_start)].strip()
 
-                                    existing_value = self.format_dictionary.get(format_value, 0)
-                                    self.format_dictionary[format_value] = existing_value + 1
+                                    existing_value = self.stats_dictionaries[STATS_FORMATS].get(format_value, 0)
+                                    self.stats_dictionaries[STATS_FORMATS][format_value] = existing_value + 1
 
                                 if USAGE_IDENTIFIER in trace_line:
-                                    logger.debug(f'Found usage on line: {trace_line}')
+                                    logger.debug(f'Found usage on line {trace_line_counter}')
 
                                     if USAGE_SKIP_IDENTIFIER not in trace_line:
                                         usage_start = trace_line.find(USAGE_IDENTIFIER) + USAGE_IDENTIFIER_LENGTH
@@ -1797,43 +1839,43 @@ class TraceStats:
                                         for usage_value in usage_values:
                                             usage_value_stripped = usage_value.strip()
                                             if usage_value_stripped.startswith(USAGE_VALUE_IDENTIFIER):
-                                                existing_value = self.usage_dictionary.get(usage_value_stripped, 0)
-                                                self.usage_dictionary[usage_value_stripped] = existing_value + 1
+                                                existing_value = self.stats_dictionaries[STATS_USAGE].get(usage_value_stripped, 0)
+                                                self.stats_dictionaries[STATS_USAGE][usage_value_stripped] = existing_value + 1
 
                                 if POOL_IDENTIFIER in trace_line:
-                                    logger.debug(f'Found pool on line: {trace_line}')
+                                    logger.debug(f'Found pool on line {trace_line_counter}')
 
                                     pool_start = trace_line.find(POOL_IDENTIFIER) + POOL_IDENTIFIER_LENGTH
                                     pool_value = trace_line[pool_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
                                                                                        pool_start)].strip()
 
-                                    existing_value = self.pool_dictionary.get(pool_value, 0)
-                                    self.pool_dictionary[pool_value] = existing_value + 1
+                                    existing_value = self.stats_dictionaries[STATS_POOLS].get(pool_value, 0)
+                                    self.stats_dictionaries[STATS_POOLS][pool_value] = existing_value + 1
 
                             elif LIGHT_TYPE_CALL in call:
-                                logger.debug(f'Found light type on line: {trace_line}')
+                                logger.debug(f'Found light type on line {trace_line_counter}')
 
                                 light_type_start = trace_line.find(LIGHT_TYPE_IDENTIFIER) + LIGHT_TYPE_IDENTIFIER_LENGTH
                                 light_type = trace_line[light_type_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
                                                                                          light_type_start)].strip()
 
-                                existing_value = self.light_type_dictionary.get(light_type, 0)
-                                self.light_type_dictionary[light_type] = existing_value + 1
+                                existing_value = self.stats_dictionaries[STATS_LIGHT_TYPES].get(light_type, 0)
+                                self.stats_dictionaries[STATS_LIGHT_TYPES][light_type] = existing_value + 1
 
                             elif PROCESS_VERTICES_FLAGS_CALL in call:
-                                logger.debug(f'Found process vertices flags on line: {trace_line}')
+                                logger.debug(f'Found process vertices flags on line {trace_line_counter}')
 
                                 if PROCESS_VERTICES_FLAGS_SKIP_IDENTIFIER3 not in trace_line:
                                     process_vertices_flags_start = trace_line.find(PROCESS_VERTICES_FLAGS_IDENTIFIER3) + PROCESS_VERTICES_FLAGS_IDENTIFIER3_LENGTH
                                     process_vertices_flag = trace_line[process_vertices_flags_start:trace_line.find(PROCESS_VERTICES_FLAGS_IDENTIFIER3_END,
                                                                                                                     process_vertices_flags_start)].strip()
 
-                                    existing_value = self.process_vertices_flag_dictionary.get(process_vertices_flag, 0)
-                                    self.process_vertices_flag_dictionary[process_vertices_flag] = existing_value + 1
+                                    existing_value = self.stats_dictionaries[STATS_PROCESS_VERTICES_FLAGS].get(process_vertices_flag, 0)
+                                    self.stats_dictionaries[STATS_PROCESS_VERTICES_FLAGS][process_vertices_flag] = existing_value + 1
 
                         elif self.api == 'D3D10' or self.api == 'D3D11':
                             if DEVICE_FLAGS_AND_FEATURE_LEVELS_CALL in call:
-                                logger.debug(f'Found device flags and feature levels on line: {trace_line}')
+                                logger.debug(f'Found device flags and feature levels on line {trace_line_counter}')
 
                                 if DEVICE_FLAGS_SKIP_IDENTIFIER not in trace_line:
                                     device_flags_start = trace_line.find(DEVICE_FLAGS_IDENTIFIER) + DEVICE_FLAGS_IDENTIFIER_LENGTH
@@ -1843,8 +1885,8 @@ class TraceStats:
 
                                     for device_flag in device_flags:
                                         device_flag_stripped = device_flag.strip()
-                                        existing_value = self.device_flag_dictionary.get(device_flag_stripped, 0)
-                                        self.device_flag_dictionary[device_flag_stripped] = existing_value + 1
+                                        existing_value = self.stats_dictionaries[STATS_DEVICE_FLAGS].get(device_flag_stripped, 0)
+                                        self.stats_dictionaries[STATS_DEVICE_FLAGS][device_flag_stripped] = existing_value + 1
 
                                 if FEATURE_LEVELS_SKIP_IDENTIFIER not in trace_line:
                                     if FEATURE_LEVELS_IDENTIFIER in trace_line:
@@ -1855,19 +1897,19 @@ class TraceStats:
 
                                         for feature_level in feature_levels:
                                             feature_level_stripped = feature_level.strip()
-                                            existing_value = self.feature_level_dictionary.get(feature_level_stripped, 0)
-                                            self.feature_level_dictionary[feature_level_stripped] = existing_value + 1
+                                            existing_value = self.stats_dictionaries[STATS_FEATURE_LEVELS].get(feature_level_stripped, 0)
+                                            self.stats_dictionaries[STATS_FEATURE_LEVELS][feature_level_stripped] = existing_value + 1
 
                                     elif FEATURE_LEVELS_IDENTIFIER_ONE in trace_line:
                                         feature_levels_start = trace_line.find(FEATURE_LEVELS_IDENTIFIER_ONE) + FEATURE_LEVELS_IDENTIFIER_ONE_LENGTH
                                         feature_level_stripped = trace_line[feature_levels_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
                                                                                                                  feature_levels_start)].strip()
-                                        existing_value = self.feature_level_dictionary.get(feature_level_stripped, 0)
-                                        self.feature_level_dictionary[feature_level_stripped] = existing_value + 1
+                                        existing_value = self.stats_dictionaries[STATS_FEATURE_LEVELS].get(feature_level_stripped, 0)
+                                        self.stats_dictionaries[STATS_FEATURE_LEVELS][feature_level_stripped] = existing_value + 1
 
                             # need to cater for 'CreateDeviceAndSwapChain' parameters parsing too, so no elif
                             if SWAPCHAIN_PARAMETERS_CALL in call or SWAPCHAIN_DEVICE_PARAMETERS_CALL in call:
-                                logger.debug(f'Found swapchain parameters on line: {trace_line}')
+                                logger.debug(f'Found swapchain parameters on line {trace_line_counter}')
 
                                 if SWAPCHAIN_PARAMETERS_SKIP_IDENTIFIER not in trace_line and SWAPCHAIN_PARAMETERS_SKIP_IDENTIFIER_2 not in trace_line:
                                     swapchain_parameters_position = trace_line.find(SWAPCHAIN_PARAMETERS_IDENTIFIER)
@@ -1899,8 +1941,8 @@ class TraceStats:
                                                         for swapchain_buffer_usage_flag in swapchain_buffer_usage:
                                                             swapchian_buffer_usage_flag_stripped = swapchain_buffer_usage_flag.strip()
 
-                                                            existing_value = self.swapchain_buffer_usage_dictionary.get(swapchian_buffer_usage_flag_stripped, 0)
-                                                            self.swapchain_buffer_usage_dictionary[swapchian_buffer_usage_flag_stripped] = existing_value + 1
+                                                            existing_value = self.stats_dictionaries[STATS_SWAPCHAIN_BUFFER_USAGE].get(swapchian_buffer_usage_flag_stripped, 0)
+                                                            self.stats_dictionaries[STATS_SWAPCHAIN_BUFFER_USAGE][swapchian_buffer_usage_flag_stripped] = existing_value + 1
 
                                                     elif swapchain_parameter_key == 'Flags':
                                                         swapchain_flags = swapchain_parameter_value.split(SWAPCHAIN_FLAGS_VALUE_SPLIT_DELIMITER)
@@ -1908,30 +1950,30 @@ class TraceStats:
                                                         for swapchain_flag in swapchain_flags:
                                                             swapchain_flag_stripped = swapchain_flag.strip()
 
-                                                            existing_value = self.swapchain_flag_dictionary.get(swapchain_flag_stripped, 0)
-                                                            self.swapchain_flag_dictionary[swapchain_flag_stripped] = existing_value + 1
+                                                            existing_value = self.stats_dictionaries[STATS_SWAPCHAIN_FLAGS].get(swapchain_flag_stripped, 0)
+                                                            self.stats_dictionaries[STATS_SWAPCHAIN_FLAGS][swapchain_flag_stripped] = existing_value + 1
 
                                                     else:
                                                         if swapchain_parameter_key == 'Count' or swapchain_parameter_key == 'Quality':
                                                             swapchain_parameter_stripped = ' '.join(('SampleDesc', swapchain_parameter_stripped))
 
-                                                        existing_value = self.swapchain_parameter_dictionary.get(swapchain_parameter_stripped, 0)
-                                                        self.swapchain_parameter_dictionary[swapchain_parameter_stripped] = existing_value + 1
+                                                        existing_value = self.stats_dictionaries[STATS_SWAPCHAIN_PARAMETERS].get(swapchain_parameter_stripped, 0)
+                                                        self.stats_dictionaries[STATS_SWAPCHAIN_PARAMETERS][swapchain_parameter_stripped] = existing_value + 1
                                         except ValueError:
                                             pass
 
                             elif QUERY_TYPE_CALL_D3D9_10_11 in call:
-                                logger.debug(f'Found query type on line: {trace_line}')
+                                logger.debug(f'Found query type on line {trace_line_counter}')
 
                                 query_type_start = trace_line.find(QUERY_TYPE_IDENTIFIER_D3D10_11) + QUERY_TYPE_IDENTIFIER_D3D10_11_LENGTH
                                 query_type = trace_line[query_type_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
                                                                                          query_type_start)].strip()
 
-                                existing_value = self.query_type_dictionary.get(query_type, 0)
-                                self.query_type_dictionary[query_type] = existing_value + 1
+                                existing_value = self.stats_dictionaries[STATS_QUERY_TYPES].get(query_type, 0)
+                                self.stats_dictionaries[STATS_QUERY_TYPES][query_type] = existing_value + 1
 
                             elif RASTIZER_STATE_CALL in call:
-                                logger.debug(f'Found rastizer state on line: {trace_line}')
+                                logger.debug(f'Found rastizer state on line {trace_line_counter}')
 
                                 if RASTIZER_STATE_IDENTIFIER in trace_line:
                                     rastizer_states_start = trace_line.find(RASTIZER_STATE_IDENTIFIER) + RASTIZER_STATE_IDENTIFIER_LENGTH
@@ -1944,11 +1986,11 @@ class TraceStats:
                                         rastizer_state_key, rastizer_state_value = rastizer_state_stripped.split(RASTIZER_STATE_VALUE_SPLIT_DELIMITER)
 
                                         if rastizer_state_key not in RASTIZER_STATE_SKIPPED:
-                                            existing_value = self.rastizer_state_dictionary.get(rastizer_state_stripped, 0)
-                                            self.rastizer_state_dictionary[rastizer_state_stripped] = existing_value + 1
+                                            existing_value = self.stats_dictionaries[STATS_RASTIZER_STATES].get(rastizer_state_stripped, 0)
+                                            self.stats_dictionaries[STATS_RASTIZER_STATES][rastizer_state_stripped] = existing_value + 1
 
                             elif BLEND_STATE_CALL in call:
-                                logger.debug(f'Found blend state on line: {trace_line}')
+                                logger.debug(f'Found blend state on line {trace_line_counter}')
 
                                 if BLEND_STATE_IDENTIFIER in trace_line:
                                     blend_states_start = trace_line.find(BLEND_STATE_IDENTIFIER) + BLEND_STATE_IDENTIFIER_LENGTH
@@ -1963,13 +2005,13 @@ class TraceStats:
 
                                     for blend_state in blend_states:
                                         blend_state_stripped = blend_state.strip()
-                                        existing_value = self.blend_state_dictionary.get(blend_state_stripped, 0)
-                                        self.blend_state_dictionary[blend_state_stripped] = existing_value + 1
+                                        existing_value = self.stats_dictionaries[STATS_BLEND_STATES](blend_state_stripped, 0)
+                                        self.stats_dictionaries[STATS_BLEND_STATES][blend_state_stripped] = existing_value + 1
 
                             elif (VERTEX_SHADER_CALL in call or PIXEL_SHADER_CALL in call or
                                   COMPUTE_SHADER_CALL in call or DOMAIN_SHADER_CALL in call or
                                   GEOMETRY_SHADER_CALL in call or HULL_SHADER_CALL in call):
-                                logger.debug(f'Found shader on line: {trace_line}')
+                                logger.debug(f'Found shader on line {trace_line_counter}')
 
                                 shader_call_disassembled = False
 
@@ -2108,14 +2150,12 @@ class TraceStats:
                                     if shader_version is not None:
                                         logger.debug(f'Shader version: {shader_version}')
 
-                                        existing_value = self.shader_version_dictionary.get(shader_version, 0)
-                                        self.shader_version_dictionary[shader_version] = existing_value + 1
-                                else:
-                                    logger.debug(f'Skipped parsing of shader line: {trace_line}')
+                                        existing_value = self.stats_dictionaries[STATS_SHADER_VERSIONS].get(shader_version, 0)
+                                        self.stats_dictionaries[STATS_SHADER_VERSIONS][shader_version] = existing_value + 1
 
                             elif API_ENTRY_FORMAT_BASE_CALL in call:
                                 if FORMAT_IDENTIFIER in trace_line:
-                                    logger.debug(f'Found format on line: {trace_line}')
+                                    logger.debug(f'Found format on line {trace_line_counter}')
 
                                     format_start = trace_line.find(FORMAT_IDENTIFIER) + FORMAT_IDENTIFIER_LENGTH
                                     format_value = trace_line[format_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
@@ -2124,11 +2164,11 @@ class TraceStats:
                                     # at times the format value can end in a '},' block
                                     format_value = format_value.replace('}', '')
 
-                                    existing_value = self.format_dictionary.get(format_value, 0)
-                                    self.format_dictionary[format_value] = existing_value + 1
+                                    existing_value = self.stats_dictionaries[STATS_FORMATS].get(format_value, 0)
+                                    self.stats_dictionaries[STATS_FORMATS][format_value] = existing_value + 1
 
                                 if USAGE_IDENTIFIER in trace_line:
-                                    logger.debug(f'Found usage on line: {trace_line}')
+                                    logger.debug(f'Found usage on line {trace_line_counter}')
 
                                     usage_start = trace_line.find(USAGE_IDENTIFIER) + USAGE_IDENTIFIER_LENGTH
                                     usage_value = trace_line[usage_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
@@ -2138,11 +2178,11 @@ class TraceStats:
                                     usage_value = usage_value.replace('}', '')
 
                                     if not USAGE_SKIP_IDENTIFIER_D3D10_11 in usage_value:
-                                        existing_value = self.usage_dictionary.get(usage_value, 0)
-                                        self.usage_dictionary[usage_value] = existing_value + 1
+                                        existing_value = self.stats_dictionaries[STATS_USAGE].get(usage_value, 0)
+                                        self.stats_dictionaries[STATS_USAGE][usage_value] = existing_value + 1
 
                                 if BIND_FLAGS_IDENTIFIER in trace_line:
-                                    logger.debug(f'Found bind flags on line: {trace_line}')
+                                    logger.debug(f'Found bind flags on line {trace_line_counter}')
 
                                     if BIND_FLAGS_SKIP_IDENTIFIER not in trace_line:
                                         bind_flags_start = trace_line.find(BIND_FLAGS_IDENTIFIER) + BIND_FLAGS_IDENTIFIER_LENGTH
@@ -2153,12 +2193,8 @@ class TraceStats:
 
                                         for bind_flag in bind_flags:
                                             bind_flag_stripped = bind_flag.strip()
-                                            existing_value = self.bind_flag_dictionary.get(bind_flag_stripped, 0)
-                                            self.bind_flag_dictionary[bind_flag_stripped] = existing_value + 1
-
-                    else:
-                        # these will usually be (numbered) memcpy lines
-                        logger.debug(f'Skipped parsing of numbered line: {trace_line}')
+                                            existing_value = self.stats_dictionaries[STATS_BIND_FLAGS].get(bind_flag_stripped, 0)
+                                            self.stats_dictionaries[STATS_BIND_FLAGS][bind_flag_stripped] = existing_value + 1
 
                     if trace_line_counter > 0 and trace_line_counter % TRACE_LOGGING_CHUNK_CALLS == 0:
                         logger.info(f'Proccessed {trace_line_counter} apitrace lines...')
