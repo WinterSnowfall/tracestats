@@ -31,9 +31,9 @@ API_VALUES_ENCODE = {'D3D3'    : 1,
                      'D3D9Ex'  : 7,
                      'D3D10'   : 8,
                      'D3D11'   : 9,
-                     'Glide1X' : 10,
-                     'Glide2X' : 11,
-                     'Glide3X' : 12}
+                     'Glide1x' : 10,
+                     'Glide2x' : 11,
+                     'Glide3x' : 12}
 
 API_VALUES_DECODE = {1:  'D3D3',
                      2:  'D3D5',
@@ -44,9 +44,9 @@ API_VALUES_DECODE = {1:  'D3D3',
                      7:  'D3D9Ex',
                      8:  'D3D10',
                      9:  'D3D11',
-                     10: 'Glide1X',
-                     11: 'Glide2X',
-                     12: 'Glide3X'}
+                     10: 'Glide1x',
+                     11: 'Glide2x',
+                     12: 'Glide3x'}
 
 STATS_TYPE_ENCODE = {# D3D or common stats
                      'api_calls': 1,
@@ -88,7 +88,8 @@ STATS_TYPE_ENCODE = {# D3D or common stats
                      'depth_buffer_modes': 102,
                      'lfb_write_modes': 103,
                      'hints': 104,
-                     'vertex_layouts': 105}
+                     'vertex_layouts': 105,
+                     'coordinate_spaces': 106}
 
 TRACE_API_OVERRIDES = {'ff7'        : 'D3D5',   # Creates a D3D3 device first, but queries for a D3D5 device and renders with it
                        'TSM'        : 'D3D9',   # Ignore queries done on a D3D9Ex interface, as it's not used for rendering
@@ -114,11 +115,11 @@ API_ENTRY_CALLS = {'IDirect3DDevice7': 'D3D7',
                    'D3D11CreateDeviceAndSwapChain': 'D3D11',
                    'D3D11CreateDevice': 'D3D11',
                    'D3D11CoreCreateDevice': 'D3D11',
-                   'Glide1X': 'Glide1X',
-                   'Glide2X': 'Glide2X',
-                   'Glide3X': 'Glide3X'}
+                   'Glide1X': 'Glide1x',
+                   'Glide2X': 'Glide2x',
+                   'Glide3X': 'Glide3x'}
 
-API_FAMILY_GLIDE = ('Glide1X', 'Glide2X', 'Glide3X')
+API_ENTRY_CALLS_GLIDE = ('Glide1X', 'Glide2X', 'Glide3X')
 
 def tracestats(request):
   request.session['filter_selection_visible'] = False
@@ -276,7 +277,7 @@ def tracestats(request):
                   stats = []
                   for key, value in entry_stats_values.items():
                     # Skip saving the Glide API identifier entry in the database
-                    if entry_api >= 10 and stat_type == 'api_calls' and key in API_FAMILY_GLIDE:
+                    if entry_api >= 10 and stat_type == 'api_calls' and key in API_ENTRY_CALLS_GLIDE:
                       continue
 
                     stats.append(models.Stats(trace=trace,

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 '''
 @author: Winter Snowfall
-@version: 2.12
-@date: 02/11/2026
+@version: 2.13
+@date: 08/11/2026
 '''
 
 import os
@@ -82,6 +82,7 @@ STATS_DEPTH_BUFFER_MODES = 102
 STATS_LFB_WRITE_MODES = 103
 STATS_HINTS = 104
 STATS_VERTEX_LAYOUTS = 105
+STATS_COORDINATE_SPACES = 106
 
 STATS_TYPE_DECODE = {# D3D or common stats
                      1:   'api_calls',
@@ -123,7 +124,8 @@ STATS_TYPE_DECODE = {# D3D or common stats
                      102: 'depth_buffer_modes',
                      103: 'lfb_write_modes',
                      104: 'hints',
-                     105: 'vertex_layouts'}
+                     105: 'vertex_layouts',
+                     106: 'coordinate_spaces'}
 
 TRACE_API_OVERRIDES = {'ff7'        : 'D3D5',   # Creates a D3D3 device first, but queries for a D3D5 device and renders with it
                        'TSM'        : 'D3D9',   # Ignore queries done on a D3D9Ex interface, as it's not used for rendering
@@ -142,7 +144,7 @@ API_ENTRY_GLIDE_IDENTIFIER = 'Glide'
 API_ENTRY_VALUE_DELIMITER = ','
 SHADER_DUMP_SKIP_IDENTIFIER_D3D8_9 = 'pFunction = NULL'
 SHADER_DUMP_SKIP_IDENTIFIER_D3D10_11 = 'pShaderBytecode = NULL'
-SHADER_DUMP_SKIP_API_LEVELS = ('D3D3', 'D3D5', 'D3D6', 'D3D7', 'Glide1X', 'Glide2X', 'Glide3X')
+SHADER_DUMP_SKIP_API_LEVELS = ('D3D3', 'D3D5', 'D3D6', 'D3D7', 'Glide1x', 'Glide2x', 'Glide3x')
 
 API_ENTRY_CALLS = {'IDirect3DDevice7': 'D3D7',
                    'IDirect3DDevice3': 'D3D6',
@@ -159,11 +161,11 @@ API_ENTRY_CALLS = {'IDirect3DDevice7': 'D3D7',
                    'D3D11CreateDeviceAndSwapChain': 'D3D11',
                    'D3D11CreateDevice': 'D3D11',
                    'D3D11CoreCreateDevice': 'D3D11',
-                   'Glide1X': 'Glide1X',
-                   'Glide2X': 'Glide2X',
-                   'Glide3X': 'Glide3X'}
+                   'Glide1X': 'Glide1x',
+                   'Glide2X': 'Glide2x',
+                   'Glide3X': 'Glide3x'}
 
-API_FAMILY_GLIDE = ('Glide1X', 'Glide2X', 'Glide3X')
+API_FAMILY_GLIDE = ('Glide1x', 'Glide2x', 'Glide3x')
 
 API_BASE_CALLS = {**API_ENTRY_CALLS, 'DirectDrawCreateEx': 'DDraw7',
                                      'DirectDrawEnumerateExA': 'DDraw7',
@@ -238,7 +240,7 @@ D3DVOP_CLIP      = 0x00000004
 D3DVOP_EXTENTS   = 0x00000008
 D3DVOP_LIGHT     = 0x00000400
 
-######################### Glide1X, Glide2X, Glide3X ############################
+######################### Glide1x, Glide2x, Glide3x ############################
 # texture formats
 GLIDE_TEXTURE_DOWNLOAD_CALL = 'grTexDownloadMipMap'
 GLIDE_TEXTURE_ALLOCATE_CALL = 'guTexAllocateMemory'
@@ -276,7 +278,12 @@ GLIDE_VERTEX_LAYOUT_CALL = 'grVertexLayout'
 GLIDE_VERTEX_LAYOUT_IDENTIFIER = 'param = '
 GLIDE_VERTEX_LAYOUT_IDENTIFIER_LENGTH = len(GLIDE_VERTEX_LAYOUT_IDENTIFIER)
 GLIDE_VERTEX_LAYOUT_SKIP_IDENTIFIER = 'mode = GR_PARAM_DISABLE'
-######################### Glide1X, Glide2X, Glide3X ############################
+# coordinate spaces
+GLIDE_COORDINATE_SPACE_CALL = 'grCoordinateSpace'
+GLIDE_COORDINATE_SPACE_IDENTIFIER = 'mode = '
+GLIDE_COORDINATE_SPACE_IDENTIFIER_LENGTH = len(GLIDE_COORDINATE_SPACE_IDENTIFIER)
+GLIDE_COORDINATE_SPACE_IDENTIFIER_END = ')'
+######################### Glide1x, Glide2x, Glide3x ############################
 
 ####################### DDRAW, D3D3, D3D5, D3D6, D3D7 ##########################
 # device type
@@ -1136,7 +1143,7 @@ class TraceStats:
                                 existing_value = self.stats_dictionaries[STATS_LFB_WRITE_MODES].get(lfb_format, 0)
                                 self.stats_dictionaries[STATS_LFB_WRITE_MODES][lfb_format] = existing_value + 1
 
-                            if self.api == 'Glide1X' or self.api == 'Glide2X':
+                            if self.api == 'Glide1x' or self.api == 'Glide2x':
                                 if GLIDE_HINTS_CALL in call:
                                     logger.debug(f'Found hints on line {trace_line_counter}')
 
@@ -1152,7 +1159,7 @@ class TraceStats:
                                             existing_value = self.stats_dictionaries[STATS_HINTS].get(hint_stripped, 0)
                                             self.stats_dictionaries[STATS_HINTS][hint_stripped] = existing_value + 1
 
-                            elif self.api == 'Glide3X':
+                            elif self.api == 'Glide3x':
                                 if GLIDE_VERTEX_LAYOUT_CALL in call:
                                     logger.debug(f'Found vertex layouts on line {trace_line_counter}')
 
@@ -1163,6 +1170,16 @@ class TraceStats:
 
                                         existing_value = self.stats_dictionaries[STATS_VERTEX_LAYOUTS].get(vertex_layout, 0)
                                         self.stats_dictionaries[STATS_VERTEX_LAYOUTS][vertex_layout] = existing_value + 1
+
+                                elif GLIDE_COORDINATE_SPACE_CALL in call:
+                                    logger.debug(f'Found coordinate spaces on line {trace_line_counter}')
+
+                                    coordinate_space_start = trace_line.find(GLIDE_COORDINATE_SPACE_IDENTIFIER) + GLIDE_COORDINATE_SPACE_IDENTIFIER_LENGTH
+                                    coordinate_space = trace_line[coordinate_space_start:trace_line.find(GLIDE_COORDINATE_SPACE_IDENTIFIER_END,
+                                                                                                         coordinate_space_start)].strip()
+
+                                    existing_value = self.stats_dictionaries[STATS_COORDINATE_SPACES].get(coordinate_space, 0)
+                                    self.stats_dictionaries[STATS_COORDINATE_SPACES][coordinate_space] = existing_value + 1
 
                         elif self.api == 'D3D7' or self.api == 'D3D6' or self.api == 'D3D5' or self.api == 'D3D3':
                             if COOPERATIVE_LEVEL_FLAGS_CALL in call:
