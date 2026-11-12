@@ -43,6 +43,7 @@
                         <th>API</th>
                         <th>🐦</th>
                         <th>🎮</th>
+                        <th>🔍</th>
                         <th>Stat Name</th>
                         <th>Stat Count</th>
                         <th>% Total</th>
@@ -50,10 +51,10 @@
                     {% for stat in search_results %}
                     <tr class="results-row">
                         <td class="no-selection-align-right"><b>{{ forloop.counter }}</b></td>
-                        <td>{{ stat.trace.name }}</td>
+                        <td>{{ stat.trace.name|safe }}</td>
                         <td>{{ api_values_decode|decode_api:stat.trace.api }}</td>
                         <td class="no-selection">
-                            <a href="{% url 'tracestats' %}?search={{ stat.trace.name|urlize }} !">🐦</a>
+                            <a href="{% url 'tracestats' %}?search={{ stat.trace.name|unmark_urlize }} !">🐦</a>
                         </td>
                         <td class="no-selection">
                             {% if stat.trace.link is None %}
@@ -61,6 +62,9 @@
                             {% else %}
                                 <a target="_blank" href="{{ stat.trace.link }}">🎮</a>
                             {% endif %}
+                        </td>
+                        <td class="no-selection">
+                            <a href="{% url 'tracestats' %}?search={{ stat.stat_name|unmark_urlize }} !">🔍</a>
                         </td>
                         <td>{{ stat.stat_name|safe }}</td>
                         <td>{{ stat.stat_count }}</td>

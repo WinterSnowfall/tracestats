@@ -1,3 +1,35 @@
+const MAX_FILE_SIZE_IN_BYTES = 16777216; // 16 MB
+
+const STATS_CHART_API_LABELS = [
+    'D3D3',
+    'D3D5',
+    'D3D6',
+    'D3D7',
+    'D3D8',
+    'D3D9',
+    'D3D9Ex',
+    'D3D10',
+    'D3D11',
+    'Glide1x',
+    'Glide2x',
+    'Glide3x'
+];
+
+const STATS_CHART_BACKGROUND_COLORS = [
+    '#9C78AA', // Light Plum
+    '#A3A624', // Light Olive Green
+    '#D2B48C', // Dark Beige
+    '#9C27B0', // Vibrant Purple
+    '#F57C23', // Light Orange
+    '#FFEA00', // Bright Yellow
+    '#33CC33', // Dark Green
+    '#FF3D00', // Dark Orange
+    '#36B4E1', // Light Blue
+    '#BFBFBF', // Light Gray
+    '#808080', // Medium Gray
+    '#404040', // Dark Gray
+];
+
 function getCookie(name) {
     let cookieValue = null;
 
@@ -17,18 +49,21 @@ function getCookie(name) {
 
 function removeURLSearchParameter() {
     const url = new URL(window.location.href);
-    url.searchParams.delete("search");
+    url.searchParams.delete('search');
     window.history.replaceState({}, document.title, url);
 }
 
-$(document).on('click', '#toggle-filter-selection', function() {
-    const csrftoken = getCookie('csrftoken');
+function getURLSearchParameter() {
+    const url = new URL(window.location.href);
+    return url.searchParams.get('search');
+}
 
+$(document).on('click', '#toggle-filter-selection', function() {
     $.ajax({
         url: '/tracestats/filter-selection/',
         method: 'POST',
         headers: {
-            'X-CSRFToken': csrftoken
+            'X-CSRFToken': getCookie('csrftoken')
         },
         success: function(response) {
             if (response.content) {
@@ -57,13 +92,11 @@ $(document).on('click', '#toggle-filter-selection', function() {
 });
 
 $(document).on('click', '#toggle-titles-list', function() {
-    const csrftoken = getCookie('csrftoken');
-
     $.ajax({
         url: '/tracestats/titles-list/',
         method: 'POST',
         headers: {
-            'X-CSRFToken': csrftoken
+            'X-CSRFToken': getCookie('csrftoken')
         },
         success: function(response) {
             if (response.content) {
@@ -92,14 +125,11 @@ $(document).on('click', '#toggle-titles-list', function() {
 });
 
 $(document).on('click', '#toggle-stats', function() {
-    removeURLSearchParameter();
-    const csrftoken = getCookie('csrftoken');
-
     $.ajax({
         url: '/tracestats/api-stats/',
         method: 'POST',
         headers: {
-            'X-CSRFToken': csrftoken
+            'X-CSRFToken': getCookie('csrftoken')
         },
         success: function(response) {
             if (response.content) {
@@ -116,27 +146,10 @@ $(document).on('click', '#toggle-stats', function() {
                 $('#stats-area').html(response.content);
                 $('#toggle-stats').attr('class', 'search-button-negative');
 
-                const backgroundColors = [
-                    '#9C78AA', // Light Plum
-                    '#A3A624', // Light Olive Green
-                    '#D2B48C', // Dark Beige
-                    '#9C27B0', // Vibrant Purple
-                    '#F57C23', // Light Orange
-                    '#FFEA00', // Bright Yellow
-                    '#33CC33', // Dark Green
-                    '#FF3D00', // Dark Orange
-                    '#36B4E1', // Light Blue
-                    '#BFBFBF', // Light Gray
-                    '#808080', // Medium Gray
-                    '#404040', // Dark Gray
-                ];
-
-                const ctx = $('#apiStatsPieChart')[0].getContext('2d');
-                const myPieChart = new Chart(ctx, {
+                new Chart($('#apiStatsPieChart')[0].getContext('2d'), {
                     type: 'pie',
                     data: {
-                        labels: ['D3D3', 'D3D5', 'D3D6', 'D3D7', 'D3D8', 'D3D9', 'D3D9Ex',
-                                 'D3D10', 'D3D11', 'Glide1x', 'Glide2x', 'Glide3x'],
+                        labels: STATS_CHART_API_LABELS,
                         datasets: [{
                             label: 'apitraces',
                             data: [response.api_stats['d3d3'],
@@ -151,7 +164,7 @@ $(document).on('click', '#toggle-stats', function() {
                                    response.api_stats['glide1x'],
                                    response.api_stats['glide2x'],
                                    response.api_stats['glide3x']],
-                            backgroundColor: backgroundColors
+                            backgroundColor: STATS_CHART_BACKGROUND_COLORS
                         }]
                     },
                     options: {
@@ -199,13 +212,11 @@ $(document).on('click', '#toggle-stats', function() {
 });
 
 $(document).on('click', '#toggle-file-upload', function() {
-    const csrftoken = getCookie('csrftoken');
-
     $.ajax({
         url: '/tracestats/file-upload/',
         method: 'POST',
         headers: {
-            'X-CSRFToken': csrftoken
+            'X-CSRFToken': getCookie('csrftoken')
         },
         success: function(response) {
             if (response.content) {
@@ -234,32 +245,34 @@ $(document).on('click', '#toggle-file-upload', function() {
 });
 
 $(document).on('click', '#filter-button', function() {
-    removeURLSearchParameter();
-
-    const csrfInput = $('<input>')
-                        .attr('type', 'hidden')
-                        .attr('name', 'csrfmiddlewaretoken')
-                        .val(getCookie('csrftoken'));
-    $('#filter-selection-form').append(csrfInput);
+    $('#filter-selection-form').append(
+        $('<input>').attr('type', 'hidden')
+                    .attr('name', 'csrfmiddlewaretoken')
+                    .val(getCookie('csrftoken'))
+    );
+    $('#filter-selection-form').append(
+        $('<input>').attr('type', 'hidden')
+                    .attr('name', 'search_input')
+                    .val(getURLSearchParameter())
+    );
     $('#filter-selection-form').submit();
 });
 
 $(document).on('click', '#upload-button', function() {
-    removeURLSearchParameter();
     const fileInput = $('.file-input');
 
     if (fileInput.length > 0) {
         const file = fileInput[0].files[0];
-        const maxSizeInBytes = 16777216; // 16 MB
 
-        if (file && file.size <= maxSizeInBytes) {
-            const csrfInput = $('<input>')
-                                .attr('type', 'hidden')
-                                .attr('name', 'csrfmiddlewaretoken')
-                                .val(getCookie('csrftoken'));
-            $('#file-upload-form').append(csrfInput);
+        if (file && file.size <= MAX_FILE_SIZE_IN_BYTES) {
+            removeURLSearchParameter()
+            $('#file-upload-form').append(
+                $('<input>').attr('type', 'hidden')
+                            .attr('name', 'csrfmiddlewaretoken')
+                            .val(getCookie('csrftoken'))
+            );
             $('#file-upload-form').submit();
-        } else if (file && file.size > maxSizeInBytes) {
+        } else if (file && file.size > MAX_FILE_SIZE_IN_BYTES) {
             if($('.password-input').val()) {
                 $('#file-upload-form')[0].reset();
                 $('#upload-notification-area').attr('class', 'notification-error');
@@ -290,13 +303,11 @@ $(document).on('click', '#reset-upload-form', function() {
 });
 
 $(document).on('click', '#sort-alphabetically', function() {
-    const csrftoken = getCookie('csrftoken');
-
     $.ajax({
         url: '/tracestats/titles-list/',
         method: 'POST',
         headers: {
-            'X-CSRFToken': csrftoken
+            'X-CSRFToken': getCookie('csrftoken')
         },
         data: {
             sort: 0
@@ -313,13 +324,11 @@ $(document).on('click', '#sort-alphabetically', function() {
 });
 
 $(document).on('click', '#sort-api', function() {
-    const csrftoken = getCookie('csrftoken');
-
     $.ajax({
         url: '/tracestats/titles-list/',
         method: 'POST',
         headers: {
-            'X-CSRFToken': csrftoken
+            'X-CSRFToken': getCookie('csrftoken')
         },
         data: {
             sort: 1
@@ -336,13 +345,11 @@ $(document).on('click', '#sort-api', function() {
 });
 
 $(document).on('click', '#sort-binary-name', function() {
-    const csrftoken = getCookie('csrftoken');
-
     $.ajax({
         url: '/tracestats/titles-list/',
         method: 'POST',
         headers: {
-            'X-CSRFToken': csrftoken
+            'X-CSRFToken': getCookie('csrftoken')
         },
         data: {
             sort: 2

@@ -120,6 +120,9 @@ CACHES = {
 SESSION_ENGINE = 'django.contrib.sessions.backends.cache'
 SESSION_CACHE_ALIAS = 'default'  # Use the default cache
 
+# This should be set to the same file size limit as in validators.py
+FILE_UPLOAD_MAX_MEMORY_SIZE = 16777216 # 16 MB
+
 FILE_UPLOAD_HANDLERS = [
     "django.core.files.uploadhandler.MemoryFileUploadHandler",
     "django.core.files.uploadhandler.TemporaryFileUploadHandler",

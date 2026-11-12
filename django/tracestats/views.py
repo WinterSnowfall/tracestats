@@ -5,7 +5,6 @@ import logging
 from urllib.parse import quote, unquote
 from django.shortcuts import render, redirect
 from django.template import loader
-from django.http import HttpResponse
 from django.http import JsonResponse
 from django.template.context_processors import csrf
 from django.utils.timezone import now
@@ -133,268 +132,290 @@ def tracestats(request):
   context = {}
   context['notification_type'] = 'notification-none'
 
-  if request.method == 'POST':
-    if 'upload-form' in request.POST:
-      form = forms.FileUploadForm(request.POST, request.FILES)
-      if form.is_valid():
-        upload_token = request.POST['authorization_token']
-        #logger.debug(f'Auth_token: {upload_token}')
-
-        try:
-          token = models.Tokens.objects.get(token=upload_token)
-        except models.Tokens.DoesNotExist:
-          token = None
-
-        if token is not None:
-          uploaded_file = request.FILES['file_upload']
-          logger.debug(f'Uploaded file name is: {uploaded_file.name}')
+  match request.method:
+    case 'POST':
+      if 'upload-form' in request.POST:
+        form = forms.FileUploadForm(request.POST, request.FILES)
+        if form.is_valid():
+          upload_token = request.POST['authorization_token']
+          #logger.debug(f'Auth_token: {upload_token}')
 
           try:
-            # Read the content of the file
-            file_content = uploaded_file.read().decode('utf-8')
-            tracestats_data = json.loads(file_content).get(JSON_BASE_KEY)
+            token = models.Tokens.objects.get(token=upload_token)
+          except models.Tokens.DoesNotExist:
+            token = None
 
-            if tracestats_data is not None:
-              for entry in tracestats_data:
-                # create/update base trace db entry
-                entry_application_name = entry.get('name')
-                logger.debug(f'Application name is: {entry_application_name}')
-                entry_binary_name = entry.get('binary_name')
-                logger.debug(f'Binary name is: {entry_binary_name}')
-                # use the binary name for the application name, if unspecified
-                if entry_application_name is None:
-                  entry_application_name = entry_binary_name
-                entry_application_link = entry.get('link', None)
+          if token is not None:
+            uploaded_file = request.FILES['file_upload']
+            logger.debug(f'Uploaded file name is: {uploaded_file.name}')
 
-                entry_call_stats = entry.get('api_calls', {})
-                # determine the API based on the entrypoint call
-                entry_api = None
-                entry_api_override = TRACE_API_OVERRIDES.get(entry_binary_name, None)
-                if entry_api_override is not None:
-                  entry_api = entry_api_override
-                else:
-                  for key, value in API_ENTRY_CALLS.items():
-                    # D3D6/D3D7 entry call identifiers aren't stand alone strings,
-                    # but rather part of a D3D subcall, due to the nature of those APIs
-                    if key in [entry_call.split(API_ENTRY_CALL_IDENTIFIER)[0] for entry_call in entry_call_stats.keys()]:
-                      entry_api = value
-                      logger.debug(f'Found an entry call for: {entry_api}')
-                      break
-                logger.debug(f'API is: {entry_api}')
-                if entry_api is None:
-                  raise Exception('Invalid JSON structure')
-                # convert API name to numeric value
-                else:
-                  entry_api = API_VALUES_ENCODE.get(entry_api)
+            try:
+              # Read the content of the file
+              file_content = uploaded_file.read().decode('utf-8')
+              tracestats_data = json.loads(file_content).get(JSON_BASE_KEY)
 
-                entry_api_family = API_FAMILY_ENCODE.get('Direct3D') if entry_api < 10 else API_FAMILY_ENCODE.get('Glide')
+              if tracestats_data is not None:
+                for entry in tracestats_data:
+                  # create/update base trace db entry
+                  entry_application_name = entry.get('name')
+                  logger.debug(f'Application name is: {entry_application_name}')
+                  entry_binary_name = entry.get('binary_name')
+                  logger.debug(f'Binary name is: {entry_binary_name}')
+                  # use the binary name for the application name, if unspecified
+                  if entry_application_name is None:
+                    entry_application_name = entry_binary_name
+                  entry_application_link = entry.get('link', None)
 
-                # determine the total API call count in the trace
-                entry_api_calls_total = 0
-                for value in entry_call_stats.values():
-                  entry_api_calls_total = entry_api_calls_total + value
-                # don't populate the db field to save some space if 0
-                if entry_api_calls_total == 0:
-                  entry_api_calls_total = None
-                logger.debug(f'Total API call count is: {entry_api_calls_total}')
+                  entry_call_stats = entry.get('api_calls', {})
+                  # determine the API based on the entrypoint call
+                  entry_api = None
+                  entry_api_override = TRACE_API_OVERRIDES.get(entry_binary_name, None)
+                  if entry_api_override is not None:
+                    entry_api = entry_api_override
+                  else:
+                    for key, value in API_ENTRY_CALLS.items():
+                      # D3D6/D3D7 entry call identifiers aren't stand alone strings,
+                      # but rather part of a D3D subcall, due to the nature of those APIs
+                      if key in [entry_call.split(API_ENTRY_CALL_IDENTIFIER)[0] for entry_call in entry_call_stats.keys()]:
+                        entry_api = value
+                        logger.debug(f'Found an entry call for: {entry_api}')
+                        break
+                  logger.debug(f'API is: {entry_api}')
+                  if entry_api is None:
+                    raise Exception('Invalid JSON structure')
+                  # convert API name to numeric value
+                  else:
+                    entry_api = API_VALUES_ENCODE.get(entry_api)
 
-                entry_render_states = entry.get('render_states', {})
-                # determine the total render state count in the trace
-                entry_render_states_total = 0
-                for value in entry_render_states.values():
-                  entry_render_states_total = entry_render_states_total + value
-                # don't populate the db field to save some space if 0
-                if entry_render_states_total == 0:
-                  entry_render_states_total = None
-                logger.debug(f'Total render state count is: {entry_render_states_total}')
+                  entry_api_family = API_FAMILY_ENCODE.get('Direct3D') if entry_api < 10 else API_FAMILY_ENCODE.get('Glide')
 
-                entry_query_types = entry.get('query_types', {})
-                # determine the total query types count in the trace
-                entry_query_types_total = 0
-                for value in entry_query_types.values():
-                  entry_query_types_total = entry_query_types_total + value
-                # don't populate the db field to save some space if 0
-                if entry_query_types_total == 0:
-                  entry_query_types_total = None
-                logger.debug(f'Total query types count is: {entry_query_types_total}')
+                  # determine the total API call count in the trace
+                  entry_api_calls_total = 0
+                  for value in entry_call_stats.values():
+                    entry_api_calls_total = entry_api_calls_total + value
+                  # don't populate the db field to save some space if 0
+                  if entry_api_calls_total == 0:
+                    entry_api_calls_total = None
+                  logger.debug(f'Total API call count is: {entry_api_calls_total}')
 
-                entry_light_types = entry.get('light_types', {})
-                # determine the total light type count in the trace
-                entry_light_types_total = 0
-                for value in entry_light_types.values():
-                  entry_light_types_total = entry_light_types_total + value
-                # don't populate the db field to save some space if 0
-                if entry_light_types_total == 0:
-                  entry_light_types_total = None
-                logger.debug(f'Total light types count is: {entry_light_types_total}')
+                  entry_render_states = entry.get('render_states', {})
+                  # determine the total render state count in the trace
+                  entry_render_states_total = 0
+                  for value in entry_render_states.values():
+                    entry_render_states_total = entry_render_states_total + value
+                  # don't populate the db field to save some space if 0
+                  if entry_render_states_total == 0:
+                    entry_render_states_total = None
+                  logger.debug(f'Total render state count is: {entry_render_states_total}')
 
-                entry_eb_opcodes = entry.get('execute_buffer_opcodes', {})
-                # determine the total execute buffer opcode count in the trace
-                entry_eb_opcodes_total = 0
-                for value in entry_eb_opcodes.values():
-                  entry_eb_opcodes_total = entry_eb_opcodes_total + value
-                # don't populate the db field to save some space if 0
-                if entry_eb_opcodes_total == 0:
-                  entry_eb_opcodes_total = None
-                logger.debug(f'Total execute buffer opcode count is: {entry_eb_opcodes_total}')
+                  entry_query_types = entry.get('query_types', {})
+                  # determine the total query types count in the trace
+                  entry_query_types_total = 0
+                  for value in entry_query_types.values():
+                    entry_query_types_total = entry_query_types_total + value
+                  # don't populate the db field to save some space if 0
+                  if entry_query_types_total == 0:
+                    entry_query_types_total = None
+                  logger.debug(f'Total query types count is: {entry_query_types_total}')
 
-                try:
-                  existing_trace = models.Trace.objects.get(name=entry_application_name, api=entry_api)
-                except models.Trace.DoesNotExist:
-                  existing_trace = None
+                  entry_light_types = entry.get('light_types', {})
+                  # determine the total light type count in the trace
+                  entry_light_types_total = 0
+                  for value in entry_light_types.values():
+                    entry_light_types_total = entry_light_types_total + value
+                  # don't populate the db field to save some space if 0
+                  if entry_light_types_total == 0:
+                    entry_light_types_total = None
+                  logger.debug(f'Total light types count is: {entry_light_types_total}')
 
-                if existing_trace is None:
-                  trace = models.Trace(name=entry_application_name,
-                                       link=entry_application_link,
-                                       binary_name=entry_binary_name,
-                                       updated_by=token,
-                                       api=entry_api,
-                                       api_family=entry_api_family,
-                                       api_calls_total=entry_api_calls_total,
-                                       render_states_total=entry_render_states_total,
-                                       query_types_total=entry_query_types_total,
-                                       light_types_total=entry_light_types_total,
-                                       eb_opcodes_total=entry_eb_opcodes_total)
-                  trace.save()
-                else:
-                  trace = existing_trace
-                  # clear any existing stats if we are updating the trace
-                  models.Stats.objects.filter(trace=trace).delete()
-                  # update the new values in the trace entry
-                  trace.link = entry_application_link
-                  trace.binary_name = entry_binary_name
-                  trace.updated_by = token
-                  trace.updated_last = now()
-                  trace.api = entry_api
-                  trace.api_family = entry_api_family
-                  trace.api_calls_total = entry_api_calls_total
-                  trace.render_states_total = entry_render_states_total
-                  trace.query_types_total = entry_query_types_total
-                  trace.save()
+                  entry_eb_opcodes = entry.get('execute_buffer_opcodes', {})
+                  # determine the total execute buffer opcode count in the trace
+                  entry_eb_opcodes_total = 0
+                  for value in entry_eb_opcodes.values():
+                    entry_eb_opcodes_total = entry_eb_opcodes_total + value
+                  # don't populate the db field to save some space if 0
+                  if entry_eb_opcodes_total == 0:
+                    entry_eb_opcodes_total = None
+                  logger.debug(f'Total execute buffer opcode count is: {entry_eb_opcodes_total}')
 
-                for stat_type in STATS_TYPE_ENCODE.keys():
-                  entry_stats_values = entry.get(stat_type, {})
-                  stats = []
-                  for key, value in entry_stats_values.items():
-                    # Skip saving the Glide API identifier entry in the database
-                    if entry_api >= 10 and stat_type == 'api_calls' and key in API_ENTRY_CALLS_GLIDE:
-                      continue
+                  try:
+                    existing_trace = models.Trace.objects.get(name=entry_application_name, api=entry_api)
+                  except models.Trace.DoesNotExist:
+                    existing_trace = None
 
-                    stats.append(models.Stats(trace=trace,
-                                              stat_type=STATS_TYPE_ENCODE[stat_type],
-                                              stat_name=key,
-                                              stat_count=value))
-                  if len(stats) > 0:
-                    models.Stats.objects.bulk_create(stats)
+                  if existing_trace is None:
+                    trace = models.Trace(name=entry_application_name,
+                                         link=entry_application_link,
+                                         binary_name=entry_binary_name,
+                                         updated_by=token,
+                                         api=entry_api,
+                                         api_family=entry_api_family,
+                                         api_calls_total=entry_api_calls_total,
+                                         render_states_total=entry_render_states_total,
+                                         query_types_total=entry_query_types_total,
+                                         light_types_total=entry_light_types_total,
+                                         eb_opcodes_total=entry_eb_opcodes_total)
+                    trace.save()
+                  else:
+                    trace = existing_trace
+                    # clear any existing stats if we are updating the trace
+                    models.Stats.objects.filter(trace=trace).delete()
+                    # update the new values in the trace entry
+                    trace.link = entry_application_link
+                    trace.binary_name = entry_binary_name
+                    trace.updated_by = token
+                    trace.updated_last = now()
+                    trace.api = entry_api
+                    trace.api_family = entry_api_family
+                    trace.api_calls_total = entry_api_calls_total
+                    trace.render_states_total = entry_render_states_total
+                    trace.query_types_total = entry_query_types_total
+                    trace.save()
 
-              context = {'notification_message': 'All good. You\'ve cossed the Bridge of Death.',
-                         'notification_type': 'notification-success'}
-            else:
+                  for stat_type in STATS_TYPE_ENCODE.keys():
+                    entry_stats_values = entry.get(stat_type, {})
+                    stats = []
+                    for key, value in entry_stats_values.items():
+                      # Skip saving the Glide API identifier entry in the database
+                      if entry_api >= 10 and stat_type == 'api_calls' and key in API_ENTRY_CALLS_GLIDE:
+                        continue
+
+                      stats.append(models.Stats(trace=trace,
+                                                stat_type=STATS_TYPE_ENCODE[stat_type],
+                                                stat_name=key,
+                                                stat_count=value))
+                    if len(stats) > 0:
+                      models.Stats.objects.bulk_create(stats)
+
+                context = {'notification_message': 'All good. You\'ve cossed the Bridge of Death.',
+                           'notification_type': 'notification-success'}
+              else:
+                context = {'notification_message': 'The JSON structure is incorrect. Just use whatever tracestats generates, ok?',
+                           'notification_type': 'notification-error'}
+
+            except UnicodeDecodeError:
+              context = {'notification_message': 'That\'s not even a text file. Try hader next time, won\'t you?',
+                         'notification_type': 'notification-error'}
+            except json.JSONDecodeError:
+              context = {'notification_message': 'That is most certainly not a JSON. Think you\'re pretty funny, don\'t ya\'?',
+                         'notification_type': 'notification-error'}
+            except Exception as e:
+              logger.error('Encountered exception: ', exc_info=e)
               context = {'notification_message': 'The JSON structure is incorrect. Just use whatever tracestats generates, ok?',
                          'notification_type': 'notification-error'}
-
-          except UnicodeDecodeError:
-            context = {'notification_message': 'That\'s not even a text file. Try hader next time, won\'t you?',
-                       'notification_type': 'notification-error'}
-          except json.JSONDecodeError:
-            context = {'notification_message': 'That is most certainly not a JSON. Think you\'re pretty funny, don\'t ya\'?',
-                       'notification_type': 'notification-error'}
-          except Exception as e:
-            logger.error('Encountered exception: ', exc_info=e)
-            context = {'notification_message': 'The JSON structure is incorrect. Just use whatever tracestats generates, ok?',
+          else:
+            context = {'notification_message': 'Wrong answer. You\'ve been cast into the Gorge of Eternal Peril!',
                        'notification_type': 'notification-error'}
         else:
-          context = {'notification_message': 'Wrong answer. You\'ve been cast into the Gorge of Eternal Peril!',
+          context = {'notification_message': 'That file has upset the Rabbit of Caerbannog. Naughty naughty.',
                      'notification_type': 'notification-error'}
+
+      elif 'search-form' in request.POST:
+        search_form = forms.SearchForm(request.POST)
+        if search_form.is_valid():
+          search_input = request.POST['search_input'].strip()
+          return redirect(f'{request.path}?search={quote(search_input)}')
+
+      elif 'filter-form' in request.POST:
+        filter_form = forms.FilterSelectionForm(request.POST)
+        if filter_form.is_valid():
+          filter_value = request.POST['api_family_filter']
+          search_input = request.POST['search_input']
+
+          if search_input is not None:
+            # We must NOT the search input at this stage, since it's already quoted
+            response = redirect(f'{request.path}?search={search_input.strip()}')
+
+            if filter_value is not None:
+              response.set_cookie(key='apiFamilyFilter', max_age=ONE_YEAR_IN_SECONDS, value=filter_value.strip())
+
+            return response
+
       else:
-        context = {'notification_message': 'That file has upset the Rabbit of Caerbannog. Naughty naughty.',
+        context = {'notification_message': 'A team of highly skilled and motivated assassins have been dispatched to your location.',
                    'notification_type': 'notification-error'}
 
-    elif 'search-form' in request.POST:
-      search_form = forms.SearchForm(request.POST)
-      if search_form.is_valid():
-        search_input = request.POST['search_input'].strip()
-        return redirect(f'{request.path}?search={quote(search_input)}')
+    case 'GET':
+      search_input = request.GET.get('search', None)
 
-    elif 'filter-form' in request.POST:
-      filter_form = forms.FilterSelectionForm(request.POST)
-      filter_value = request.POST['api_family_filter'].strip()
+      if search_input is not None:
+        logger.info(f'Search input: {search_input}')
 
-    else:
-      logger.error('What in the bloody blazes is this?')
+        if len(search_input) < 2:
+          return redirect(f'{request.path}')
 
-  elif request.method == 'GET':
-    search_input = request.GET.get('search', None)
+        search_input = unquote(search_input)
+        search_form = forms.SearchForm(initial={'search_input': search_input})
+        exact_search = False
 
-    if search_input is not None:
-      logger.info(f'Search input: {search_input}')
+        search_bang_split = search_input.rsplit(' ', 1)
+        if len(search_bang_split) > 1 and search_bang_split[1] == '!':
+          search_input = search_bang_split[0]
+          exact_search = True
 
-      if len(search_input) < 2:
-        return redirect(f'{request.path}')
+        filter_value = None
 
-      search_input = unquote(search_input)
-      search_form = forms.SearchForm(initial={'search_input': search_input})
-      exact_search = False
+        try:
+          filter_selection = request.COOKIES['apiFamilyFilter']
+          if filter_selection != 'All':
+            filter_value = API_FAMILY_ENCODE.get(filter_selection)
+        except KeyError:
+          pass
 
-      search_bang_split = search_input.rsplit(' ', 1)
-      if len(search_bang_split) > 1 and search_bang_split[1] == '!':
-        search_input = search_bang_split[0]
-        exact_search = True
-
-      filter_value = None
-
-      try:
-        filter_selection = request.COOKIES['apiFamilyFilter']
-        if filter_selection != 'All':
-          filter_value = API_FAMILY_ENCODE.get(filter_selection)
-      except KeyError:
-        pass
-
-      # Note that all searches are case insensitive in SQLite
-      if not exact_search:
-        search_results = models.Stats.objects.filter(stat_name__icontains=search_input)
-      else:
-        search_results = models.Stats.objects.filter(stat_name__exact=search_input)
-
-      if filter_value is not None:
-        search_results = search_results.filter(trace__api_family__exact=filter_value)
-
-      search_results = search_results.order_by('stat_type',
-                                               '-stat_count',
-                                               'trace__name',
-                                               'trace__api')[:SEARCH_RESULTS_LIMIT]
-
-      if len(search_results) == 0:
-        # If no objects are found, do a search based on application names
+        # Note that all searches are case insensitive in SQLite
         if not exact_search:
-          search_results = models.Stats.objects.filter(trace__name__icontains=search_input)
+          search_results = models.Stats.objects.filter(stat_name__icontains=search_input)
         else:
-          search_results = models.Stats.objects.filter(trace__name__exact=search_input)
+          search_results = models.Stats.objects.filter(stat_name__exact=search_input)
 
         if filter_value is not None:
           search_results = search_results.filter(trace__api_family__exact=filter_value)
 
-        search_results = search_results.order_by('trace__name',
-                                                 'trace__api',
-                                                 'stat_type',
-                                                 '-stat_count')[:SEARCH_RESULTS_LIMIT]
+        search_results = search_results.order_by('stat_type',
+                                                 '-stat_count',
+                                                 'trace__name',
+                                                 'trace__api')[:SEARCH_RESULTS_LIMIT]
 
         if len(search_results) == 0:
-          # If no results of any kind could be found, show a notification to that extent
-          context = {'notification_message': 'I\'m afraid that particular shrubbery is nowhere to be found.',
-                     'notification_type': 'notification-info'}
-      else:
-        # Highlight the searched text in the returned results
-        for search_result in search_results:
-          result_stat_name = search_result.stat_name
+          # If no objects are found, do a search based on application names
+          if not exact_search:
+            search_results = models.Stats.objects.filter(trace__name__icontains=search_input)
+          else:
+            search_results = models.Stats.objects.filter(trace__name__exact=search_input)
 
-          highlighted_text = re.sub(re.escape(search_input),
-                                    lambda match: f'<mark>{match.group(0)}</mark>',
-                                    result_stat_name,
-                                    flags=re.IGNORECASE)
-          search_result.stat_name = highlighted_text
+          if filter_value is not None:
+            search_results = search_results.filter(trace__api_family__exact=filter_value)
 
-    filter_value = None
+          search_results = search_results.order_by('trace__name',
+                                                   'trace__api',
+                                                   'stat_type',
+                                                   '-stat_count')[:SEARCH_RESULTS_LIMIT]
+
+          if len(search_results) == 0:
+            # If no results of any kind could be found, show a notification to that extent
+            context = {'notification_message': 'I\'m afraid that particular shrubbery is nowhere to be found.',
+                       'notification_type': 'notification-info'}
+
+          else:
+            # Highlight the searched text in the returned results
+            for search_result in search_results:
+              search_result.trace.name = re.sub(re.escape(search_input),
+                                                lambda match: f'<mark>{match.group(0)}</mark>',
+                                                search_result.trace.name,
+                                                flags=re.IGNORECASE)
+        else:
+          # Highlight the searched text in the returned results
+          for search_result in search_results:
+            search_result.stat_name = re.sub(re.escape(search_input),
+                                             lambda match: f'<mark>{match.group(0)}</mark>',
+                                             search_result.stat_name,
+                                             flags=re.IGNORECASE)
+
+      filter_value = None
+
+    case _:
+      context = {'notification_message': 'A team of highly skilled and motivated assassins have been dispatched to your location.',
+                 'notification_type': 'notification-error'}
 
   context['traces_total'] = models.Trace.objects.count()
 
@@ -407,159 +428,168 @@ def tracestats(request):
 
   response = render(request, 'home.html', context)
   if filter_value is not None:
-    response.set_cookie(key='apiFamilyFilter', max_age=ONE_YEAR_IN_SECONDS, value=filter_value)
+    response.set_cookie(key='apiFamilyFilter', max_age=ONE_YEAR_IN_SECONDS, value=filter_value.strip())
   return response
 
 def generate_titles_list(request):
-  if request.method != 'POST':
-    return JsonResponse({'error': 'The Rabbit of Caerbannog pounces on you and you die!'}, status=403)
-  else:
-    try:
-      sort_by = int(request.POST.get('sort'))
-    except:
-      sort_by = None
-
-    filter_value = None
-
-    try:
-      filter_selection = request.COOKIES['apiFamilyFilter']
-      if filter_selection != 'All':
-        filter_value = API_FAMILY_ENCODE.get(filter_selection)
-    except KeyError:
-      pass
-
-    titles_list = models.Trace.objects.only('name', 'link', 'binary_name', 'api')
-
-    if filter_value is not None:
-      titles_list = titles_list.filter(api_family__exact=filter_value)
-
-    if sort_by == 1:
-      titles_list = titles_list.order_by('api', 'name')
-    elif sort_by == 2:
-      titles_list = titles_list.order_by('binary_name')
-    # Catch-all for 0 or None
-    else:
-      titles_list = titles_list.order_by('name', 'api')
-
-    if sort_by is None:
+  match request.method:
+    case 'POST':
       try:
-        request.session['titles_list_visible'] = not request.session['titles_list_visible']
-        request.session.modified = True
-      except KeyError:
-        request.session['titles_list_visible'] = True
-        request.session.modified = True
-    else:
-      request.session['titles_list_visible'] = True
+        sort_by = int(request.POST.get('sort'))
+      except:
+        sort_by = None
 
-    if request.session['titles_list_visible']:
-      context = {}
-      context['titles_list'] = titles_list
-      context['api_values_decode'] = API_VALUES_DECODE
-      context.update(csrf(request))
-      content = loader.render_to_string('titles_list.html', context)
-    else:
-      content = ""
+      filter_value = None
 
-    request.session['filter_selection_visible'] = False
-    request.session['api_stats_visible'] = False
-    request.session['file_upload_visible'] = False
-    request.session.modified = True
-
-    return JsonResponse({'content': content})
-
-def generate_stats(request):
-  if request.method != 'POST':
-    return JsonResponse({'error': 'The Rabbit of Caerbannog pounces on you and you die!'}, status=403)
-  else:
-    api_stats = {}
-
-    try:
-      request.session['api_stats_visible'] = not request.session['api_stats_visible']
-      request.session.modified = True
-    except KeyError:
-      request.session['api_stats_visible'] = True
-      request.session.modified = True
-
-    if request.session['api_stats_visible']:
-      api_stats['d3d3']    = models.Trace.objects.filter(api=1).count()
-      api_stats['d3d5']    = models.Trace.objects.filter(api=2).count()
-      api_stats['d3d6']    = models.Trace.objects.filter(api=3).count()
-      api_stats['d3d7']    = models.Trace.objects.filter(api=4).count()
-      api_stats['d3d8']    = models.Trace.objects.filter(api=5).count()
-      api_stats['d3d9']    = models.Trace.objects.filter(api=6).count()
-      api_stats['d3d9ex']  = models.Trace.objects.filter(api=7).count()
-      api_stats['d3d10']   = models.Trace.objects.filter(api=8).count()
-      api_stats['d3d11']   = models.Trace.objects.filter(api=9).count()
-      api_stats['glide1x'] = models.Trace.objects.filter(api=10).count()
-      api_stats['glide2x'] = models.Trace.objects.filter(api=11).count()
-      api_stats['glide3x'] = models.Trace.objects.filter(api=12).count()
-
-      context = {}
-      context.update(csrf(request))
-      content = loader.render_to_string('api_stats.html', context)
-    else:
-      content = ""
-
-    request.session['filter_selection_visible'] = False
-    request.session['titles_list_visible'] = False
-    request.session['file_upload_visible'] = False
-    request.session.modified = True
-
-    return JsonResponse({'content': content,
-                         'api_stats': api_stats})
-
-def generate_file_upload(request):
-  if request.method != 'POST':
-    return JsonResponse({'error': 'The Rabbit of Caerbannog pounces on you and you die!'}, status=403)
-  else:
-    try:
-      request.session['file_upload_visible'] = not request.session['file_upload_visible']
-      request.session.modified = True
-    except KeyError:
-      request.session['file_upload_visible'] = True
-      request.session.modified = True
-
-    if request.session['file_upload_visible']:
-      file_upload_form = forms.FileUploadForm()
-      context = {'file_upload_form': file_upload_form}
-      context.update(csrf(request))
-      content = loader.render_to_string('file_upload.html', context)
-    else:
-      content = ""
-
-    request.session['filter_selection_visible'] = False
-    request.session['titles_list_visible'] = False
-    request.session['api_stats_visible'] = False
-    request.session.modified = True
-
-    return JsonResponse({'content': content})
-
-def generate_filter_selection(request):
-  if request.method != 'POST':
-    return JsonResponse({'error': 'The Rabbit of Caerbannog pounces on you and you die!'}, status=403)
-  else:
-    try:
-      request.session['filter_selection_visible'] = not request.session['filter_selection_visible']
-      request.session.modified = True
-    except KeyError:
-      request.session['filter_selection_visible'] = True
-      request.session.modified = True
-
-    if request.session['filter_selection_visible']:
       try:
         filter_selection = request.COOKIES['apiFamilyFilter']
+        if filter_selection != 'All':
+          filter_value = API_FAMILY_ENCODE.get(filter_selection)
       except KeyError:
-        filter_selection = 'All'
-      filter_selection_form = forms.FilterSelectionForm({'api_family_filter': (filter_selection, filter_selection)})
-      context = {'filter_selection_form': filter_selection_form}
-      context.update(csrf(request))
-      content = loader.render_to_string('filter_selection.html', context)
-    else:
-      content = ""
+        pass
 
-    request.session['titles_list_visible'] = False
-    request.session['api_stats_visible'] = False
-    request.session['file_upload_visible'] = False
-    request.session.modified = True
+      titles_list = models.Trace.objects.only('name', 'link', 'binary_name', 'api')
 
-    return JsonResponse({'content': content})
+      if filter_value is not None:
+        titles_list = titles_list.filter(api_family__exact=filter_value)
+
+      match sort_by:
+        case 1:
+          titles_list = titles_list.order_by('api', 'name')
+        case 2:
+          titles_list = titles_list.order_by('binary_name')
+        # Catch-all for 0 or None
+        case _:
+          titles_list = titles_list.order_by('name', 'api')
+
+      if sort_by is None:
+        try:
+          request.session['titles_list_visible'] = not request.session['titles_list_visible']
+          request.session.modified = True
+        except KeyError:
+          request.session['titles_list_visible'] = True
+          request.session.modified = True
+      else:
+        request.session['titles_list_visible'] = True
+
+      if request.session['titles_list_visible']:
+        context = {}
+        context['titles_list'] = titles_list
+        context['api_values_decode'] = API_VALUES_DECODE
+        context.update(csrf(request))
+        content = loader.render_to_string('titles_list.html', context)
+      else:
+        content = ""
+
+      request.session['filter_selection_visible'] = False
+      request.session['api_stats_visible'] = False
+      request.session['file_upload_visible'] = False
+      request.session.modified = True
+
+      return JsonResponse({'content': content})
+
+    case _:
+      return JsonResponse({'error': 'The Rabbit of Caerbannog pounces on you and you die!'}, status=403)
+
+def generate_stats(request):
+  match request.method:
+    case 'POST':
+      api_stats = {}
+
+      try:
+        request.session['api_stats_visible'] = not request.session['api_stats_visible']
+        request.session.modified = True
+      except KeyError:
+        request.session['api_stats_visible'] = True
+        request.session.modified = True
+
+      if request.session['api_stats_visible']:
+        api_stats['d3d3']    = models.Trace.objects.filter(api=1).count()
+        api_stats['d3d5']    = models.Trace.objects.filter(api=2).count()
+        api_stats['d3d6']    = models.Trace.objects.filter(api=3).count()
+        api_stats['d3d7']    = models.Trace.objects.filter(api=4).count()
+        api_stats['d3d8']    = models.Trace.objects.filter(api=5).count()
+        api_stats['d3d9']    = models.Trace.objects.filter(api=6).count()
+        api_stats['d3d9ex']  = models.Trace.objects.filter(api=7).count()
+        api_stats['d3d10']   = models.Trace.objects.filter(api=8).count()
+        api_stats['d3d11']   = models.Trace.objects.filter(api=9).count()
+        api_stats['glide1x'] = models.Trace.objects.filter(api=10).count()
+        api_stats['glide2x'] = models.Trace.objects.filter(api=11).count()
+        api_stats['glide3x'] = models.Trace.objects.filter(api=12).count()
+
+        context = {}
+        context.update(csrf(request))
+        content = loader.render_to_string('api_stats.html', context)
+      else:
+        content = ""
+
+      request.session['filter_selection_visible'] = False
+      request.session['titles_list_visible'] = False
+      request.session['file_upload_visible'] = False
+      request.session.modified = True
+
+      return JsonResponse({'content': content,
+                          'api_stats': api_stats})
+
+    case _:
+      return JsonResponse({'error': 'The Rabbit of Caerbannog pounces on you and you die!'}, status=403)
+
+def generate_file_upload(request):
+  match request.method:
+    case 'POST':
+      try:
+        request.session['file_upload_visible'] = not request.session['file_upload_visible']
+        request.session.modified = True
+      except KeyError:
+        request.session['file_upload_visible'] = True
+        request.session.modified = True
+
+      if request.session['file_upload_visible']:
+        file_upload_form = forms.FileUploadForm()
+        context = {'file_upload_form': file_upload_form}
+        context.update(csrf(request))
+        content = loader.render_to_string('file_upload.html', context)
+      else:
+        content = ""
+
+      request.session['filter_selection_visible'] = False
+      request.session['titles_list_visible'] = False
+      request.session['api_stats_visible'] = False
+      request.session.modified = True
+
+      return JsonResponse({'content': content})
+
+    case _:
+      return JsonResponse({'error': 'The Rabbit of Caerbannog pounces on you and you die!'}, status=403)
+
+def generate_filter_selection(request):
+  match request.method:
+    case 'POST':
+      try:
+        request.session['filter_selection_visible'] = not request.session['filter_selection_visible']
+        request.session.modified = True
+      except KeyError:
+        request.session['filter_selection_visible'] = True
+        request.session.modified = True
+
+      if request.session['filter_selection_visible']:
+        try:
+          filter_selection = request.COOKIES['apiFamilyFilter']
+        except KeyError:
+          filter_selection = 'All'
+        filter_selection_form = forms.FilterSelectionForm({'api_family_filter': (filter_selection, filter_selection)})
+        context = {'filter_selection_form': filter_selection_form}
+        context.update(csrf(request))
+        content = loader.render_to_string('filter_selection.html', context)
+      else:
+        content = ""
+
+      request.session['titles_list_visible'] = False
+      request.session['api_stats_visible'] = False
+      request.session['file_upload_visible'] = False
+      request.session.modified = True
+
+      return JsonResponse({'content': content})
+
+    case _:
+      return JsonResponse({'error': 'The Rabbit of Caerbannog pounces on you and you die!'}, status=403)

@@ -1410,24 +1410,25 @@ class TraceStats:
                                                 # apitrace may not do the conversion, so we'll have to do it ourselves
                                                 texture_map_mode = int(texture_map_mode)
 
-                                                if texture_map_mode == 1:
-                                                    texture_map_mode = 'D3DTBLEND_DECAL'
-                                                elif texture_map_mode == 2:
-                                                    texture_map_mode = 'D3DTBLEND_MODULATE'
-                                                elif texture_map_mode == 3:
-                                                    texture_map_mode = 'D3DTBLEND_DECALALPHA'
-                                                elif texture_map_mode == 4:
-                                                    texture_map_mode = 'D3DTBLEND_MODULATEALPHA'
-                                                elif texture_map_mode == 5:
-                                                    texture_map_mode = 'D3DTBLEND_DECALMASK'
-                                                elif texture_map_mode == 6:
-                                                    texture_map_mode = 'D3DTBLEND_MODULATEMASK'
-                                                elif texture_map_mode == 7:
-                                                    texture_map_mode = 'D3DTBLEND_COPY'
-                                                elif texture_map_mode == 8:
-                                                    texture_map_mode = 'D3DTBLEND_ADD'
-                                                else:
-                                                    texture_map_mode = None
+                                                match texture_map_mode:
+                                                    case 1:
+                                                        texture_map_mode = 'D3DTBLEND_DECAL'
+                                                    case 2:
+                                                        texture_map_mode = 'D3DTBLEND_MODULATE'
+                                                    case 3:
+                                                        texture_map_mode = 'D3DTBLEND_DECALALPHA'
+                                                    case 4:
+                                                        texture_map_mode = 'D3DTBLEND_MODULATEALPHA'
+                                                    case 5:
+                                                        texture_map_mode = 'D3DTBLEND_DECALMASK'
+                                                    case 6:
+                                                        texture_map_mode = 'D3DTBLEND_MODULATEMASK'
+                                                    case 7:
+                                                        texture_map_mode = 'D3DTBLEND_COPY'
+                                                    case 8:
+                                                        texture_map_mode = 'D3DTBLEND_ADD'
+                                                    case _:
+                                                        texture_map_mode = None
 
                                             except ValueError:
                                                 pass
@@ -1952,30 +1953,31 @@ class TraceStats:
 
                                             if swapchain_parameter_key in SWAPCHAIN_PARAMETERS_CAPTURED:
                                                 if swapchain_parameter_value != '0x0':
-                                                    if swapchain_parameter_key == 'BufferUsage':
-                                                        swapchain_buffer_usage = swapchain_parameter_value.split(SWAPCHAIN_BUFFER_USAGE_VALUE_SPLIT_DELIMITER)
+                                                    match swapchain_parameter_key:
+                                                        case 'BufferUsage':
+                                                            swapchain_buffer_usage = swapchain_parameter_value.split(SWAPCHAIN_BUFFER_USAGE_VALUE_SPLIT_DELIMITER)
 
-                                                        for swapchain_buffer_usage_flag in swapchain_buffer_usage:
-                                                            swapchian_buffer_usage_flag_stripped = swapchain_buffer_usage_flag.strip()
+                                                            for swapchain_buffer_usage_flag in swapchain_buffer_usage:
+                                                                swapchian_buffer_usage_flag_stripped = swapchain_buffer_usage_flag.strip()
 
-                                                            existing_value = self.stats_dictionaries[STATS_SWAPCHAIN_BUFFER_USAGE].get(swapchian_buffer_usage_flag_stripped, 0)
-                                                            self.stats_dictionaries[STATS_SWAPCHAIN_BUFFER_USAGE][swapchian_buffer_usage_flag_stripped] = existing_value + 1
+                                                                existing_value = self.stats_dictionaries[STATS_SWAPCHAIN_BUFFER_USAGE].get(swapchian_buffer_usage_flag_stripped, 0)
+                                                                self.stats_dictionaries[STATS_SWAPCHAIN_BUFFER_USAGE][swapchian_buffer_usage_flag_stripped] = existing_value + 1
 
-                                                    elif swapchain_parameter_key == 'Flags':
-                                                        swapchain_flags = swapchain_parameter_value.split(SWAPCHAIN_FLAGS_VALUE_SPLIT_DELIMITER)
+                                                        case 'Flags':
+                                                            swapchain_flags = swapchain_parameter_value.split(SWAPCHAIN_FLAGS_VALUE_SPLIT_DELIMITER)
 
-                                                        for swapchain_flag in swapchain_flags:
-                                                            swapchain_flag_stripped = swapchain_flag.strip()
+                                                            for swapchain_flag in swapchain_flags:
+                                                                swapchain_flag_stripped = swapchain_flag.strip()
 
-                                                            existing_value = self.stats_dictionaries[STATS_SWAPCHAIN_FLAGS].get(swapchain_flag_stripped, 0)
-                                                            self.stats_dictionaries[STATS_SWAPCHAIN_FLAGS][swapchain_flag_stripped] = existing_value + 1
+                                                                existing_value = self.stats_dictionaries[STATS_SWAPCHAIN_FLAGS].get(swapchain_flag_stripped, 0)
+                                                                self.stats_dictionaries[STATS_SWAPCHAIN_FLAGS][swapchain_flag_stripped] = existing_value + 1
 
-                                                    else:
-                                                        if swapchain_parameter_key == 'Count' or swapchain_parameter_key == 'Quality':
-                                                            swapchain_parameter_stripped = ' '.join(('SampleDesc', swapchain_parameter_stripped))
+                                                        case _:
+                                                            if swapchain_parameter_key == 'Count' or swapchain_parameter_key == 'Quality':
+                                                                swapchain_parameter_stripped = ' '.join(('SampleDesc', swapchain_parameter_stripped))
 
-                                                        existing_value = self.stats_dictionaries[STATS_SWAPCHAIN_PARAMETERS].get(swapchain_parameter_stripped, 0)
-                                                        self.stats_dictionaries[STATS_SWAPCHAIN_PARAMETERS][swapchain_parameter_stripped] = existing_value + 1
+                                                            existing_value = self.stats_dictionaries[STATS_SWAPCHAIN_PARAMETERS].get(swapchain_parameter_stripped, 0)
+                                                            self.stats_dictionaries[STATS_SWAPCHAIN_PARAMETERS][swapchain_parameter_stripped] = existing_value + 1
                                         except ValueError:
                                             pass
 
