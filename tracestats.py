@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 '''
 @author: Winter Snowfall
-@version: 2.13
-@date: 08/11/2026
+@version: 2.14
+@date: 14/11/2026
 '''
 
 import os
@@ -80,9 +80,10 @@ STATS_TEXTURE_MAP_MODES = 34
 STATS_TMUS = 101
 STATS_DEPTH_BUFFER_MODES = 102
 STATS_LFB_WRITE_MODES = 103
-STATS_HINTS = 104
-STATS_VERTEX_LAYOUTS = 105
-STATS_COORDINATE_SPACES = 106
+STATS_BUFFER_TYPES = 104
+STATS_HINTS = 105
+STATS_VERTEX_LAYOUTS = 106
+STATS_COORDINATE_SPACES = 107
 
 STATS_TYPE_DECODE = {# D3D or common stats
                      1:   'api_calls',
@@ -123,9 +124,10 @@ STATS_TYPE_DECODE = {# D3D or common stats
                      101: 'tmus',
                      102: 'depth_buffer_modes',
                      103: 'lfb_write_modes',
-                     104: 'hints',
-                     105: 'vertex_layouts',
-                     106: 'coordinate_spaces'}
+                     104: 'buffer_types',
+                     105: 'hints',
+                     106: 'vertex_layouts',
+                     107: 'coordinate_spaces'}
 
 TRACE_API_OVERRIDES = {'ff7'        : 'D3D5',   # Creates a D3D3 device first, but queries for a D3D5 device and renders with it
                        'TSM'        : 'D3D9',   # Ignore queries done on a D3D9Ex interface, as it's not used for rendering
@@ -260,12 +262,20 @@ GLIDE_DEPTH_BUFFER_MODE_IDENTIFIER_END = ')'
 GLIDE_LFB_CALL = 'grLfbWriteMode'
 GLIDE_LFB_CALL2 = 'grLfbLock'
 GLIDE_LFB_CALL3 = 'grLfbWriteRegion'
+GLIDE_LFB_CALL4 = 'grLfbReadRegion'
 GLIDE_LFB_WRITE_MODE_IDENTIFIER = 'mode = '
 GLIDE_LFB_WRITE_MODE_IDENTIFIER_LENGTH = len(GLIDE_LFB_WRITE_MODE_IDENTIFIER)
 GLIDE_LFB_WRITE_MODE_IDENTIFIER2 = 'writeMode = '
 GLIDE_LFB_WRITE_MODE_IDENTIFIER2_LENGTH = len(GLIDE_LFB_WRITE_MODE_IDENTIFIER2)
 GLIDE_LFB_WRITE_MODE_IDENTIFIER3 = 'src_format = '
 GLIDE_LFB_WRITE_MODE_IDENTIFIER3_LENGTH = len(GLIDE_LFB_WRITE_MODE_IDENTIFIER3)
+# buffer types
+GLIDE_BUFFER_TYPE_IDENTIFIER = 'buffer = '
+GLIDE_BUFFER_TYPE_IDENTIFIER_LENGTH = len(GLIDE_BUFFER_TYPE_IDENTIFIER)
+GLIDE_BUFFER_TYPE_IDENTIFIER2 = 'dst_buffer = '
+GLIDE_BUFFER_TYPE_IDENTIFIER2_LENGTH = len(GLIDE_BUFFER_TYPE_IDENTIFIER2)
+GLIDE_BUFFER_TYPE_IDENTIFIER3 = 'src_buffer = '
+GLIDE_BUFFER_TYPE_IDENTIFIER3_LENGTH = len(GLIDE_BUFFER_TYPE_IDENTIFIER3)
 # hint types and values
 GLIDE_HINTS_CALL = 'grHints'
 GLIDE_HINTS_IDENTIFIER = 'hintMask = '
@@ -593,9 +603,28 @@ class TraceStats:
                 case 4: return 'D3DDEVINFOID_VCACHE'
                 case 5: return 'D3DDEVINFOID_RESOURCEMANAGER'
                 case 6: return 'D3DDEVINFOID_VERTEXSTATS'
-                case _: return 'Unknown'
+                case _: return None
+
         except ValueError:
-            return 'Unknown'
+            return None
+
+    @classmethod
+    def ddraw_texture_map_mode(cls, value):
+        try:
+            # apitrace may not do the conversion, so we'll have to do it ourselves
+            match int(value):
+                case 1: return 'D3DTBLEND_DECAL'
+                case 2: return 'D3DTBLEND_MODULATE'
+                case 3: return 'D3DTBLEND_DECALALPHA'
+                case 4: return 'D3DTBLEND_MODULATEALPHA'
+                case 5: return 'D3DTBLEND_DECALMASK'
+                case 6: return 'D3DTBLEND_MODULATEMASK'
+                case 7: return 'D3DTBLEND_COPY'
+                case 8: return 'D3DTBLEND_ADD'
+                case _: return  None
+
+        except ValueError:
+            return None
 
     @classmethod
     def detect_potential_vendor_hack(cls, vendor_hack_value_int, trace_line):
@@ -1127,21 +1156,38 @@ class TraceStats:
                                 existing_value = self.stats_dictionaries[STATS_DEPTH_BUFFER_MODES].get(depth_buffer_mode, 0)
                                 self.stats_dictionaries[STATS_DEPTH_BUFFER_MODES][depth_buffer_mode] = existing_value + 1
 
-                            elif GLIDE_LFB_CALL in call or GLIDE_LFB_CALL2 in call or GLIDE_LFB_CALL3 in call:
-                                logger.debug(f'Found LFB write modes on line {trace_line_counter}')
+                            elif GLIDE_LFB_CALL in call or GLIDE_LFB_CALL2 in call or GLIDE_LFB_CALL3 in call or GLIDE_LFB_CALL4 in call:
+                                if GLIDE_LFB_CALL in call or GLIDE_LFB_CALL2 in call or GLIDE_LFB_CALL3 in call:
+                                    logger.debug(f'Found LFB write modes on line {trace_line_counter}')
 
-                                if GLIDE_LFB_CALL in call:
-                                    lfb_format_start = trace_line.find(GLIDE_LFB_WRITE_MODE_IDENTIFIER) + GLIDE_LFB_WRITE_MODE_IDENTIFIER_LENGTH
-                                elif GLIDE_LFB_CALL2 in call:
-                                    lfb_format_start = trace_line.find(GLIDE_LFB_WRITE_MODE_IDENTIFIER2) + GLIDE_LFB_WRITE_MODE_IDENTIFIER2_LENGTH
-                                elif GLIDE_LFB_CALL3 in call:
-                                    lfb_format_start = trace_line.find(GLIDE_LFB_WRITE_MODE_IDENTIFIER3) + GLIDE_LFB_WRITE_MODE_IDENTIFIER3_LENGTH
+                                    if GLIDE_LFB_CALL in call:
+                                        lfb_format_start = trace_line.find(GLIDE_LFB_WRITE_MODE_IDENTIFIER) + GLIDE_LFB_WRITE_MODE_IDENTIFIER_LENGTH
+                                    elif GLIDE_LFB_CALL2 in call:
+                                        lfb_format_start = trace_line.find(GLIDE_LFB_WRITE_MODE_IDENTIFIER2) + GLIDE_LFB_WRITE_MODE_IDENTIFIER2_LENGTH
+                                    elif GLIDE_LFB_CALL3 in call:
+                                        lfb_format_start = trace_line.find(GLIDE_LFB_WRITE_MODE_IDENTIFIER3) + GLIDE_LFB_WRITE_MODE_IDENTIFIER3_LENGTH
 
-                                lfb_format = trace_line[lfb_format_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
-                                                                                         lfb_format_start)].strip()
+                                    lfb_format = trace_line[lfb_format_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
+                                                                                            lfb_format_start)].strip()
 
-                                existing_value = self.stats_dictionaries[STATS_LFB_WRITE_MODES].get(lfb_format, 0)
-                                self.stats_dictionaries[STATS_LFB_WRITE_MODES][lfb_format] = existing_value + 1
+                                    existing_value = self.stats_dictionaries[STATS_LFB_WRITE_MODES].get(lfb_format, 0)
+                                    self.stats_dictionaries[STATS_LFB_WRITE_MODES][lfb_format] = existing_value + 1
+
+                                if GLIDE_LFB_CALL2 in call or GLIDE_LFB_CALL3 in call or GLIDE_LFB_CALL4 in call:
+                                    logger.debug(f'Found buffer types on line {trace_line_counter}')
+
+                                    if GLIDE_LFB_CALL2 in call:
+                                        buffer_type_start = trace_line.find(GLIDE_BUFFER_TYPE_IDENTIFIER) + GLIDE_BUFFER_TYPE_IDENTIFIER_LENGTH
+                                    elif GLIDE_LFB_CALL3 in call:
+                                        buffer_type_start = trace_line.find(GLIDE_BUFFER_TYPE_IDENTIFIER2) + GLIDE_BUFFER_TYPE_IDENTIFIER2_LENGTH
+                                    elif GLIDE_LFB_CALL4 in call:
+                                        buffer_type_start = trace_line.find(GLIDE_BUFFER_TYPE_IDENTIFIER3) + GLIDE_BUFFER_TYPE_IDENTIFIER3_LENGTH
+
+                                    buffer_type = trace_line[buffer_type_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
+                                                                                               buffer_type_start)].strip()
+
+                                    existing_value = self.stats_dictionaries[STATS_BUFFER_TYPES].get(buffer_type, 0)
+                                    self.stats_dictionaries[STATS_BUFFER_TYPES][buffer_type] = existing_value + 1
 
                             if self.api == 'Glide1x' or self.api == 'Glide2x':
                                 if GLIDE_HINTS_CALL in call:
@@ -1406,32 +1452,10 @@ class TraceStats:
                                             texture_map_mode = trace_line[texture_map_mode_start:trace_line.find(TEXTURE_MAP_BLEND_MODE_END,
                                                                                                                  texture_map_mode_start)].strip()
 
-                                            try:
-                                                # apitrace may not do the conversion, so we'll have to do it ourselves
-                                                texture_map_mode = int(texture_map_mode)
-
-                                                match texture_map_mode:
-                                                    case 1:
-                                                        texture_map_mode = 'D3DTBLEND_DECAL'
-                                                    case 2:
-                                                        texture_map_mode = 'D3DTBLEND_MODULATE'
-                                                    case 3:
-                                                        texture_map_mode = 'D3DTBLEND_DECALALPHA'
-                                                    case 4:
-                                                        texture_map_mode = 'D3DTBLEND_MODULATEALPHA'
-                                                    case 5:
-                                                        texture_map_mode = 'D3DTBLEND_DECALMASK'
-                                                    case 6:
-                                                        texture_map_mode = 'D3DTBLEND_MODULATEMASK'
-                                                    case 7:
-                                                        texture_map_mode = 'D3DTBLEND_COPY'
-                                                    case 8:
-                                                        texture_map_mode = 'D3DTBLEND_ADD'
-                                                    case _:
-                                                        texture_map_mode = None
-
-                                            except ValueError:
-                                                pass
+                                            # apitrace may not do the conversion, so we'll have to do it ourselves
+                                            texture_map_mode_converted = self.ddraw_texture_map_mode(texture_map_mode)
+                                            if texture_map_mode_converted is not None:
+                                                texture_map_mode = texture_map_mode_converted
 
                                             # work around an older apitrace bug which decoded values to D3DBLEND_
                                             if texture_map_mode is not None and not texture_map_mode.startswith('D3DBLEND_'):
@@ -1733,11 +1757,13 @@ class TraceStats:
                                 query_type_start = trace_line.find(QUERY_TYPE_IDENTIFIER_D3D8) + QUERY_TYPE_IDENTIFIER_LENGTH_D3D8
                                 query_type = trace_line[query_type_start:trace_line.find(API_ENTRY_VALUE_DELIMITER,
                                                                                          query_type_start)].strip()
-                                query_type_decoded = self.d3d8_query_type(query_type)
-                                logger.debug(f'Decoded query type is: {query_type_decoded}')
 
-                                existing_value = self.stats_dictionaries[STATS_QUERY_TYPES].get(query_type_decoded, 0)
-                                self.stats_dictionaries[STATS_QUERY_TYPES][query_type_decoded] = existing_value + 1
+                                query_type_decoded = self.d3d8_query_type(query_type)
+                                if query_type_decoded is not None:
+                                    query_type = query_type_decoded
+
+                                existing_value = self.stats_dictionaries[STATS_QUERY_TYPES].get(query_type, 0)
+                                self.stats_dictionaries[STATS_QUERY_TYPES][query_type] = existing_value + 1
 
                             # D3D9Ex/D3D9 use IDirect3DQuery9::CreateQuery to initiate queries
                             elif (self.api == 'D3D9Ex' or self.api == 'D3D9') and QUERY_TYPE_CALL_D3D9_10_11 in call:
@@ -2233,30 +2259,51 @@ class TraceStats:
 
         trace_file_paths.sort()
 
-        for trace_file_path in trace_file_paths:
-            try:
-                logger.info(f'Processing {os.path.basename(trace_file_path)} for joining...')
-
-                with open(trace_file_path, 'r') as file:
-                    file_content = file.read()
-
-                single_trace_content_items = json.loads(file_content).get(JSON_BASE_KEY)
-
-                for item in single_trace_content_items:
-                    self.json_output[JSON_BASE_KEY].append(item)
-
-            except json.JSONDecodeError:
-                logger.critical(f'Unable to parse JSON file: {trace_file_path}')
+        if len(trace_file_paths) > 0:
+            if self.apis_to_skip is not None and not TRACEAPPNAMES_IS_IMPORTED:
+                logger.critical('Unable to skip APIs without a traceappnames repository')
                 raise SystemExit(7)
 
-        joined_json_export = json.dumps(self.json_output, sort_keys=True, indent=4,
-                                        separators=(',', ': '), ensure_ascii=False)
-        logger.debug(f'Joined JSON export output is: {joined_json_export}')
+            for trace_file_path in trace_file_paths:
+                try:
+                    logger.info(f'Processing {os.path.basename(trace_file_path)} for joining...')
 
-        with open(self.json_export_path, 'w') as file:
-            file.write(joined_json_export)
+                    with open(trace_file_path, 'r') as file:
+                        file_content = file.read()
 
-        logger.info('Joined JSON export complete')
+                    single_trace_content_items = json.loads(file_content).get(JSON_BASE_KEY)
+
+                    if self.apis_to_skip is not None:
+                        binary_name_raw = os.path.basename(trace_file_path).rsplit('.', 1)[0]
+
+                        try:
+                            traceappnames_api = TraceAppNames.get(binary_name_raw)[2]
+                            if traceappnames_api is not None:
+                                logger.info(f'Application API found in traceappnames repository: {traceappnames_api}')
+                        except TypeError:
+                            traceappnames_api = None
+
+                        if traceappnames_api in self.apis_to_skip:
+                            logger.info('Skipped JSON file due to API filter')
+                            continue
+
+                    for item in single_trace_content_items:
+                        self.json_output[JSON_BASE_KEY].append(item)
+
+                except json.JSONDecodeError:
+                    logger.critical(f'Unable to parse JSON file: {trace_file_path}')
+                    raise SystemExit(8)
+
+            joined_json_export = json.dumps(self.json_output, sort_keys=True, indent=4,
+                                            separators=(',', ': '), ensure_ascii=False)
+
+            with open(self.json_export_path, 'w') as file:
+                file.write(joined_json_export)
+
+            logger.info('Joined JSON export complete')
+
+        else:
+            logger.info('No JSON export files found')
 
 if __name__ == "__main__":
     # catch SIGTERM and exit gracefully

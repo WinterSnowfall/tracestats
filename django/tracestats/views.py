@@ -3,6 +3,7 @@ import re
 import logging
 
 from urllib.parse import quote, unquote
+from django.db import connection
 from django.shortcuts import render, redirect
 from django.template import loader
 from django.http import JsonResponse
@@ -17,6 +18,7 @@ logger = logging.getLogger('tracestats')
 JSON_BASE_KEY = 'tracestats'
 SEARCH_RESULTS_LIMIT = 999
 ONE_YEAR_IN_SECONDS = 31536000
+DB_ANALYZE_QUERY = 'PRAGMA optimize;'
 
 API_FAMILY_ENCODE = {'Direct3D' : 1,
                      'Glide'    : 2}
@@ -86,9 +88,10 @@ STATS_TYPE_ENCODE = {# D3D or common stats
                      'tmus': 101,
                      'depth_buffer_modes': 102,
                      'lfb_write_modes': 103,
-                     'hints': 104,
-                     'vertex_layouts': 105,
-                     'coordinate_spaces': 106}
+                     'buffer_types': 104,
+                     'hints': 105,
+                     'vertex_layouts': 106,
+                     'coordinate_spaces': 107}
 
 TRACE_API_OVERRIDES = {'ff7'        : 'D3D5',   # Creates a D3D3 device first, but queries for a D3D5 device and renders with it
                        'TSM'        : 'D3D9',   # Ignore queries done on a D3D9Ex interface, as it's not used for rendering
@@ -287,6 +290,10 @@ def tracestats(request):
                     if len(stats) > 0:
                       models.Stats.objects.bulk_create(stats)
 
+                # Re-analyze tables, if needed, after every batch of imports
+                with connection.cursor() as cursor:
+                  cursor.execute(DB_ANALYZE_QUERY)
+
                 context = {'notification_message': 'All good. You\'ve cossed the Bridge of Death.',
                            'notification_type': 'notification-success'}
               else:
@@ -479,7 +486,7 @@ def generate_titles_list(request):
         context.update(csrf(request))
         content = loader.render_to_string('titles_list.html', context)
       else:
-        content = ""
+        content = ''
 
       request.session['filter_selection_visible'] = False
       request.session['api_stats_visible'] = False
@@ -521,7 +528,7 @@ def generate_stats(request):
         context.update(csrf(request))
         content = loader.render_to_string('api_stats.html', context)
       else:
-        content = ""
+        content = ''
 
       request.session['filter_selection_visible'] = False
       request.session['titles_list_visible'] = False
@@ -550,7 +557,7 @@ def generate_file_upload(request):
         context.update(csrf(request))
         content = loader.render_to_string('file_upload.html', context)
       else:
-        content = ""
+        content = ''
 
       request.session['filter_selection_visible'] = False
       request.session['titles_list_visible'] = False
@@ -582,7 +589,7 @@ def generate_filter_selection(request):
         context.update(csrf(request))
         content = loader.render_to_string('filter_selection.html', context)
       else:
-        content = ""
+        content = ''
 
       request.session['titles_list_visible'] = False
       request.session['api_stats_visible'] = False

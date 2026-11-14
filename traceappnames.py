@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 '''
 @author: Winter Snowfall
-@version: 2.13
-@date: 08/11/2026
+@version: 2.14
+@date: 14/11/2026
 '''
 
 import os
@@ -143,6 +143,7 @@ class TraceAppNames:
         'BlackMirrorIII':                                  ('Black Mirror 3', None, 'D3D9'),
         'Blacksad':                                        ('Blacksad: Under the Skin', None, 'D3D11'),
         'Blade':                                           ('Blade of Darkness', None, 'D3D7'),
+        'Blade_':                                          ('Blade of Darkness', None, 'Glide2x'),
         'bladesoftime':                                    ('Blades of Time', None, 'D3D9Ex'),
         'Blazing Chrome':                                  (None, None, 'D3D11'),
         'BloodBowl2_DX_32':                                ('Blood Bowl 2', None, 'D3D11'),
@@ -650,6 +651,7 @@ class TraceAppNames:
         'IVV':                                             ('In Verbis Virtus', None, 'D3D9'),
         'iw3sp':                                           ('Call of Duty 4: Modern Warfare', None, 'D3D9'),
         'iw6sp64_ship':                                    ('Call of Duty: Ghosts', None, 'D3D11'),
+        'IWar':                                            ('Independence War', None, 'Glide2x'),
         'Ixion':                                           ('IXION', None, 'D3D11'),
         'JackKeane':                                       ('Jack Keane', None, 'D3D9'),
         'JackKeane2':                                      ('Jack Keane 2: The Fire Within', None, 'D3D9'),
@@ -769,6 +771,7 @@ class TraceAppNames:
         'Megarace3':                                       ('MegaRace 3', None, 'D3D8'),
         'mageslay':                                        ('MageSlayer', None, 'D3D3'),
         'MessiahD3D':                                      ('Messiah', None, 'D3D7'),
+        'MessiahGlide3x':                                  ('Messiah', None, 'Glide3x'),
         'METAL GEAR RISING REVENGEANCE':                   ('Metal Gear Rising: Revengeance', None, 'D3D9'),
         'MetalGear':                                       ('Metal Gear (MSX2)', None, 'D3D8'),
         'METAPHOR':                                        ('Metaphor: ReFantazio', None, 'D3D11'),
@@ -777,6 +780,7 @@ class TraceAppNames:
         'metro2033':                                       ('Metro 2033', None, 'D3D9'),
         'MetroExodus':                                     ('Metro Exodus', None, 'D3D11'),
         'MFatigue':                                        ('Metal Fatigue', None, 'D3D6'),
+        'MFatigue_':                                       ('Metal Fatigue', None, 'Glide2x'),
         'mgsi':                                            ('Metal Gear Solid: Integral', None, 'D3D7'),
         'midtown':                                         ('Midtown Madness', None, 'D3D6'),
         'Midtown2':                                        ('Midtown Madness 2', None, 'D3D7'),
@@ -822,6 +826,7 @@ class TraceAppNames:
         'NeedForSpeedHeat':                                ('Need for Speed Heat', None, 'D3D11'),
         'NeonChrome':                                      ('Neon Chrome', None, 'D3D9'),
         'Nerf':                                            ('Nerf ArenaBlast', None, 'D3D7'),
+        'Nerf_':                                           ('Nerf ArenaBlast', None, 'Glide2x'),
         'Neva':                                            (None, None, 'D3D11'),
         'Never_Alone':                                     ('Never Alone', None, 'D3D9'),
         'nexus_DX8':                                       ('Nexus: The Jupiter Incident', None, 'D3D8'),
@@ -835,6 +840,7 @@ class TraceAppNames:
         'nfs4_':                                           ('Need for Speed: High Stakes', None, 'D3D7'), # Modern Patch
         'nfs4__':                                          ('Need for Speed: High Stakes', None, 'D3D6'), # Modern Patch
         'nfs4___':                                         ('Need for Speed: High Stakes', None, 'Glide3x'), # Modern Patch
+        'nfs5':                                            ('Need for Speed: Porsche Unleashed', None, 'Glide3x'), # Verok's Patch
         'NFSHP2':                                          ('Need for Speed: Hot Pursuit 2', None, 'D3D8'),
         'Night in the Woods':                              (None, None, 'D3D11'),
         'Nikopol':                                         ('Nikopol: Secrets of the Immortals', None, 'D3D9'),
@@ -929,6 +935,7 @@ class TraceAppNames:
         'Postal':                                          (None, None, 'D3D9'),
         'Postal2':                                         ('Postal 2', None, 'D3D8'),
         'powerslide':                                      ('Powerslide', None, 'D3D5'),
+        'powerslide_':                                     ('Powerslide', None, 'Glide2x'),
         'PR2':                                             ('Port Royale 2', None, 'D3D8'),
         'Praest-Win64-Shipping':                           ('Graven', None, 'D3D11'),
         'Praetorians':                                     (None, None, 'D3D7'),
@@ -965,6 +972,7 @@ class TraceAppNames:
         'RATOF':                                           ('Runaway: A Twist of Fate', None, 'D3D9'),
         'RavenShield':                                     ('Tom Clancy\'s Rainbow Six 3: Raven Shield', None, 'D3D8'),
         'Rayman2':                                         ('Rayman 2: The Great Escape', None, 'D3D6'),
+        'Rayman2_':                                        ('Rayman 2: The Great Escape', None, 'Glide2x'),
         'Rayman3':                                         ('Rayman 3: Hoodlum Havoc', None, 'D3D8'),
         'Rayman Origins':                                  (None, None, 'D3D9'),
         'rayne1':                                          ('BloodRayne: Terminal Cut', None, 'D3D8'), #D3D9 with d3d8to9
@@ -1022,6 +1030,7 @@ class TraceAppNames:
         'ROTT':                                            ('Rise of the Triad', None, 'D3D9'),
         'ROTTR':                                           ('Rise of the Tomb Raider', None, 'D3D11'),
         'rr_dx5':                                          ('RoBoRumble', None, 'D3D5'),
+        'rr_glide':                                        ('RoBoRumble', None, 'Glide2x'),
         'RRRE64':                                          ('RaceRoom Racing Experience', None, 'D3D9Ex'),
         'RRU':                                             ('Ridge Racer Unbounded', None, 'D3D9'),
         'RSG-Win64-Shipping':                              ('Everspace', None, 'D3D11'),
@@ -1053,6 +1062,7 @@ class TraceAppNames:
         'SCP - Containment Breach':                        (None, None, 'D3D7'),
         'Scrap':                                           ('Scrapland Remastered', None, 'D3D8'),
         'Screamer4x4_d3d':                                 ('Screamer 4x4', None, 'D3D7'),
+        'Screamer4x4_glide':                               ('Screamer 4x4', None, 'Glide2x'),
         'SE5':                                             ('Space Empires V', None, 'D3D7'),
         'secondsight':                                     ('Second Sight', None, 'D3D9'),
         'SecretWorldLegends':                              ('The Secret World', None, 'D3D9'),
