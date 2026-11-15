@@ -511,18 +511,25 @@ def generate_stats(request):
         request.session.modified = True
 
       if request.session['api_stats_visible']:
-        api_stats['d3d3']    = models.Trace.objects.filter(api=1).count()
-        api_stats['d3d5']    = models.Trace.objects.filter(api=2).count()
-        api_stats['d3d6']    = models.Trace.objects.filter(api=3).count()
-        api_stats['d3d7']    = models.Trace.objects.filter(api=4).count()
-        api_stats['d3d8']    = models.Trace.objects.filter(api=5).count()
-        api_stats['d3d9']    = models.Trace.objects.filter(api=6).count()
-        api_stats['d3d9ex']  = models.Trace.objects.filter(api=7).count()
-        api_stats['d3d10']   = models.Trace.objects.filter(api=8).count()
-        api_stats['d3d11']   = models.Trace.objects.filter(api=9).count()
-        api_stats['glide1x'] = models.Trace.objects.filter(api=10).count()
-        api_stats['glide2x'] = models.Trace.objects.filter(api=11).count()
-        api_stats['glide3x'] = models.Trace.objects.filter(api=12).count()
+        try:
+          filter_selection = request.COOKIES['apiFamilyFilter']
+        except KeyError:
+          filter_selection = 'All'
+
+        if filter_selection != 'Glide':
+          api_stats['d3d3']    = models.Trace.objects.filter(api=1).count()
+          api_stats['d3d5']    = models.Trace.objects.filter(api=2).count()
+          api_stats['d3d6']    = models.Trace.objects.filter(api=3).count()
+          api_stats['d3d7']    = models.Trace.objects.filter(api=4).count()
+          api_stats['d3d8']    = models.Trace.objects.filter(api=5).count()
+          api_stats['d3d9']    = models.Trace.objects.filter(api=6).count()
+          api_stats['d3d9ex']  = models.Trace.objects.filter(api=7).count()
+          api_stats['d3d10']   = models.Trace.objects.filter(api=8).count()
+          api_stats['d3d11']   = models.Trace.objects.filter(api=9).count()
+        if filter_selection != 'Direct3D':
+          api_stats['glide1x'] = models.Trace.objects.filter(api=10).count()
+          api_stats['glide2x'] = models.Trace.objects.filter(api=11).count()
+          api_stats['glide3x'] = models.Trace.objects.filter(api=12).count()
 
         context = {}
         context.update(csrf(request))
@@ -536,7 +543,7 @@ def generate_stats(request):
       request.session.modified = True
 
       return JsonResponse({'content': content,
-                          'api_stats': api_stats})
+                           'api_stats': api_stats})
 
     case _:
       return JsonResponse({'error': 'The Rabbit of Caerbannog pounces on you and you die!'}, status=403)

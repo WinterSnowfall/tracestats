@@ -1,35 +1,5 @@
 const MAX_FILE_SIZE_IN_BYTES = 16777216; // 16 MB
 
-const STATS_CHART_API_LABELS = [
-    'D3D3',
-    'D3D5',
-    'D3D6',
-    'D3D7',
-    'D3D8',
-    'D3D9',
-    'D3D9Ex',
-    'D3D10',
-    'D3D11',
-    'Glide1x',
-    'Glide2x',
-    'Glide3x'
-];
-
-const STATS_CHART_BACKGROUND_COLORS = [
-    '#9C78AA', // Light Plum
-    '#A3A624', // Light Olive Green
-    '#D2B48C', // Dark Beige
-    '#9C27B0', // Vibrant Purple
-    '#F57C23', // Light Orange
-    '#FFEA00', // Bright Yellow
-    '#33CC33', // Dark Green
-    '#FF3D00', // Dark Orange
-    '#36B4E1', // Light Blue
-    '#BFBFBF', // Light Gray
-    '#808080', // Medium Gray
-    '#404040', // Dark Gray
-];
-
 function getCookie(name) {
     let cookieValue = null;
 
@@ -146,25 +116,73 @@ $(document).on('click', '#toggle-stats', function() {
                 $('#stats-area').html(response.content);
                 $('#toggle-stats').attr('class', 'search-button-negative');
 
+                const apiFilter = getCookie('apiFamilyFilter');
+
+                let statsLabels = [];
+                let statsColors = [];
+                let statsData = [];
+
+                if (apiFilter !== 'Glide') {
+                    // D3D3
+                    statsLabels.push('D3D3');
+                    statsColors.push('#9C78AA');
+                    statsData.push(response.api_stats['d3d3']);
+                    // D3D5
+                    statsLabels.push('D3D5');
+                    statsColors.push('#A3A624');
+                    statsData.push(response.api_stats['d3d5']);
+                    // D3D6
+                    statsLabels.push('D3D6');
+                    statsColors.push('#D2B48C');
+                    statsData.push(response.api_stats['d3d6']);
+                    // D3D7
+                    statsLabels.push('D3D7');
+                    statsColors.push('#9C27B0');
+                    statsData.push(response.api_stats['d3d7']);
+                    // D3D8
+                    statsLabels.push('D3D8');
+                    statsColors.push('#F57C23');
+                    statsData.push(response.api_stats['d3d8']);
+                    // D3D9
+                    statsLabels.push('D3D9');
+                    statsColors.push('#FFEA00');
+                    statsData.push(response.api_stats['d3d9']);
+                    // D3D9Ex
+                    statsLabels.push('D3D9Ex');
+                    statsColors.push('#33CC33');
+                    statsData.push(response.api_stats['d3d9ex']);
+                    // D3D10
+                    statsLabels.push('D3D10');
+                    statsColors.push('#FF3D00');
+                    statsData.push(response.api_stats['d3d10']);
+                    // D3D11
+                    statsLabels.push('D3D11');
+                    statsColors.push('#36B4E1');
+                    statsData.push(response.api_stats['d3d11']);
+                }
+                if (apiFilter !== 'Direct3D') {
+                    // Glide1x
+                    statsLabels.push('Glide1x');
+                    statsColors.push('#BFBFBF');
+                    statsData.push(response.api_stats['glide1x']);
+                    // Glide2x
+                    statsLabels.push('Glide2x');
+                    statsColors.push('#808080');
+                    statsData.push(response.api_stats['glide2x']);
+                    // Glide3x
+                    statsLabels.push('Glide3x');
+                    statsColors.push('#404040');
+                    statsData.push(response.api_stats['glide3x']);
+                }
+
                 new Chart($('#apiStatsPieChart')[0].getContext('2d'), {
                     type: 'pie',
                     data: {
-                        labels: STATS_CHART_API_LABELS,
+                        labels: statsLabels,
                         datasets: [{
                             label: 'apitraces',
-                            data: [response.api_stats['d3d3'],
-                                   response.api_stats['d3d5'],
-                                   response.api_stats['d3d6'],
-                                   response.api_stats['d3d7'],
-                                   response.api_stats['d3d8'],
-                                   response.api_stats['d3d9'],
-                                   response.api_stats['d3d9ex'],
-                                   response.api_stats['d3d10'],
-                                   response.api_stats['d3d11'],
-                                   response.api_stats['glide1x'],
-                                   response.api_stats['glide2x'],
-                                   response.api_stats['glide3x']],
-                            backgroundColor: STATS_CHART_BACKGROUND_COLORS
+                            data: statsData,
+                            backgroundColor: statsColors
                         }]
                     },
                     options: {

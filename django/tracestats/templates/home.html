@@ -58,9 +58,9 @@
                         </td>
                         <td class="no-selection">
                             {% if stat.trace.link is None %}
-                                <a target="_blank" href="https://www.pcgamingwiki.com/w/index.php?search={{ stat.trace.name|urlize }}&title=Special:Search">🎮</a>
+                                <a target="_blank" href="https://www.pcgamingwiki.com/w/index.php?search={{ stat.trace.name|unmark_urlize }}&title=Special:Search">🎮</a>
                             {% else %}
-                                <a target="_blank" href="{{ stat.trace.link }}">🎮</a>
+                                <a target="_blank" href="{{ stat.trace.link|unmark_urlize }}">🎮</a>
                             {% endif %}
                         </td>
                         <td class="no-selection">
